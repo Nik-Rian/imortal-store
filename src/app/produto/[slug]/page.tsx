@@ -1,33 +1,25 @@
-import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ProductGallery } from "@/components/product/ProductGallery";
 import { AddToCartButton } from "@/components/cart/AddToCartButton";
+import { getProductBySlug } from "@/services/product.service";
+import { formatPrice } from "@/lib/utils";
 
 type Props = {
   params: Promise<{ slug: string }>;
 };
 
 export default async function ProductPage({ params }: Props) {
-  //Await the params to extract the slug
+  // Await the params to extract the slug
   const { slug } = await params;
 
-  //Fetch the specific product using the unique slug
-  const product = await prisma.product.findUnique({
-    where: { slug },
-  });
+  // Fetch
+  const product = await getProductBySlug(slug);
 
-  //If the slug doesn't match any product, trigger a 404 page
+  // If the slug doesn't match any product, trigger a 404 page
   if (!product) {
     notFound();
   }
-
-  const formatPrice = (cents: number) => {
-    return (cents / 100).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    });
-  };
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-12">

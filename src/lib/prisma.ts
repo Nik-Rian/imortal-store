@@ -19,7 +19,7 @@ declare global {
 // Export the singleton instance
 export const prisma = globalThis.prismaGlobal ?? prismaClientSingleton();
 
-// If we are not in production, attach it to the global object to survive HMR
+// If not in production, attach it to the global object to survive HMR
 if (process.env.NODE_ENV !== 'production') {
   globalThis.prismaGlobal = prisma;
 }
