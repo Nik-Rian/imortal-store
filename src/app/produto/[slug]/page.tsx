@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ProductGallery } from "@/components/ProductGallery";
-import { AddToCartButton } from "@/components/AddToCartButton";
+import { ProductGallery } from "@/components/product/ProductGallery";
+import { AddToCartButton } from "@/components/cart/AddToCartButton";
 
 type Props = {
   params: Promise<{ slug: string }>;
