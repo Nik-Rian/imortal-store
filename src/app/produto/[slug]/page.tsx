@@ -2,13 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ProductGallery } from "@/components/ProductGallery";
+import { AddToCartButton } from "@/components/AddToCartButton";
 
 type Props = {
   params: Promise<{ slug: string }>;
 };
 
 export default async function ProductPage({ params }: Props) {
-  //Await the params to extract the slug (Next.js 15 standard)
+  //Await the params to extract the slug
   const { slug } = await params;
 
   //Fetch the specific product using the unique slug
@@ -59,10 +60,7 @@ export default async function ProductPage({ params }: Props) {
           </div>
 
           <div className="mt-8 flex gap-4">
-            {/* Dummy Add to Cart Button (We'll wire this up in a future phase) */}
-            <button className="flex-1 rounded-md bg-zinc-900 px-8 py-3 text-base font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors">
-              Adicionar ao Carrinho
-            </button>
+            <AddToCartButton product={product} />
           </div>
         </div>
       </div>
