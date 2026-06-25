@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { CartProvider } from "@/context/CartContext";
 import "./globals.css";
-import { Header } from "@/components/layout/Header";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,14 +24,13 @@ export default function RootLayout({
 }>) {
   return (
     <html
-    lang="en"
-    className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
-        <CartProvider>
-          <Header />
-          <main className="flex-1">{children}</main>
-        </CartProvider>
+      <body className="min-h-full bg-background text-foreground">
+        {/* We removed the CartProvider and Header from here. 
+            They will now only render inside the storefront group. */}
+        {children}
       </body>
     </html>
   );
