@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { getProducts } from "@/services/product.service";
 import { formatPrice } from "@/lib/utils";
-import { deleteProduct } from "@/actions/product.actions";
+import { DeleteProductButton } from "@/components/admin/DeleteProductButton";
 
 export default async function AdminProductsPage() {
-  // Fetch products directly through the DAL
   const products = await getProducts();
 
   return (
@@ -12,7 +11,7 @@ export default async function AdminProductsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Produtos</h1>
-          <p className="text-zinc-500 mt-1">Gerenciar o catálogo.</p>
+          <p className="text-zinc-500 mt-1">Gerencie o catálogo da sua loja.</p>
         </div>
         <Link 
           href="/admin/produtos/novo" 
@@ -44,27 +43,20 @@ export default async function AdminProductsPage() {
                 <tr key={product.id} className="hover:bg-zinc-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-zinc-900">{product.name}</td>
                   <td className="px-4 py-3">{product.slug}</td>
-                  {/* Assuming formatPrice takes cents and outputs a formatted BRL string */}
                   <td className="px-4 py-3">{formatPrice(product.price)}</td>
-                <td className="px-4 py-3 text-right flex items-center justify-end space-x-4">
-                  <Link 
-                    href={`/admin/produtos/${product.id}/editar`} 
-                    className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
-                  >
-                    Editar
-                  </Link>
-                  <form action={async () => {
-                    "use server";
-                    await deleteProduct(product.id);
-                  }}>
-                    <button 
-                      type="submit" 
-                      className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
-                    >
-                      Excluir
-                    </button>
-                  </form>
-                </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-4 h-5">
+                      <Link 
+                        href={`/admin/produtos/${product.id}/editar`} 
+                        className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                      >
+                        Editar
+                      </Link>
+                      <div className="border-l border-zinc-200 h-4" />
+                      {/* 2. Swap the form structure out for our isolated Client element */}
+                      <DeleteProductButton productId={product.id} />
+                    </div>
+                  </td>
                 </tr>
               ))
             )}
