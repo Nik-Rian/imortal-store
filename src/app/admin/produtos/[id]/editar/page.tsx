@@ -16,7 +16,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
     notFound();
   }
 
-  // Pre-bind the database row ID to our update action
+  // Pre-bind the database row ID to update action
   const updateProductWithId = updateProduct.bind(null, product.id);
 
   return (

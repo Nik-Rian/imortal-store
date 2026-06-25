@@ -53,7 +53,6 @@ export default async function AdminProductsPage() {
                         Editar
                       </Link>
                       <div className="border-l border-zinc-200 h-4" />
-                      {/* 2. Swap the form structure out for our isolated Client element */}
                       <DeleteProductButton productId={product.id} />
                     </div>
                   </td>

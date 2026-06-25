@@ -15,7 +15,6 @@ export default function NewProductPage() {
         </Link>
       </div>
 
-      {/* Pass the creation action. No initial data needed. */}
       <ProductForm action={createProduct} />
     </div>
   );

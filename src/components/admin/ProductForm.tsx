@@ -19,7 +19,7 @@ export function ProductForm({ action, initialData }: ProductFormProps) {
     const value = e.target.value;
     setName(value);
     
-    // In edit mode, we preserve the existing slug so links don't break.
+    // In edit mode, preserve the existing slug so links don't break.
     // In creation mode, it auto-generates perfectly.
     if (!isEditMode) {
       setSlug(slugify(value));
@@ -39,7 +39,6 @@ export function ProductForm({ action, initialData }: ProductFormProps) {
           onChange={handleNameChange}
           className="w-full flex h-10 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900"
         />
-        {/* Your smart micro-copy layout recommendation */}
         <p className="text-xs text-zinc-500 mt-1">
           Link permanente: <span className="font-mono bg-zinc-50 text-zinc-700 px-1 py-0.5 rounded">{slug || "..."}</span>
         </p>
