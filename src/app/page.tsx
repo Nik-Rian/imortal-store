@@ -1,17 +1,10 @@
-import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { getProducts } from "@/services/product.service";
+import { formatPrice } from "@/lib/utils";
 
 export default async function LojaPage() {
-  const products = await prisma.product.findMany({
-    orderBy: { createdAt: "desc" },
-  });
-
-  const formatPrice = (cents: number) => {
-    return (cents / 100).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    });
-  };
+  // fetch data
+  const products = await getProducts();
 
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-900">
