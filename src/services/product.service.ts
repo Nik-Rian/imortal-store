@@ -20,3 +20,12 @@ export const getProductBySlug = cache(async (slug: string) => {
     where: { slug },
   });
 });
+
+/**
+ * Fetches a single product by its unique database ID.
+ */
+export const getProductById = cache(async (id: string) => {
+  return await prisma.product.findUnique({
+    where: { id },
+  });
+});
