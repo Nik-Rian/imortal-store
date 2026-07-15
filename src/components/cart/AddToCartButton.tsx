@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
 import { Minus, Plus, ShoppingBag } from "lucide-react";
+import { toast } from "sonner";
 
 interface AddToCartButtonProps {
   product: {
@@ -33,12 +34,12 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
       },
       quantity
     );
-    
+
     // Reset quantity selector to 1 after adding
     setQuantity(1);
-    
-    // Quick UX feedback
-    alert(`${product.name} adicionado ao carrinho!`);
+
+    // feedback
+    toast.success(`${product.name} adicionado ao carrinho!`);
   };
 
   return (
@@ -68,8 +69,8 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
       </div>
 
       {/* Add to Cart Button */}
-      <Button 
-        onClick={handleAddToCart} 
+      <Button
+        onClick={handleAddToCart}
         className="w-full sm:w-64 gap-2 text-base font-semibold"
         size="lg"
       >
