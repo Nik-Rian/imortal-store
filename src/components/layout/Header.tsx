@@ -5,18 +5,11 @@ import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { ShoppingBag, X, Trash2, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatPrice } from "@/lib/utils";
 
 export function Header() {
   const { items, cartCount, cartTotal, updateQuantity, removeItem } = useCart();
   const [isOpen, setIsOpen] = useState(false);
-
-  // Helper to format cents into Brazilian Real (BRL)
-  const formatCurrency = (cents: number) => {
-    return (cents / 100).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    });
-  };
 
   return (
     <>
@@ -95,7 +88,7 @@ export function Header() {
                 <div className="flex-1 min-w-0 flex flex-col gap-1">
                   <h4 className="font-medium text-sm truncate">{item.name}</h4>
                   <p className="text-sm font-semibold text-primary">
-                    {formatCurrency(item.price * item.quantity)}
+                    {formatPrice(item.price * item.quantity)}
                   </p>
 
                   {/* Quantity Actions */}
@@ -138,7 +131,7 @@ export function Header() {
           <div className="border-t border-border pt-4 space-y-4 bg-background">
             <div className="flex items-center justify-between font-semibold text-base">
               <span>Subtotal:</span>
-              <span className="text-xl text-primary">{formatCurrency(cartTotal)}</span>
+              <span className="text-xl text-primary">{formatPrice(cartTotal)}</span>
             </div>
             <p className="text-xs text-muted-foreground">
               Frete e taxas calculados no encerramento da compra.
