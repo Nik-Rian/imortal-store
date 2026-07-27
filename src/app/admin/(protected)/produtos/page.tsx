@@ -1,3 +1,4 @@
+// src/app/admin/(protected)/produtos/page.tsx
 import Link from "next/link";
 import { getProducts } from "@/services/product.service";
 import { formatPrice } from "@/lib/utils";
@@ -26,6 +27,7 @@ export default async function AdminProductsPage() {
           <thead className="bg-zinc-50 text-zinc-900 font-medium border-b">
             <tr>
               <th className="px-4 py-3">Nome</th>
+              <th className="px-4 py-3">Drop</th>
               <th className="px-4 py-3">Slug</th>
               <th className="px-4 py-3">Preço</th>
               <th className="px-4 py-3 text-right">Ações</th>
@@ -34,7 +36,7 @@ export default async function AdminProductsPage() {
           <tbody className="divide-y">
             {products.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-zinc-500">
+                <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
                   Nenhum produto encontrado.
                 </td>
               </tr>
@@ -46,6 +48,11 @@ export default async function AdminProductsPage() {
                 >
                   <td className="px-4 py-3 font-medium text-zinc-900">
                     {product.name}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-800">
+                      {product.drop?.name ?? "Sem drop"}
+                    </span>
                   </td>
                   <td className="px-4 py-3">{product.slug}</td>
                   <td className="px-4 py-3">

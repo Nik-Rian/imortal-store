@@ -23,10 +23,18 @@ export async function createProduct(formData: FormData) {
   const name = formData.get("name") as string;
   const slug = formData.get("slug") as string;
   const description = formData.get("description") as string;
-  const priceCents = parseInt(formData.get("priceCents") as string, 10);
+  const dropId = formData.get("dropId") as string;
 
-  if (!name || !slug || Number.isNaN(priceCents) || priceCents < 0) {
-    throw new Error("Missing required fields");
+  // Accept either 'priceCents' or 'price' from form data
+  const rawPrice = (formData.get("priceCents") ??
+    formData.get("price")) as string;
+  const priceCents = parseInt(rawPrice, 10);
+
+  const rawSortOrder = formData.get("sortOrder") as string;
+  const sortOrder = rawSortOrder ? parseInt(rawSortOrder, 10) : 0;
+
+  if (!name || !slug || !dropId || Number.isNaN(priceCents) || priceCents < 0) {
+    throw new Error("Campos obrigatórios ausentes ou inválidos.");
   }
 
   const existingProduct = await prisma.product.findUnique({
@@ -46,6 +54,8 @@ export async function createProduct(formData: FormData) {
         slug,
         description,
         priceCents,
+        dropId,
+        sortOrder,
         images: [],
       },
     });
@@ -72,10 +82,17 @@ export async function updateProduct(id: string, formData: FormData) {
   const name = formData.get("name") as string;
   const slug = formData.get("slug") as string;
   const description = formData.get("description") as string;
-  const priceCents = parseInt(formData.get("priceCents") as string, 10);
+  const dropId = formData.get("dropId") as string;
 
-  if (!name || !slug || Number.isNaN(priceCents) || priceCents < 0) {
-    throw new Error("Missing required fields");
+  const rawPrice = (formData.get("priceCents") ??
+    formData.get("price")) as string;
+  const priceCents = parseInt(rawPrice, 10);
+
+  const rawSortOrder = formData.get("sortOrder") as string;
+  const sortOrder = rawSortOrder ? parseInt(rawSortOrder, 10) : undefined;
+
+  if (!name || !slug || !dropId || Number.isNaN(priceCents) || priceCents < 0) {
+    throw new Error("Campos obrigatórios ausentes ou inválidos.");
   }
 
   const existingProduct = await prisma.product.findUnique({
@@ -96,6 +113,8 @@ export async function updateProduct(id: string, formData: FormData) {
         slug,
         description,
         priceCents,
+        dropId,
+        ...(sortOrder !== undefined && { sortOrder }),
       },
     });
   } catch (error: unknown) {
