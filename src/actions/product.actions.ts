@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import { productSchema } from "@/lib/validations/product.schema";
 
 async function requireSession() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -20,22 +21,28 @@ async function requireSession() {
 export async function createProduct(formData: FormData) {
   await requireSession();
 
-  const name = formData.get("name") as string;
-  const slug = formData.get("slug") as string;
-  const description = formData.get("description") as string;
-  const dropId = formData.get("dropId") as string;
-
-  // Accept either 'priceCents' or 'price' from form data
   const rawPrice = (formData.get("priceCents") ??
     formData.get("price")) as string;
-  const priceCents = parseInt(rawPrice, 10);
-
   const rawSortOrder = formData.get("sortOrder") as string;
-  const sortOrder = rawSortOrder ? parseInt(rawSortOrder, 10) : 0;
 
-  if (!name || !slug || !dropId || Number.isNaN(priceCents) || priceCents < 0) {
-    throw new Error("Campos obrigatórios ausentes ou inválidos.");
+  const validationResult = productSchema.safeParse({
+    name: formData.get("name"),
+    slug: formData.get("slug"),
+    description: formData.get("description") ?? "",
+    dropId: formData.get("dropId"),
+    priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
+    sortOrder: rawSortOrder ? parseInt(rawSortOrder, 10) : 0,
+  });
+
+  if (!validationResult.success) {
+    const firstErrorMessage =
+      validationResult.error.issues[0]?.message ??
+      "Dados do produto inválidos.";
+    throw new Error(firstErrorMessage);
   }
+
+  const { name, slug, description, dropId, priceCents, sortOrder } =
+    validationResult.data;
 
   const existingProduct = await prisma.product.findUnique({
     where: { slug },
@@ -79,21 +86,28 @@ export async function createProduct(formData: FormData) {
 export async function updateProduct(id: string, formData: FormData) {
   await requireSession();
 
-  const name = formData.get("name") as string;
-  const slug = formData.get("slug") as string;
-  const description = formData.get("description") as string;
-  const dropId = formData.get("dropId") as string;
-
   const rawPrice = (formData.get("priceCents") ??
     formData.get("price")) as string;
-  const priceCents = parseInt(rawPrice, 10);
-
   const rawSortOrder = formData.get("sortOrder") as string;
-  const sortOrder = rawSortOrder ? parseInt(rawSortOrder, 10) : undefined;
 
-  if (!name || !slug || !dropId || Number.isNaN(priceCents) || priceCents < 0) {
-    throw new Error("Campos obrigatórios ausentes ou inválidos.");
+  const validationResult = productSchema.safeParse({
+    name: formData.get("name"),
+    slug: formData.get("slug"),
+    description: formData.get("description") ?? "",
+    dropId: formData.get("dropId"),
+    priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
+    sortOrder: rawSortOrder ? parseInt(rawSortOrder, 10) : 0,
+  });
+
+  if (!validationResult.success) {
+    const firstErrorMessage =
+      validationResult.error.issues[0]?.message ??
+      "Dados do produto inválidos.";
+    throw new Error(firstErrorMessage);
   }
+
+  const { name, slug, description, dropId, priceCents, sortOrder } =
+    validationResult.data;
 
   const existingProduct = await prisma.product.findUnique({
     where: { slug },
@@ -114,7 +128,7 @@ export async function updateProduct(id: string, formData: FormData) {
         description,
         priceCents,
         dropId,
-        ...(sortOrder !== undefined && { sortOrder }),
+        sortOrder,
       },
     });
   } catch (error: unknown) {
