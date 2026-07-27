@@ -23,9 +23,9 @@ export async function createProduct(formData: FormData) {
   const name = formData.get("name") as string;
   const slug = formData.get("slug") as string;
   const description = formData.get("description") as string;
-  const price = parseInt(formData.get("price") as string, 10);
+  const priceCents = parseInt(formData.get("priceCents") as string, 10);
 
-  if (!name || !slug || Number.isNaN(price) || price < 0) {
+  if (!name || !slug || Number.isNaN(priceCents) || priceCents < 0) {
     throw new Error("Missing required fields");
   }
 
@@ -45,7 +45,7 @@ export async function createProduct(formData: FormData) {
         name,
         slug,
         description,
-        price,
+        priceCents,
         images: [],
       },
     });
@@ -72,9 +72,9 @@ export async function updateProduct(id: string, formData: FormData) {
   const name = formData.get("name") as string;
   const slug = formData.get("slug") as string;
   const description = formData.get("description") as string;
-  const price = parseInt(formData.get("price") as string, 10);
+  const priceCents = parseInt(formData.get("priceCents") as string, 10);
 
-  if (!name || !slug || Number.isNaN(price) || price < 0) {
+  if (!name || !slug || Number.isNaN(priceCents) || priceCents < 0) {
     throw new Error("Missing required fields");
   }
 
@@ -95,7 +95,7 @@ export async function updateProduct(id: string, formData: FormData) {
         name,
         slug,
         description,
-        price,
+        priceCents,
       },
     });
   } catch (error: unknown) {

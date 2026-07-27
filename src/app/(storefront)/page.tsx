@@ -9,7 +9,6 @@ export default async function LojaPage() {
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-900">
       <div className="mx-auto max-w-7xl px-6 py-12">
-
         {/* HERO */}
 
         <section className="mb-20 border-b-4 border-orange-500 pb-10">
@@ -87,7 +86,7 @@ export default async function LojaPage() {
 
                   <div className="flex items-end justify-between">
                     <span className="text-2xl font-black text-orange-500">
-                      {formatPrice(product.price)}
+                      {formatPrice(product.priceCents)}
                     </span>
 
                     <span
@@ -115,7 +114,6 @@ export default async function LojaPage() {
             IMORTAL • ATLÉTICA • ENGENHARIA • UFC
           </p>
         </section>
-
       </div>
     </main>
   );

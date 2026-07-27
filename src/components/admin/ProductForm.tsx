@@ -21,7 +21,7 @@ export function ProductForm({ action, initialData }: ProductFormProps) {
   const currentSlug = slugify(name);
 
   const initialPriceDisplay = initialData
-    ? (initialData.price / 100).toFixed(2)
+    ? (initialData.priceCents / 100).toFixed(2)
     : "";
   const [priceInput, setPriceInput] = useState(initialPriceDisplay);
 

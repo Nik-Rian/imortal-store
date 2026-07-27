@@ -24,8 +24,8 @@ export default async function ProductPage({ params }: Props) {
   return (
     <main className="mx-auto max-w-7xl px-4 py-12">
       {/* Breadcrumb / Back Link */}
-      <Link 
-        href="/" 
+      <Link
+        href="/"
         className="text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 mb-8 inline-block transition-colors"
       >
         &larr; Voltar para a loja
@@ -34,14 +34,14 @@ export default async function ProductPage({ params }: Props) {
       <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
         {/* Left Column: Product Gallery */}
         <ProductGallery images={product.images} productName={product.name} />
-        
+
         {/* Right Column: Product Details */}
         <div className="flex flex-col">
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-4xl">
             {product.name}
           </h1>
           <p className="mt-4 text-2xl font-medium text-zinc-900 dark:text-zinc-100">
-            {formatPrice(product.price)}
+            {formatPrice(product.priceCents)}
           </p>
 
           <div className="mt-6">

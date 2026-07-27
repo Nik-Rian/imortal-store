@@ -16,7 +16,10 @@ export function Header() {
       {/* Main Navbar */}
       <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur-md">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <Link href="/" className="text-xl font-bold tracking-tight hover:opacity-80 transition">
+          <Link
+            href="/"
+            className="text-xl font-bold tracking-tight hover:opacity-80 transition"
+          >
             imortal<span className="text-primary">-store</span>
           </Link>
 
@@ -88,14 +91,16 @@ export function Header() {
                 <div className="flex-1 min-w-0 flex flex-col gap-1">
                   <h4 className="font-medium text-sm truncate">{item.name}</h4>
                   <p className="text-sm font-semibold text-primary">
-                    {formatPrice(item.price * item.quantity)}
+                    {formatPrice(item.priceCents * item.quantity)}
                   </p>
 
                   {/* Quantity Actions */}
                   <div className="flex items-center gap-2 mt-1">
                     <div className="flex items-center border border-input rounded bg-background">
                       <button
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        onClick={() =>
+                          updateQuantity(item.id, item.quantity - 1)
+                        }
                         className="p-1 hover:bg-muted text-muted-foreground"
                       >
                         <Minus className="h-3 w-3" />
@@ -104,7 +109,9 @@ export function Header() {
                         {item.quantity}
                       </span>
                       <button
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        onClick={() =>
+                          updateQuantity(item.id, item.quantity + 1)
+                        }
                         className="p-1 hover:bg-muted text-muted-foreground"
                       >
                         <Plus className="h-3 w-3" />
@@ -131,7 +138,9 @@ export function Header() {
           <div className="border-t border-border pt-4 space-y-4 bg-background">
             <div className="flex items-center justify-between font-semibold text-base">
               <span>Subtotal:</span>
-              <span className="text-xl text-primary">{formatPrice(cartTotal)}</span>
+              <span className="text-xl text-primary">
+                {formatPrice(cartTotal)}
+              </span>
             </div>
             <p className="text-xs text-muted-foreground">
               Frete e taxas calculados no encerramento da compra.

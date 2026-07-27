@@ -13,8 +13,8 @@ export default async function AdminProductsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Produtos</h1>
           <p className="text-zinc-500 mt-1">Gerencie o catálogo da sua loja.</p>
         </div>
-        <Link 
-          href="/admin/produtos/novo" 
+        <Link
+          href="/admin/produtos/novo"
           className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2 transition-colors"
         >
           + Novo Produto
@@ -40,14 +40,21 @@ export default async function AdminProductsPage() {
               </tr>
             ) : (
               products.map((product) => (
-                <tr key={product.id} className="hover:bg-zinc-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-zinc-900">{product.name}</td>
+                <tr
+                  key={product.id}
+                  className="hover:bg-zinc-50 transition-colors"
+                >
+                  <td className="px-4 py-3 font-medium text-zinc-900">
+                    {product.name}
+                  </td>
                   <td className="px-4 py-3">{product.slug}</td>
-                  <td className="px-4 py-3">{formatPrice(product.price)}</td>
+                  <td className="px-4 py-3">
+                    {formatPrice(product.priceCents)}
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-4 h-5">
-                      <Link 
-                        href={`/admin/produtos/${product.id}/editar`} 
+                      <Link
+                        href={`/admin/produtos/${product.id}/editar`}
                         className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
                       >
                         Editar

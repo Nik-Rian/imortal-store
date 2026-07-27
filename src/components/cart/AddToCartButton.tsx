@@ -11,7 +11,7 @@ interface AddToCartButtonProps {
     id: string;
     name: string;
     slug: string;
-    price: number;
+    priceCents: number;
     images: string[];
   };
 }
@@ -29,10 +29,10 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
         id: product.id,
         name: product.name,
         slug: product.slug,
-        price: product.price,
+        priceCents: product.priceCents,
         image: product.images[0] || "/placeholder.png", // Fallback if no images
       },
-      quantity
+      quantity,
     );
 
     // Reset quantity selector to 1 after adding

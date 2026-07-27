@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -8,15 +7,110 @@ datasource db {
   provider = "postgresql"
 }
 
+model Drop {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  startsAt  DateTime
+  endsAt    DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products  Product[]
+
+  @@index([startsAt])
+  @@index([endsAt])
+}
+
 model Product {
   id          String   @id @default(uuid())
   name        String
   slug        String   @unique
   description String
-  price       Int
+  priceCents  Int
   images      String[]
+  sortOrder   Int      @default(0)
+
+  dropId      String
+  drop        Drop     @relation(fields: [dropId], references: [id], onDelete: Restrict)
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  variants    ProductVariant[]
+  orderItems  OrderItem[]
+
+  @@index([dropId])
+}
+
+model ProductVariant {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  size      String
+  sortOrder Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderItems OrderItem[]
+
+  @@unique([productId, size])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  READY_FOR_PICKUP
+  COMPLETED
+  CANCELLED
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  accessToken     String      @unique // generated in app code (crypto.randomBytes), no schema default
+
+  customerName    String
+  customerPhone   String?
+  customerEmail   String?
+
+  status          OrderStatus @default(PENDING)
+  cancelableUntil DateTime
+  totalPriceCents Int
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  items           OrderItem[]
+
+  @@index([status])
+}
+
+model OrderItem {
+  id             String          @id @default(uuid())
+
+  orderId        String
+  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId      String?
+  product        Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  variantId      String?
+  variant        ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  productName    String
+  dropName       String
+  variantSize    String?
+  unitPriceCents Int
+  quantity       Int
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
 }
 
 model User {
