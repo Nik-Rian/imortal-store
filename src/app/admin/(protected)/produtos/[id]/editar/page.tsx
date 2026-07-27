@@ -3,20 +3,23 @@ import { notFound } from "next/navigation";
 import { getProductById } from "@/services/product.service";
 import { updateProduct } from "@/actions/product.actions";
 import { ProductForm } from "@/components/admin/ProductForm";
+import { getDrops } from "@/services/drop.service";
 
 interface EditProductPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default async function EditProductPage({ params }: EditProductPageProps) {
+export default async function EditProductPage({
+  params,
+}: EditProductPageProps) {
   const { id } = await params;
   const product = await getProductById(id);
+  const drops = await getDrops();
 
   if (!product) {
     notFound();
   }
 
-  // Pre-bind the database row ID to update action
   const updateProductWithId = updateProduct.bind(null, product.id);
 
   return (
@@ -24,15 +27,23 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Editar Produto</h1>
-          <p className="text-zinc-500 mt-1">Altere as informações de {product.name}.</p>
+          <p className="text-zinc-500 mt-1">
+            Altere as informações de {product.name}.
+          </p>
         </div>
-        <Link href="/admin/produtos" className="text-sm font-medium text-zinc-600 hover:text-zinc-900">
+        <Link
+          href="/admin/produtos"
+          className="text-sm font-medium text-zinc-600 hover:text-zinc-900"
+        >
           &larr; Voltar
         </Link>
       </div>
 
-      {/* Render the shared component with pre-filled database info */}
-      <ProductForm action={updateProductWithId} initialData={product} />
+      <ProductForm
+        action={updateProductWithId}
+        initialData={product}
+        drops={drops}
+      />
     </div>
   );
 }
