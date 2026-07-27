@@ -30,7 +30,11 @@ function getServerSnapshot(): string {
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   // Synchronizes React directly with localStorage
-  const rawCart = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const rawCart = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
+  );
 
   let items: CartItem[] = [];
   try {
@@ -52,7 +56,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       updatedItems = items.map((item, index) =>
         index === existingIndex
           ? { ...item, quantity: item.quantity + quantity }
-          : item
+          : item,
       );
     } else {
       updatedItems = [...items, { ...newItem, quantity }];
@@ -71,7 +75,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     saveCart(
-      items.map((item) => (item.id === id ? { ...item, quantity } : item))
+      items.map((item) => (item.id === id ? { ...item, quantity } : item)),
     );
   };
 
@@ -80,7 +84,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const cartCount = items.reduce((total, item) => total + item.quantity, 0);
-  const cartTotal = items.reduce((total, item) => total + item.priceCents * item.quantity, 0);
+  const cartTotal = items.reduce(
+    (total, item) => total + item.priceCents * item.quantity,
+    0,
+  );
 
   return (
     <CartContext.Provider
