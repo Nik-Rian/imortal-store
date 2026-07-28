@@ -9,7 +9,10 @@ export const productSchema = z.object({
     .string({ message: "O link permanente (slug) é obrigatório." })
     .trim()
     .min(1, "O link permanente (slug) é obrigatório."),
-  description: z.string().default(""),
+  description: z
+    .string({ message: "A descrição do produto é obrigatória." })
+    .trim()
+    .min(1, "A descrição do produto é obrigatória."),
   dropId: z
     .string({ message: "Por favor, selecione um Drop para o produto." })
     .min(1, "Por favor, selecione um Drop para o produto."),

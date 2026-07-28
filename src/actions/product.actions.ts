@@ -23,26 +23,28 @@ export async function createProduct(formData: FormData) {
 
   const rawPrice = (formData.get("priceCents") ??
     formData.get("price")) as string;
-  const rawSortOrder = formData.get("sortOrder") as string;
 
   const validationResult = productSchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
-    description: formData.get("description") ?? "",
+    description: formData.get("description"),
     dropId: formData.get("dropId"),
     priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
-    sortOrder: rawSortOrder ? parseInt(rawSortOrder, 10) : 0,
   });
 
   if (!validationResult.success) {
     const firstErrorMessage =
-      validationResult.error.issues[0]?.message ??
-      "Dados do produto inválidos.";
+      validationResult.error.issues[0]?.message ?? "Dados do produto inválidos.";
     throw new Error(firstErrorMessage);
   }
 
-  const { name, slug, description, dropId, priceCents, sortOrder } =
-    validationResult.data;
+  const {
+    name,
+    slug,
+    description,
+    dropId,
+    priceCents,
+  } = validationResult.data;
 
   const existingProduct = await prisma.product.findUnique({
     where: { slug },
@@ -62,7 +64,6 @@ export async function createProduct(formData: FormData) {
         description,
         priceCents,
         dropId,
-        sortOrder,
         images: [],
       },
     });
@@ -88,26 +89,33 @@ export async function updateProduct(id: string, formData: FormData) {
 
   const rawPrice = (formData.get("priceCents") ??
     formData.get("price")) as string;
-  const rawSortOrder = formData.get("sortOrder") as string;
 
   const validationResult = productSchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
-    description: formData.get("description") ?? "",
+    description: formData.get("description"),
     dropId: formData.get("dropId"),
     priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
-    sortOrder: rawSortOrder ? parseInt(rawSortOrder, 10) : 0,
   });
 
   if (!validationResult.success) {
     const firstErrorMessage =
-      validationResult.error.issues[0]?.message ??
-      "Dados do produto inválidos.";
+      validationResult.error.issues[0]?.message ?? "Dados do produto inválidos.";
     throw new Error(firstErrorMessage);
   }
 
-  const { name, slug, description, dropId, priceCents, sortOrder } =
-    validationResult.data;
+  const { name, slug, description, dropId, priceCents } = validationResult.data;
+
+  await prisma.product.update({
+    where: { id },
+    data: {
+      name,
+      slug,
+      description,
+      priceCents,
+      dropId,
+    },
+  });
 
   const existingProduct = await prisma.product.findUnique({
     where: { slug },
@@ -128,7 +136,6 @@ export async function updateProduct(id: string, formData: FormData) {
         description,
         priceCents,
         dropId,
-        sortOrder,
       },
     });
   } catch (error: unknown) {
