@@ -3,6 +3,7 @@
 import { useState, ChangeEvent } from "react";
 import { slugify } from "@/lib/utils";
 import { Product } from "@/types";
+import { productSchema } from "@/lib/validations/product.schema";
 
 type DropOption = {
   id: string;
@@ -42,21 +43,37 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   const clientAction = async (formData: FormData) => {
     setError(null);
 
-    if (!selectedDropId) {
-      setError("Por favor, selecione um Drop para o produto.");
-      return;
-    }
-
+    const description = (formData.get("description") as string) ?? "";
     const parsedDisplayPrice = parseFloat(priceInput);
-    if (isNaN(parsedDisplayPrice) || parsedDisplayPrice < 0) {
-      setError("Por favor, insira um preço válido.");
+    const priceCents = isNaN(parsedDisplayPrice)
+      ? NaN
+      : Math.round(parsedDisplayPrice * 100);
+
+    const validationResult = productSchema.safeParse({
+      name,
+      slug: currentSlug,
+      description,
+      dropId: selectedDropId,
+      priceCents,
+      sortOrder,
+    });
+
+    if (!validationResult.success) {
+      const firstErrorMessage =
+        validationResult.error.issues[0]?.message ??
+        "Por favor, verifique os campos do formulário.";
+      setError(firstErrorMessage);
       return;
     }
 
-    const priceInCents = Math.round(parsedDisplayPrice * 100);
-    formData.set("priceCents", priceInCents.toString());
-    formData.set("dropId", selectedDropId);
-    formData.set("sortOrder", sortOrder.toString());
+    const validData = validationResult.data;
+
+    formData.set("name", validData.name);
+    formData.set("slug", validData.slug);
+    formData.set("description", validData.description);
+    formData.set("priceCents", validData.priceCents.toString());
+    formData.set("dropId", validData.dropId);
+    formData.set("sortOrder", validData.sortOrder.toString());
 
     setIsPending(true);
     try {
@@ -94,7 +111,6 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
         <select
           id="dropId"
           name="dropId"
-          required
           value={selectedDropId}
           onChange={(e) => setSelectedDropId(e.target.value)}
           disabled={isPending || drops.length === 0}
@@ -127,7 +143,6 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
           type="text"
           id="name"
           name="name"
-          required
           value={name}
           onChange={handleNameChange}
           disabled={isPending}
@@ -193,7 +208,6 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
               type="number"
               id="price"
               name="price"
-              required
               step="0.01"
               min="0"
               placeholder="0.00"
