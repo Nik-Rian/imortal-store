@@ -3,6 +3,7 @@
 import { useState, ChangeEvent } from "react";
 import { slugify } from "@/lib/utils";
 import { Product } from "@/types";
+import { productSchema } from "@/lib/validations/product.schema";
 
 type DropOption = {
   id: string;
@@ -30,7 +31,6 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     ? (initialData.priceCents / 100).toFixed(2)
     : "";
   const [priceInput, setPriceInput] = useState(initialPriceDisplay);
-  const [sortOrder, setSortOrder] = useState(initialData?.sortOrder ?? 0);
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
@@ -42,21 +42,35 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   const clientAction = async (formData: FormData) => {
     setError(null);
 
-    if (!selectedDropId) {
-      setError("Por favor, selecione um Drop para o produto.");
-      return;
-    }
-
+    const description = (formData.get("description") as string) ?? "";
     const parsedDisplayPrice = parseFloat(priceInput);
-    if (isNaN(parsedDisplayPrice) || parsedDisplayPrice < 0) {
-      setError("Por favor, insira um preço válido.");
+    const priceCents = isNaN(parsedDisplayPrice)
+      ? NaN
+      : Math.round(parsedDisplayPrice * 100);
+
+    const validationResult = productSchema.safeParse({
+      name,
+      slug: currentSlug,
+      description,
+      dropId: selectedDropId,
+      priceCents,
+    });
+
+    if (!validationResult.success) {
+      const firstErrorMessage =
+        validationResult.error.issues[0]?.message ??
+        "Por favor, verifique os campos do formulário.";
+      setError(firstErrorMessage);
       return;
     }
 
-    const priceInCents = Math.round(parsedDisplayPrice * 100);
-    formData.set("priceCents", priceInCents.toString());
-    formData.set("dropId", selectedDropId);
-    formData.set("sortOrder", sortOrder.toString());
+    const validData = validationResult.data;
+
+    formData.set("name", validData.name);
+    formData.set("slug", validData.slug);
+    formData.set("description", validData.description);
+    formData.set("priceCents", validData.priceCents.toString());
+    formData.set("dropId", validData.dropId);
 
     setIsPending(true);
     try {
@@ -94,7 +108,6 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
         <select
           id="dropId"
           name="dropId"
-          required
           value={selectedDropId}
           onChange={(e) => setSelectedDropId(e.target.value)}
           disabled={isPending || drops.length === 0}
@@ -127,7 +140,6 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
           type="text"
           id="name"
           name="name"
-          required
           value={name}
           onChange={handleNameChange}
           disabled={isPending}
@@ -179,48 +191,26 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
         />
       </div>
 
-      {/* Price & Sort Order Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <label htmlFor="price" className="text-sm font-medium text-zinc-900">
-            Preço (R$)
-          </label>
-          <div className="relative">
-            <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
-              <span className="text-zinc-500 text-sm">R$</span>
-            </div>
-            <input
-              type="number"
-              id="price"
-              name="price"
-              required
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              value={priceInput}
-              onChange={(e) => setPriceInput(e.target.value)}
-              disabled={isPending}
-              style={{ paddingLeft: "2.5rem" }}
-              className="w-full block h-10 rounded-md border border-zinc-200 bg-white pr-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
-            />
+      {/* Price */}
+      <div className="space-y-2">
+        <label htmlFor="price" className="text-sm font-medium text-zinc-900">
+          Preço (R$)
+        </label>
+        <div className="relative">
+          <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
+            <span className="text-zinc-500 text-sm">R$</span>
           </div>
-        </div>
-
-        <div className="space-y-2">
-          <label
-            htmlFor="sortOrder"
-            className="text-sm font-medium text-zinc-900"
-          >
-            Ordem de Exibição
-          </label>
           <input
             type="number"
-            id="sortOrder"
-            name="sortOrder"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(parseInt(e.target.value, 10) || 0)}
+            id="price"
+            name="price"
+            step="0.01"
+            placeholder="0.00"
+            value={priceInput}
+            onChange={(e) => setPriceInput(e.target.value)}
             disabled={isPending}
-            className="w-full flex h-10 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
+            style={{ paddingLeft: "2.5rem" }}
+            className="w-full block h-10 rounded-md border border-zinc-200 bg-white pr-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
           />
         </div>
       </div>
