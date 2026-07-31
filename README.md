@@ -1,8 +1,8 @@
 # Imortal Store
 
-A modern e-commerce application
+A modern e-commerce application.
 
-The project provides both a customer storefront and a protected administration panel for managing products and administrator accounts.
+The project provides both a customer storefront and a protected administration panel for managing products, product media, and administrator accounts.
 
 ---
 
@@ -12,20 +12,20 @@ The project provides both a customer storefront and a protected administration p
 
 * Product catalog
 * Product detail pages
-* Image gallery
+* Interactive image gallery with thumbnail selection
 * Shopping cart (client-side)
-* Responsive interface.
+* Responsive interface
 
 ### Admin Panel
 
 * Secure authentication with Better Auth
 * Product management
-
-  * Create products
-  * Edit products
-  * Delete products
+  * Create, edit, and delete products
+  * Integrated image uploads via Vercel Blob Storage
+  * Instant upload previews and client-side removal
+  * Filename normalization (`slugify` base name formatting)
+  * Automated image cleanup on removal or product deletion
 * Administrator management
-
   * Create administrators
   * Remove administrators
 * Protected routes
@@ -43,6 +43,7 @@ The project provides both a customer storefront and a protected administration p
 * Prisma ORM
 * PostgreSQL
 * Better Auth
+* Vercel Blob Storage
 * Docker (database)
 
 ---
@@ -50,8 +51,9 @@ The project provides both a customer storefront and a protected administration p
 ## Project Structure
 
 ```
+
 src/
-├── actions/          # Server Actions
+├── actions/          # Server Actions (products, auth, blob storage)
 ├── app/
 │   ├── (storefront)  # Public storefront
 │   ├── admin/        # Administration panel
@@ -69,6 +71,7 @@ prisma/
 
 scripts/
 └── create-admin.ts
+
 ```
 
 ---
@@ -111,6 +114,9 @@ DATABASE_URL="postgresql://<username>:<password>@localhost:5432/imortal_store?sc
 
 BETTER_AUTH_SECRET=<your-random-secret>
 BETTER_AUTH_URL=http://localhost:3000
+
+BLOB_READ_WRITE_TOKEN=<your-vercel-blob-read-write-token>
+
 ```
 
 ---
@@ -170,7 +176,6 @@ http://localhost:3000
 ```
 
 Admin login:
-
 ```
 http://localhost:3000/admin/login
 ```
