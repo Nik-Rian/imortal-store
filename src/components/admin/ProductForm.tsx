@@ -4,6 +4,8 @@ import { useState, ChangeEvent } from "react";
 import { slugify } from "@/lib/utils";
 import { Product } from "@/types";
 import { productSchema } from "@/lib/validations/product.schema";
+import { uploadProductImage } from "@/actions/blob.actions";
+import { ImagePlus, Loader2, X } from "lucide-react";
 
 type DropOption = {
   id: string;
@@ -32,11 +34,45 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     : "";
   const [priceInput, setPriceInput] = useState(initialPriceDisplay);
 
+  // Image Management State
+  const [images, setImages] = useState<string[]>(initialData?.images ?? []);
+  const [isUploading, setIsUploading] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
   const handleNameChange = (e: ChangeEvent<HTMLInputElement>) => {
     setName(e.target.value);
+  };
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      for (const file of Array.from(files)) {
+        const uploadFormData = new FormData();
+        uploadFormData.append("file", file);
+
+        const uploadedUrl = await uploadProductImage(uploadFormData);
+        setImages((prev) => [...prev, uploadedUrl]);
+      }
+    } catch (err) {
+      console.error("Erro ao enviar imagem:", err);
+      setError(
+        err instanceof Error ? err.message : "Falha ao enviar a imagem.",
+      );
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveImage = (indexToRemove: number) => {
+    setImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   const clientAction = async (formData: FormData) => {
@@ -72,6 +108,10 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     formData.set("priceCents", validData.priceCents.toString());
     formData.set("dropId", validData.dropId);
 
+    // Append image URLs to formData
+    formData.delete("images");
+    images.forEach((url) => formData.append("images", url));
+
     setIsPending(true);
     try {
       await action(formData);
@@ -90,7 +130,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   return (
     <form
       action={clientAction}
-      className="space-y-4 bg-white p-6 border rounded-md shadow-sm"
+      className="space-y-6 bg-white p-6 border rounded-md shadow-sm"
     >
       {error && (
         <p className="text-sm text-red-600 bg-red-50 rounded-md px-3 py-2 animate-in fade-in duration-200">
@@ -173,6 +213,59 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
         )}
       </div>
 
+      {/* Product Images Management */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-zinc-900">
+          Fotos do Produto
+        </label>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {images.map((url, idx) => (
+            <div
+              key={url}
+              className="relative aspect-square border rounded-md overflow-hidden group bg-zinc-100"
+            >
+              <img
+                src={url}
+                alt={`Foto ${idx + 1}`}
+                className="w-full h-full object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => handleRemoveImage(idx)}
+                disabled={isPending || isUploading}
+                className="absolute top-1 right-1 bg-black/70 text-white rounded-full p-1 opacity-90 hover:bg-black transition-opacity"
+                title="Remover imagem"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+
+          {/* Add Image Upload Slot */}
+          <label className="border-2 border-dashed border-zinc-300 hover:border-zinc-500 rounded-md aspect-square flex flex-col items-center justify-center cursor-pointer transition-colors bg-zinc-50 hover:bg-zinc-100 p-2 text-center">
+            {isUploading ? (
+              <Loader2 className="w-6 h-6 animate-spin text-zinc-500" />
+            ) : (
+              <>
+                <ImagePlus className="w-6 h-6 text-zinc-400 mb-1" />
+                <span className="text-xs text-zinc-600 font-medium">
+                  Adicionar Foto
+                </span>
+              </>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleFileChange}
+              disabled={isPending || isUploading}
+              className="hidden"
+            />
+          </label>
+        </div>
+      </div>
+
       {/* Description */}
       <div className="space-y-2">
         <label
@@ -218,7 +311,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
       <div className="pt-4 flex justify-end">
         <button
           type="submit"
-          disabled={isPending || drops.length === 0}
+          disabled={isPending || isUploading || drops.length === 0}
           className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2 transition-colors disabled:opacity-50 cursor-pointer"
         >
           {isPending
