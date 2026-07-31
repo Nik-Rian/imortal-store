@@ -4,7 +4,7 @@ import { useState, ChangeEvent } from "react";
 import { slugify } from "@/lib/utils";
 import { Product } from "@/types";
 import { productSchema } from "@/lib/validations/product.schema";
-import { uploadProductImage } from "@/actions/blob.actions";
+import { uploadProductImage, deleteBlobImages } from "@/actions/blob.actions";
 import { ImagePlus, Loader2, X } from "lucide-react";
 
 type DropOption = {
@@ -71,8 +71,22 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     }
   };
 
-  const handleRemoveImage = (indexToRemove: number) => {
+  const handleRemoveImage = async (indexToRemove: number) => {
+    const urlToRemove = images[indexToRemove];
+
     setImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+
+    try {
+      await deleteBlobImages([urlToRemove]);
+    } catch (err) {
+      console.error("Erro ao remover imagem do servidor:", err);
+      setError("Não foi possível remover a imagem do servidor.");
+      setImages((prev) => [
+        ...prev.slice(0, indexToRemove),
+        urlToRemove,
+        ...prev.slice(indexToRemove),
+      ]);
+    }
   };
 
   const clientAction = async (formData: FormData) => {
