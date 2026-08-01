@@ -4,6 +4,7 @@ export interface CartItem {
   slug: string;
   priceCents: number;
   image: string;
+  size?: string;
   quantity: number;
 }
 
@@ -15,4 +16,6 @@ export interface CartContextType {
   clearCart: () => void;
   cartCount: number;
   cartTotal: number;
+  isOpen: boolean;
+  setIsOpen: (isOpen: boolean) => void;
 }

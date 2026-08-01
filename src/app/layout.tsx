@@ -1,21 +1,25 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Chakra_Petch, Space_Grotesk } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
+import { cn } from "@/lib/utils";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const chakraPetch = Chakra_Petch({
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
+  variable: "--font-chakra",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const spaceGrotesk = Space_Grotesk({
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
+  variable: "--font-space",
 });
 
 export const metadata: Metadata = {
-  title: "imortal-store",
-  description: "The ultimate e-commerce storefront MVP",
+  title: "Atlética Imortal — Loja Oficial",
+  description:
+    "Loja oficial da Atlética Imortal. Uniformes, edições limitadas e produtos oficiais.",
 };
 
 export default function RootLayout({
@@ -26,11 +30,16 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={cn(
+        "h-full",
+        "antialiased",
+        "dark",
+        chakraPetch.variable,
+        spaceGrotesk.variable
+      )}
     >
-      <body className="min-h-full bg-background text-foreground">
+      <body className="min-h-full bg-background font-sans text-foreground">
         {children}
-        {/* Render Toaster component globally with nice UI configurations */}
         <Toaster richColors closeButton position="top-right" />
       </body>
     </html>

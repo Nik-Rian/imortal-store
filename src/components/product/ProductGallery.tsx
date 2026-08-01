@@ -18,7 +18,7 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
         <img
           src={mainImage}
           alt={productName}
-          className="h-full w-full object-cover object-center transition-all duration-300"
+          className="size-full object-cover object-center transition-all duration-300"
         />
       </div>
 
@@ -29,7 +29,7 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
             <button
               key={index}
               onClick={() => setMainImage(img)}
-              className={`aspect-4/5 overflow-hidden rounded-sm bg-zinc-100 dark:bg-zinc-900 border-2 transition-all ${
+              className={`aspect-4/5 overflow-hidden rounded-sm border-2 bg-zinc-100 transition-all dark:bg-zinc-900 ${
                 mainImage === img
                   ? "border-zinc-900 dark:border-zinc-100" // Active state border
                   : "border-transparent hover:border-zinc-300 dark:hover:border-zinc-700" // Inactive state
@@ -38,7 +38,7 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
               <img
                 src={img}
                 alt={`${productName} thumbnail ${index + 1}`}
-                className="h-full w-full object-cover object-center"
+                className="size-full object-cover object-center"
               />
             </button>
           ))}

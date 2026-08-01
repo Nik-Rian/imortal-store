@@ -10,41 +10,41 @@ The project provides both a customer storefront and a protected administration p
 
 ### Storefront
 
-* Product catalog
-* Product detail pages
-* Interactive image gallery with thumbnail selection
-* Shopping cart (client-side)
-* Responsive interface
+- Product catalog
+- Product detail pages
+- Interactive image gallery with thumbnail selection
+- Shopping cart (client-side)
+- Responsive interface
 
 ### Admin Panel
 
-* Secure authentication with Better Auth
-* Product management
-  * Create, edit, and delete products
-  * Integrated image uploads via Vercel Blob Storage
-  * Instant upload previews and client-side removal
-  * Filename normalization (`slugify` base name formatting)
-  * Automated image cleanup on removal or product deletion
-* Administrator management
-  * Create administrators
-  * Remove administrators
-* Protected routes
-* Server Actions for mutations
+- Secure authentication with Better Auth
+- Product management
+  - Create, edit, and delete products
+  - Integrated image uploads via Vercel Blob Storage
+  - Instant upload previews and client-side removal
+  - Filename normalization (`slugify` base name formatting)
+  - Automated image cleanup on removal or product deletion
+- Administrator management
+  - Create administrators
+  - Remove administrators
+- Protected routes
+- Server Actions for mutations
 
 ---
 
 ## Tech Stack
 
-* Next.js 16 (App Router)
-* React 19
-* TypeScript
-* Tailwind CSS 4
-* shadcn/ui
-* Prisma ORM
-* PostgreSQL
-* Better Auth
-* Vercel Blob Storage
-* Docker (database)
+- Next.js 16 (App Router)
+- React 19
+- TypeScript
+- Tailwind CSS 4
+- shadcn/ui
+- Prisma ORM
+- PostgreSQL
+- Better Auth
+- Vercel Blob Storage
+- Docker (database)
 
 ---
 
@@ -176,6 +176,7 @@ http://localhost:3000
 ```
 
 Admin login:
+
 ```
 http://localhost:3000/admin/login
 ```

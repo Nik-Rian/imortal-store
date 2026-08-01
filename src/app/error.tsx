@@ -24,7 +24,7 @@ export default function RootError({ error, reset }: ErrorProps) {
               viewBox="0 0 24 24"
               strokeWidth={1.5}
               stroke="currentColor"
-              className="h-12 w-12"
+              className="size-12"
             >
               <path
                 strokeLinecap="round"
@@ -36,12 +36,14 @@ export default function RootError({ error, reset }: ErrorProps) {
         </div>
 
         <div className="space-y-2">
-          <h1 className="text-3xl font-extrabold tracking-tight">Ops! Algo deu errado</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight">
+            Ops! Algo deu errado
+          </h1>
           <p className="text-zinc-500 dark:text-zinc-400">
             Ocorreu um erro inesperado ao carregar esta página.
           </p>
           {error.message && (
-            <p className="mt-2 rounded bg-zinc-100 p-3 font-mono text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 max-w-full overflow-auto">
+            <p className="mt-2 max-w-full overflow-auto rounded bg-zinc-100 p-3 font-mono text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
               {error.message}
             </p>
           )}
@@ -50,13 +52,13 @@ export default function RootError({ error, reset }: ErrorProps) {
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <button
             onClick={() => reset()}
-            className="inline-flex items-center justify-center rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-zinc-50 hover:bg-zinc-900/90 transition-colors dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-50/90 cursor-pointer"
+            className="inline-flex cursor-pointer items-center justify-center rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-zinc-50 transition-colors hover:bg-zinc-900/90 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-50/90"
           >
             Tentar novamente
           </button>
           <Link
             href="/"
-            className="inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-50 transition-colors dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+            className="inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
           >
             Voltar para a Loja
           </Link>

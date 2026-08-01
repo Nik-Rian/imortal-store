@@ -1,17 +1,24 @@
 "use client";
 
-import React, { createContext, useContext, useSyncExternalStore } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { CartItem, CartContextType } from "../types/cart";
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 const STORAGE_KEY = "imortal-store-cart";
 
-// Custom event to notify components in the same tab when storage changes
 function notifyStorageChange() {
-  window.dispatchEvent(new Event("local-storage-cart"));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("local-storage-cart"));
+  }
 }
 
 function subscribe(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
   window.addEventListener("storage", callback);
   window.addEventListener("local-storage-cart", callback);
   return () => {
@@ -21,6 +28,7 @@ function subscribe(callback: () => void) {
 }
 
 function getSnapshot(): string {
+  if (typeof window === "undefined") return "[]";
   return localStorage.getItem(STORAGE_KEY) || "[]";
 }
 
@@ -29,11 +37,12 @@ function getServerSnapshot(): string {
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  // Synchronizes React directly with localStorage
+  const [isOpen, setIsOpen] = useState(false);
+
   const rawCart = useSyncExternalStore(
     subscribe,
     getSnapshot,
-    getServerSnapshot,
+    getServerSnapshot
   );
 
   let items: CartItem[] = [];
@@ -44,25 +53,30 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }
 
   const saveCart = (newItems: CartItem[]) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newItems));
-    notifyStorageChange();
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newItems));
+      notifyStorageChange();
+    }
   };
 
   const addItem = (newItem: Omit<CartItem, "quantity">, quantity = 1) => {
-    const existingIndex = items.findIndex((item) => item.id === newItem.id);
+    const existingIndex = items.findIndex(
+      (item) => item.id === newItem.id && item.size === newItem.size
+    );
     let updatedItems: CartItem[];
 
     if (existingIndex > -1) {
       updatedItems = items.map((item, index) =>
         index === existingIndex
           ? { ...item, quantity: item.quantity + quantity }
-          : item,
+          : item
       );
     } else {
       updatedItems = [...items, { ...newItem, quantity }];
     }
 
     saveCart(updatedItems);
+    setIsOpen(true);
   };
 
   const removeItem = (id: string) => {
@@ -75,7 +89,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     saveCart(
-      items.map((item) => (item.id === id ? { ...item, quantity } : item)),
+      items.map((item) => (item.id === id ? { ...item, quantity } : item))
     );
   };
 
@@ -86,7 +100,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const cartCount = items.reduce((total, item) => total + item.quantity, 0);
   const cartTotal = items.reduce(
     (total, item) => total + item.priceCents * item.quantity,
-    0,
+    0
   );
 
   return (
@@ -99,6 +113,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         clearCart,
         cartCount,
         cartTotal,
+        isOpen,
+        setIsOpen,
       }}
     >
       {children}

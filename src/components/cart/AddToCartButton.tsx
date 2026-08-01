@@ -21,7 +21,8 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
   const [quantity, setQuantity] = useState(1);
 
   const handleIncrement = () => setQuantity((prev) => prev + 1);
-  const handleDecrement = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1));
+  const handleDecrement = () =>
+    setQuantity((prev) => (prev > 1 ? prev - 1 : 1));
 
   const handleAddToCart = () => {
     addItem(
@@ -32,7 +33,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
         priceCents: product.priceCents,
         image: product.images[0] || "/placeholder.png", // Fallback if no images
       },
-      quantity,
+      quantity
     );
 
     // Reset quantity selector to 1 after adding
@@ -43,38 +44,38 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
   };
 
   return (
-    <div className="flex flex-col gap-4 w-full sm:w-auto">
+    <div className="flex w-full flex-col gap-4 sm:w-auto">
       {/* Quantity Selector */}
-      <div className="flex items-center border border-input rounded-md w-fit bg-background">
+      <div className="flex w-fit items-center rounded-md border border-input bg-background">
         <Button
           variant="ghost"
           size="icon"
           onClick={handleDecrement}
           disabled={quantity <= 1}
-          className="h-10 w-10 rounded-r-none"
+          className="size-10 rounded-r-none"
         >
-          <Minus className="h-4 w-4" />
+          <Minus className="size-4" />
         </Button>
-        <span className="w-12 text-center font-medium text-sm select-none">
+        <span className="w-12 text-center text-sm font-medium select-none">
           {quantity}
         </span>
         <Button
           variant="ghost"
           size="icon"
           onClick={handleIncrement}
-          className="h-10 w-10 rounded-l-none"
+          className="size-10 rounded-l-none"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="size-4" />
         </Button>
       </div>
 
       {/* Add to Cart Button */}
       <Button
         onClick={handleAddToCart}
-        className="w-full sm:w-64 gap-2 text-base font-semibold"
+        className="w-full gap-2 text-base font-semibold sm:w-64"
         size="lg"
       >
-        <ShoppingBag className="h-5 w-5" />
+        <ShoppingBag className="size-5" />
         Adicionar ao Carrinho
       </Button>
     </div>

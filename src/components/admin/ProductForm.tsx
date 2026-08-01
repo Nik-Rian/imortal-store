@@ -23,7 +23,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
 
   const [name, setName] = useState(initialData?.name ?? "");
   const [selectedDropId, setSelectedDropId] = useState(
-    initialData?.dropId ?? (drops[0]?.id || ""),
+    initialData?.dropId ?? (drops[0]?.id || "")
   );
 
   const originalSlug = initialData?.slug ?? "";
@@ -63,7 +63,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     } catch (err) {
       console.error("Erro ao enviar imagem:", err);
       setError(
-        err instanceof Error ? err.message : "Falha ao enviar a imagem.",
+        err instanceof Error ? err.message : "Falha ao enviar a imagem."
       );
     } finally {
       setIsUploading(false);
@@ -134,7 +134,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
       setError(
         err instanceof Error
           ? err.message
-          : "Não foi possível salvar o produto.",
+          : "Não foi possível salvar o produto."
       );
     } finally {
       setIsPending(false);
@@ -144,10 +144,10 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   return (
     <form
       action={clientAction}
-      className="space-y-6 bg-white p-6 border rounded-md shadow-sm"
+      className="space-y-6 rounded-md border bg-white p-6 shadow-sm"
     >
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 rounded-md px-3 py-2 animate-in fade-in duration-200">
+        <p className="animate-in rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 duration-200 fade-in">
           {error}
         </p>
       )}
@@ -165,7 +165,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
           value={selectedDropId}
           onChange={(e) => setSelectedDropId(e.target.value)}
           disabled={isPending || drops.length === 0}
-          className="w-full flex h-10 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
+          className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
         >
           {drops.length === 0 ? (
             <option value="">Nenhum Drop cadastrado</option>
@@ -197,13 +197,13 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
           value={name}
           onChange={handleNameChange}
           disabled={isPending}
-          className="w-full flex h-10 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
+          className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
         />
 
         {!isEditMode ? (
-          <p className="text-xs text-zinc-500 mt-1">
+          <p className="mt-1 text-xs text-zinc-500">
             Link permanente:{" "}
-            <span className="font-mono bg-zinc-50 text-zinc-700 px-1 py-0.5 rounded">
+            <span className="rounded bg-zinc-50 px-1 py-0.5 font-mono text-zinc-700">
               {currentSlug || "..."}
             </span>
           </p>
@@ -211,14 +211,14 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
           <div className="mt-2 flex flex-col gap-1">
             <p className="text-xs text-zinc-500">
               Link anterior:{" "}
-              <span className="font-mono bg-zinc-100 text-zinc-700 px-1 py-0.5 rounded">
+              <span className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-zinc-700">
                 {originalSlug}
               </span>
             </p>
             {currentSlug !== originalSlug && currentSlug !== "" && (
               <p className="text-xs text-orange-400">
                 O link será alterado para:{" "}
-                <span className="font-mono bg-blue-50 px-1 py-0.5 rounded">
+                <span className="rounded bg-blue-50 px-1 py-0.5 font-mono">
                   {currentSlug}
                 </span>
               </p>
@@ -233,37 +233,37 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
           Fotos do Produto
         </label>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {images.map((url, idx) => (
             <div
               key={url}
-              className="relative aspect-square border rounded-md overflow-hidden group bg-zinc-100"
+              className="group relative aspect-square overflow-hidden rounded-md border bg-zinc-100"
             >
               <img
                 src={url}
                 alt={`Foto ${idx + 1}`}
-                className="w-full h-full object-cover"
+                className="size-full object-cover"
               />
               <button
                 type="button"
                 onClick={() => handleRemoveImage(idx)}
                 disabled={isPending || isUploading}
-                className="absolute top-1 right-1 bg-black/70 text-white rounded-full p-1 opacity-90 hover:bg-black transition-opacity"
+                className="absolute top-1 right-1 rounded-full bg-black/70 p-1 text-white opacity-90 transition-opacity hover:bg-black"
                 title="Remover imagem"
               >
-                <X className="w-4 h-4" />
+                <X className="size-4" />
               </button>
             </div>
           ))}
 
           {/* Add Image Upload Slot */}
-          <label className="border-2 border-dashed border-zinc-300 hover:border-zinc-500 rounded-md aspect-square flex flex-col items-center justify-center cursor-pointer transition-colors bg-zinc-50 hover:bg-zinc-100 p-2 text-center">
+          <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-zinc-300 bg-zinc-50 p-2 text-center transition-colors hover:border-zinc-500 hover:bg-zinc-100">
             {isUploading ? (
-              <Loader2 className="w-6 h-6 animate-spin text-zinc-500" />
+              <Loader2 className="size-6 animate-spin text-zinc-500" />
             ) : (
               <>
-                <ImagePlus className="w-6 h-6 text-zinc-400 mb-1" />
-                <span className="text-xs text-zinc-600 font-medium">
+                <ImagePlus className="mb-1 size-6 text-zinc-400" />
+                <span className="text-xs font-medium text-zinc-600">
                   Adicionar Foto
                 </span>
               </>
@@ -294,7 +294,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
           rows={4}
           defaultValue={initialData?.description ?? ""}
           disabled={isPending}
-          className="w-full flex rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
+          className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
         />
       </div>
 
@@ -304,8 +304,8 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
           Preço (R$)
         </label>
         <div className="relative">
-          <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
-            <span className="text-zinc-500 text-sm">R$</span>
+          <div className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
+            <span className="text-sm text-zinc-500">R$</span>
           </div>
           <input
             type="number"
@@ -317,16 +317,16 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
             onChange={(e) => setPriceInput(e.target.value)}
             disabled={isPending}
             style={{ paddingLeft: "2.5rem" }}
-            className="w-full block h-10 rounded-md border border-zinc-200 bg-white pr-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
+            className="block h-10 w-full rounded-md border border-zinc-200 bg-white py-2 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
           />
         </div>
       </div>
 
-      <div className="pt-4 flex justify-end">
+      <div className="flex justify-end pt-4">
         <button
           type="submit"
           disabled={isPending || isUploading || drops.length === 0}
-          className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2 transition-colors disabled:opacity-50 cursor-pointer"
+          className="inline-flex h-10 cursor-pointer items-center justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 transition-colors hover:bg-zinc-900/90 disabled:opacity-50"
         >
           {isPending
             ? "Salvando..."

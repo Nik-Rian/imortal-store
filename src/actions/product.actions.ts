@@ -50,7 +50,7 @@ export async function createProduct(formData: FormData) {
 
   if (existingProduct) {
     throw new Error(
-      `Não foi possível cadastrar o produto. O link permanente (slug) "${slug}" já está em uso pelo produto "${existingProduct.name}". Por favor, escolha outro nome.`,
+      `Não foi possível cadastrar o produto. O link permanente (slug) "${slug}" já está em uso pelo produto "${existingProduct.name}". Por favor, escolha outro nome.`
     );
   }
 
@@ -69,7 +69,7 @@ export async function createProduct(formData: FormData) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
         throw new Error(
-          `Erro de duplicidade: O link permanente (slug) "${slug}" já está em uso por outro produto.`,
+          `Erro de duplicidade: O link permanente (slug) "${slug}" já está em uso por outro produto.`
         );
       }
     }
@@ -122,13 +122,13 @@ export async function updateProduct(id: string, formData: FormData) {
 
   if (existingProductWithSlug && existingProductWithSlug.id !== id) {
     throw new Error(
-      `Não foi possível salvar as alterações. O link permanente (slug) "${slug}" já está sendo usado pelo produto "${existingProductWithSlug.name}".`,
+      `Não foi possível salvar as alterações. O link permanente (slug) "${slug}" já está sendo usado pelo produto "${existingProductWithSlug.name}".`
     );
   }
 
   // Identify orphaned images removed by the admin
   const removedImages = currentProduct.images.filter(
-    (oldUrl) => !newImages.includes(oldUrl),
+    (oldUrl) => !newImages.includes(oldUrl)
   );
 
   try {
@@ -152,7 +152,7 @@ export async function updateProduct(id: string, formData: FormData) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
         throw new Error(
-          `Erro de duplicidade: O link permanente (slug) "${slug}" já está em uso por outro produto.`,
+          `Erro de duplicidade: O link permanente (slug) "${slug}" já está em uso por outro produto.`
         );
       }
     }

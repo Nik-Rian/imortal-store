@@ -1,61 +1,70 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ProductGallery } from "@/components/product/ProductGallery";
-import { AddToCartButton } from "@/components/cart/AddToCartButton";
+import { getProduct, products } from "@/data/products";
 import { getProductBySlug } from "@/services/product.service";
-import { formatPrice } from "@/lib/utils";
+import { ProductDetailView } from "@/components/product/ProductDetailView";
 
 type Props = {
   params: Promise<{ slug: string }>;
 };
 
+export async function generateStaticParams() {
+  return products.map((p) => ({
+    slug: p.slug || p.id,
+  }));
+}
+
 export default async function ProductPage({ params }: Props) {
-  // Await the params to extract the slug
   const { slug } = await params;
 
-  // Fetch
-  const product = await getProductBySlug(slug);
+  let product = null;
 
-  // If the slug doesn't match any product, trigger a 404 page
+  // 1. Try querying Prisma database first
+  try {
+    const dbProduct = await getProductBySlug(slug);
+    if (dbProduct) {
+      const dbSizes =
+        dbProduct.variants && dbProduct.variants.length > 0
+          ? dbProduct.variants.map((v) => v.size)
+          : ["PP", "P", "M", "G", "GG", "XG"];
+
+      product = {
+        id: dbProduct.id,
+        code: `IMR-${dbProduct.id.slice(0, 3).toUpperCase()}`,
+        name: dbProduct.name,
+        slug: dbProduct.slug,
+        line: dbProduct.drop?.name || "Linha Guardiã",
+        description: dbProduct.description,
+        story: dbProduct.description,
+        price: dbProduct.priceCents / 100,
+        image: dbProduct.images[0] || "/placeholder.png",
+        photos: (dbProduct.images && dbProduct.images.length > 0
+          ? dbProduct.images
+          : ["/placeholder.png"]
+        ).map((img, idx) => ({
+          src: img,
+          label: idx === 0 ? "Frente" : idx === 1 ? "Costas" : `Detalhe ${idx}`,
+        })),
+        sizes: dbSizes,
+        specs: [
+          { label: "Material", value: "100% Algodão Penteado" },
+          { label: "Modelagem", value: "Unissex" },
+        ],
+        highlights: ["Produto Oficial Atlética Imortal"],
+        care: ["Lavar em ciclo delicado", "Secar à sombra"],
+      };
+    }
+  } catch (error) {
+    console.error("Erro ao buscar produto do banco:", error);
+  }
+
+  // 2. Fallback to static products dataset if not found in database
+  if (!product) {
+    product = getProduct(slug) || null;
+  }
+
   if (!product) {
     notFound();
   }
 
-  return (
-    <main className="mx-auto max-w-7xl px-4 py-12">
-      {/* Breadcrumb / Back Link */}
-      <Link
-        href="/"
-        className="text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 mb-8 inline-block transition-colors"
-      >
-        &larr; Voltar para a loja
-      </Link>
-
-      <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
-        {/* Left Column: Product Gallery */}
-        <ProductGallery images={product.images} productName={product.name} />
-
-        {/* Right Column: Product Details */}
-        <div className="flex flex-col">
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-4xl">
-            {product.name}
-          </h1>
-          <p className="mt-4 text-2xl font-medium text-zinc-900 dark:text-zinc-100">
-            {formatPrice(product.priceCents)}
-          </p>
-
-          <div className="mt-6">
-            <h3 className="sr-only">Descrição</h3>
-            <p className="text-base text-zinc-700 dark:text-zinc-300 leading-relaxed">
-              {product.description}
-            </p>
-          </div>
-
-          <div className="mt-8 flex gap-4">
-            <AddToCartButton product={product} />
-          </div>
-        </div>
-      </div>
-    </main>
-  );
+  return <ProductDetailView product={product} />;
 }

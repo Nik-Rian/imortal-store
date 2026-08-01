@@ -46,7 +46,7 @@ export async function deleteBlobImages(urls: string[]): Promise<void> {
 
   // Ensure we only pass Vercel Blob URLs to the `del` API
   const validBlobUrls = urls.filter((url) =>
-    url.includes("blob.vercel-storage.com"),
+    url.includes("blob.vercel-storage.com")
   );
 
   if (validBlobUrls.length > 0) {

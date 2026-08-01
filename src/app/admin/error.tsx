@@ -14,7 +14,7 @@ export default function AdminError({ error, reset }: ErrorProps) {
   }, [error]);
 
   return (
-    <div className="flex min-h-[80vh] items-center justify-center p-6 bg-zinc-50">
+    <div className="flex min-h-[80vh] items-center justify-center bg-zinc-50 p-6">
       <div className="w-full max-w-lg space-y-6 rounded-lg border border-zinc-200 bg-white p-8 shadow-sm">
         <div className="flex items-center gap-3 border-b border-zinc-100 pb-4">
           <div className="rounded-full bg-red-100 p-2 text-red-600">
@@ -24,7 +24,7 @@ export default function AdminError({ error, reset }: ErrorProps) {
               viewBox="0 0 24 24"
               strokeWidth={2}
               stroke="currentColor"
-              className="h-6 w-6"
+              className="size-6"
             >
               <path
                 strokeLinecap="round"
@@ -34,36 +34,42 @@ export default function AdminError({ error, reset }: ErrorProps) {
             </svg>
           </div>
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-zinc-900">Erro no Painel Administrativo</h2>
-            <p className="text-xs text-zinc-500">Ocorreu uma falha ao processar a requisição.</p>
+            <h2 className="text-xl font-bold tracking-tight text-zinc-900">
+              Erro no Painel Administrativo
+            </h2>
+            <p className="text-xs text-zinc-500">
+              Ocorreu uma falha ao processar a requisição.
+            </p>
           </div>
         </div>
 
         <div className="space-y-2">
           <p className="text-sm text-zinc-600">
-            A ação solicitada não pôde ser concluída. Verifique suas credenciais, certifique-se de que os campos requeridos estão corretos ou tente reiniciar o processo.
+            A ação solicitada não pôde ser concluída. Verifique suas
+            credenciais, certifique-se de que os campos requeridos estão
+            corretos ou tente reiniciar o processo.
           </p>
-          <div className="rounded-md bg-zinc-50 border border-zinc-200 p-4">
-            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
+          <div className="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+            <span className="mb-1 block text-xs font-semibold tracking-wider text-zinc-400 uppercase">
               Mensagem de Erro
             </span>
-            <code className="text-sm font-mono text-red-600 wrap-break-words block">
+            <code className="wrap-break-words block font-mono text-sm text-red-600">
               {error.message || "Instabilidade ou erro interno desconhecido."}
             </code>
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+        <div className="flex flex-col gap-3 pt-2 sm:flex-row">
           <button
             onClick={() => reset()}
-            className="flex-1 inline-flex items-center justify-center rounded-md bg-zinc-900 text-sm font-medium text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2 transition-colors cursor-pointer"
+            className="inline-flex h-10 flex-1 cursor-pointer items-center justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 transition-colors hover:bg-zinc-900/90"
           >
             Tentar Novamente
           </button>
-          
+
           <Link
             href="/admin"
-            className="flex-1 inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white text-sm font-medium text-zinc-700 hover:bg-zinc-50 h-10 px-4 py-2 transition-colors"
+            className="inline-flex h-10 flex-1 items-center justify-center rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
           >
             Ir para a Dashboard
           </Link>
