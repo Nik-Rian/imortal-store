@@ -24,11 +24,18 @@ model Drop {
 
 model Product {
   id          String   @id @default(uuid())
+  code        String?
   name        String
   slug        String   @unique
+  line        String?
+  tag         String?
   description String
+  story       String?
   priceCents  Int
   images      String[]
+  specs       Json?    @default("[]")
+  highlights  String[] @default([])
+  care        String[] @default([])
   sortOrder   Int      @default(0)
 
   dropId      String

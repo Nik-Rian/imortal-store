@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, ChangeEvent } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { slugify } from "@/lib/utils";
@@ -24,12 +24,25 @@ import {
   CircleNotchIcon,
   XIcon,
   WarningCircleIcon,
+  PlusIcon,
+  TrashIcon,
 } from "@phosphor-icons/react";
 
+const ALL_SIZES = ["PP", "P", "M", "G", "GG", "XG"];
+
+const specItemSchema = z.object({
+  label: z.string().trim(),
+  value: z.string().trim(),
+});
+
 const productFormSchema = z.object({
+  code: z.string().trim().optional(),
   name: z.string().trim().min(1, "O nome do produto é obrigatório."),
   slug: z.string().trim().min(1, "O link permanente é obrigatório."),
+  line: z.string().trim().optional(),
+  tag: z.string().trim().optional(),
   description: z.string().trim().min(1, "A descrição do produto é obrigatória."),
+  story: z.string().trim().optional(),
   dropId: z.string().min(1, "Por favor, selecione um Drop para o produto."),
   price: z
     .string()
@@ -39,10 +52,14 @@ const productFormSchema = z.object({
       "O preço deve ser um valor numérico positivo."
     ),
   images: z.array(z.string()),
+  sizes: z.array(z.string()),
+  specs: z.array(specItemSchema),
+  highlights: z.array(z.string()),
+  care: z.array(z.string()),
 });
 
-type ProductFormValues = z.infer<typeof productFormSchema>;
 
+type ProductFormValues = z.infer<typeof productFormSchema>;
 
 type DropOption = {
   id: string;
@@ -60,27 +77,68 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
+  const initialSizes = initialData?.variants?.map((v) => v.size) ?? ["PP", "P", "M", "G", "GG", "XG"];
+  const initialSpecs = Array.isArray(initialData?.specs) ? (initialData.specs as { label: string; value: string }[]) : [];
+  const initialHighlights = initialData?.highlights ?? [];
+  const initialCare = initialData?.care ?? [];
+
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
     defaultValues: {
+      code: initialData?.code ?? "",
       name: initialData?.name ?? "",
       slug: initialData?.slug ?? "",
+      line: initialData?.line ?? "",
+      tag: initialData?.tag ?? "",
       description: initialData?.description ?? "",
+      story: initialData?.story ?? "",
       dropId: initialData?.dropId ?? (drops[0]?.id || ""),
       price: initialData ? (initialData.priceCents / 100).toFixed(2) : "",
       images: initialData?.images ?? [],
+      sizes: initialSizes.length > 0 ? initialSizes : ALL_SIZES,
+      specs: initialSpecs.length > 0 ? initialSpecs : [
+        { label: "Tecido", value: "" },
+        { label: "Modelagem", value: "" },
+      ],
+      highlights: initialHighlights.length > 0 ? initialHighlights : [""],
+      care: initialCare.length > 0 ? initialCare : [""],
     },
+  });
+
+  const {
+    fields: specFields,
+    append: appendSpec,
+    remove: removeSpec,
+  } = useFieldArray({
+    control,
+    name: "specs",
   });
 
   const nameValue = watch("name");
   const images = watch("images");
+  const selectedSizes = watch("sizes");
+  const highlights = watch("highlights");
+  const care = watch("care");
   const currentSlug = slugify(nameValue || "");
+
+  const toggleSize = (size: string) => {
+    if (selectedSizes.includes(size)) {
+      setValue(
+        "sizes",
+        selectedSizes.filter((s) => s !== size),
+        { shouldValidate: true }
+      );
+    } else {
+      setValue("sizes", [...selectedSizes, size], { shouldValidate: true });
+    }
+  };
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -125,6 +183,42 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     }
   };
 
+  const addHighlight = () => {
+    setValue("highlights", [...highlights, ""], { shouldValidate: true });
+  };
+
+  const removeHighlight = (idx: number) => {
+    setValue(
+      "highlights",
+      highlights.filter((_, i) => i !== idx),
+      { shouldValidate: true }
+    );
+  };
+
+  const updateHighlight = (idx: number, val: string) => {
+    const next = [...highlights];
+    next[idx] = val;
+    setValue("highlights", next, { shouldValidate: true });
+  };
+
+  const addCare = () => {
+    setValue("care", [...care, ""], { shouldValidate: true });
+  };
+
+  const removeCare = (idx: number) => {
+    setValue(
+      "care",
+      care.filter((_, i) => i !== idx),
+      { shouldValidate: true }
+    );
+  };
+
+  const updateCare = (idx: number, val: string) => {
+    const next = [...care];
+    next[idx] = val;
+    setValue("care", next, { shouldValidate: true });
+  };
+
   const onSubmit = async (data: ProductFormValues) => {
     setServerError(null);
 
@@ -132,11 +226,24 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     const priceCents = Math.round(parsedDisplayPrice * 100);
 
     const formData = new FormData();
+    formData.set("code", data.code || "");
     formData.set("name", data.name);
     formData.set("slug", currentSlug);
+    formData.set("line", data.line || "");
+    formData.set("tag", data.tag || "");
     formData.set("description", data.description);
+    formData.set("story", data.story || "");
     formData.set("priceCents", priceCents.toString());
     formData.set("dropId", data.dropId);
+
+    const validSpecs = data.specs.filter((s) => s.label.trim() && s.value.trim());
+    const validHighlights = data.highlights.filter((h) => h.trim());
+    const validCare = data.care.filter((c) => c.trim());
+
+    formData.set("specs", JSON.stringify(validSpecs));
+    formData.set("highlights", JSON.stringify(validHighlights));
+    formData.set("care", JSON.stringify(validCare));
+    formData.set("sizes", JSON.stringify(data.sizes));
 
     data.images.forEach((url) => formData.append("images", url));
 
@@ -198,6 +305,39 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
                 <FieldError>{errors.dropId.message}</FieldError>
               )}
             </Field>
+
+            {/* Code, Line, Tag Grid */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field data-invalid={!!errors.code}>
+                <FieldLabel htmlFor="code">Código / SKU</FieldLabel>
+                <Input
+                  id="code"
+                  placeholder="ex: IMT-001"
+                  disabled={isSubmitting}
+                  {...register("code")}
+                />
+              </Field>
+
+              <Field data-invalid={!!errors.line}>
+                <FieldLabel htmlFor="line">Linha do Produto</FieldLabel>
+                <Input
+                  id="line"
+                  placeholder="ex: Linha Guardiã"
+                  disabled={isSubmitting}
+                  {...register("line")}
+                />
+              </Field>
+
+              <Field data-invalid={!!errors.tag}>
+                <FieldLabel htmlFor="tag">Tag / Selo Promocional</FieldLabel>
+                <Input
+                  id="tag"
+                  placeholder="ex: Mais vendida"
+                  disabled={isSubmitting}
+                  {...register("tag")}
+                />
+              </Field>
+            </div>
 
             {/* Product Name */}
             <Field data-invalid={!!errors.name}>
@@ -278,17 +418,29 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
 
             {/* Description */}
             <Field data-invalid={!!errors.description}>
-              <FieldLabel htmlFor="description">Descrição</FieldLabel>
+              <FieldLabel htmlFor="description">Descrição Resumida</FieldLabel>
               <Textarea
                 id="description"
-                rows={4}
-                placeholder="Descreva os detalhes do produto, tecido, caimento..."
+                rows={3}
+                placeholder="Descreva o resumo do produto, tecido, gramatura..."
                 disabled={isSubmitting}
                 {...register("description")}
               />
               {errors.description?.message && (
                 <FieldError>{errors.description.message}</FieldError>
               )}
+            </Field>
+
+            {/* Story / Narrative */}
+            <Field data-invalid={!!errors.story}>
+              <FieldLabel htmlFor="story">História / Conceito da Peça</FieldLabel>
+              <Textarea
+                id="story"
+                rows={4}
+                placeholder="Conte a história por trás do design, inspiração e detalhes da confecção..."
+                disabled={isSubmitting}
+                {...register("story")}
+              />
             </Field>
 
             {/* Price */}
@@ -311,6 +463,165 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
               {errors.price?.message && (
                 <FieldError>{errors.price.message}</FieldError>
               )}
+            </Field>
+
+            {/* Available Sizes (ProductVariants) */}
+            <Field>
+              <FieldLabel>Tamanhos Disponíveis (Variantes)</FieldLabel>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {ALL_SIZES.map((sz) => {
+                  const isSelected = selectedSizes.includes(sz);
+                  return (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => toggleSize(sz)}
+                      disabled={isSubmitting}
+                      className={`h-9 min-w-12 rounded-md border text-xs font-bold uppercase transition-colors ${
+                        isSelected
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background text-muted-foreground hover:border-primary/50"
+                      }`}
+                    >
+                      {sz}
+                    </button>
+                  );
+                })}
+              </div>
+              <FieldDescription>
+                Selecione os tamanhos que serão criados como variantes para este produto.
+              </FieldDescription>
+            </Field>
+
+            {/* Ficha Técnica (Specs) */}
+            <Field className="space-y-3">
+              <div className="flex items-center justify-between">
+                <FieldLabel>Ficha Técnica (Especificações)</FieldLabel>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={() => appendSpec({ label: "", value: "" })}
+                  disabled={isSubmitting}
+                  className="gap-1 text-xs"
+                >
+                  <PlusIcon className="size-3.5" />
+                  <span>Adicionar Especificação</span>
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {specFields.map((field, idx) => (
+                  <div key={field.id} className="flex items-center gap-2">
+                    <Input
+                      placeholder="Propriedade (ex: Tecido)"
+                      disabled={isSubmitting}
+                      {...register(`specs.${idx}.label`)}
+                      className="w-1/3 text-xs"
+                    />
+                    <Input
+                      placeholder="Valor (ex: 100% Algodão 240g)"
+                      disabled={isSubmitting}
+                      {...register(`specs.${idx}.value`)}
+                      className="flex-1 text-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeSpec(idx)}
+                      disabled={isSubmitting}
+                      className="size-8 text-muted-foreground hover:text-destructive shrink-0"
+                    >
+                      <TrashIcon className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Field>
+
+            {/* Destaques (Highlights) */}
+            <Field className="space-y-3">
+              <div className="flex items-center justify-between">
+                <FieldLabel>Destaques do Produto</FieldLabel>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={addHighlight}
+                  disabled={isSubmitting}
+                  className="gap-1 text-xs"
+                >
+                  <PlusIcon className="size-3.5" />
+                  <span>Adicionar Destaque</span>
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {highlights.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      placeholder="ex: Brasão em bordado alta definição"
+                      value={item}
+                      onChange={(e) => updateHighlight(idx, e.target.value)}
+                      disabled={isSubmitting}
+                      className="flex-1 text-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeHighlight(idx)}
+                      disabled={isSubmitting}
+                      className="size-8 text-muted-foreground hover:text-destructive shrink-0"
+                    >
+                      <TrashIcon className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Field>
+
+            {/* Cuidados (Care) */}
+            <Field className="space-y-3">
+              <div className="flex items-center justify-between">
+                <FieldLabel>Instruções de Cuidados</FieldLabel>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={addCare}
+                  disabled={isSubmitting}
+                  className="gap-1 text-xs"
+                >
+                  <PlusIcon className="size-3.5" />
+                  <span>Adicionar Instrução</span>
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {care.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      placeholder="ex: Lavar do avesso até 30 °C"
+                      value={item}
+                      onChange={(e) => updateCare(idx, e.target.value)}
+                      disabled={isSubmitting}
+                      className="flex-1 text-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeCare(idx)}
+                      disabled={isSubmitting}
+                      className="size-8 text-muted-foreground hover:text-destructive shrink-0"
+                    >
+                      <TrashIcon className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </Field>
           </FieldGroup>
 
@@ -336,5 +647,6 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     </Card>
   );
 }
+
 
 

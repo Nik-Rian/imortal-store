@@ -6,10 +6,14 @@ export const getProducts = cache(async () => {
   return await prisma.product.findMany({
     include: {
       drop: true,
+      variants: {
+        orderBy: { sortOrder: "asc" },
+      },
     },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
   });
 });
+
 
 export const getProductBySlug = cache(async (slug: string) => {
   return await prisma.product.findUnique({

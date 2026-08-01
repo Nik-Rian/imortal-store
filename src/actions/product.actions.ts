@@ -25,12 +25,39 @@ export async function createProduct(formData: FormData) {
   const rawPrice = (formData.get("priceCents") ??
     formData.get("price")) as string;
 
+  const rawSpecs = (formData.get("specs") as string) ?? "[]";
+  const rawHighlights = (formData.get("highlights") as string) ?? "[]";
+  const rawCare = (formData.get("care") as string) ?? "[]";
+  const rawSizes = (formData.get("sizes") as string) ?? "[]";
+
+  let specs = [];
+  let highlights = [];
+  let care = [];
+  let sizes: string[] = [];
+
+  try {
+    specs = JSON.parse(rawSpecs);
+    highlights = JSON.parse(rawHighlights);
+    care = JSON.parse(rawCare);
+    sizes = JSON.parse(rawSizes);
+  } catch (e) {
+    console.error("Erro ao analisar campos em JSON:", e);
+  }
+
   const validationResult = productSchema.safeParse({
+    code: formData.get("code") || null,
     name: formData.get("name"),
     slug: formData.get("slug"),
+    line: formData.get("line") || null,
+    tag: formData.get("tag") || null,
     description: formData.get("description"),
+    story: formData.get("story") || null,
     dropId: formData.get("dropId"),
     priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
+    specs,
+    highlights,
+    care,
+    sizes,
   });
 
   if (!validationResult.success) {
@@ -40,7 +67,17 @@ export async function createProduct(formData: FormData) {
     throw new Error(firstErrorMessage);
   }
 
-  const { name, slug, description, dropId, priceCents } = validationResult.data;
+  const {
+    code,
+    name,
+    slug,
+    line,
+    tag,
+    description,
+    story,
+    dropId,
+    priceCents,
+  } = validationResult.data;
 
   const images = formData.getAll("images") as string[];
 
@@ -57,12 +94,25 @@ export async function createProduct(formData: FormData) {
   try {
     await prisma.product.create({
       data: {
+        code,
         name,
         slug,
+        line,
+        tag,
         description,
+        story,
         priceCents,
         dropId,
         images,
+        specs,
+        highlights,
+        care,
+        variants: {
+          create: sizes.map((size, index) => ({
+            size,
+            sortOrder: index,
+          })),
+        },
       },
     });
   } catch (error: unknown) {
@@ -88,12 +138,39 @@ export async function updateProduct(id: string, formData: FormData) {
   const rawPrice = (formData.get("priceCents") ??
     formData.get("price")) as string;
 
+  const rawSpecs = (formData.get("specs") as string) ?? "[]";
+  const rawHighlights = (formData.get("highlights") as string) ?? "[]";
+  const rawCare = (formData.get("care") as string) ?? "[]";
+  const rawSizes = (formData.get("sizes") as string) ?? "[]";
+
+  let specs = [];
+  let highlights = [];
+  let care = [];
+  let sizes: string[] = [];
+
+  try {
+    specs = JSON.parse(rawSpecs);
+    highlights = JSON.parse(rawHighlights);
+    care = JSON.parse(rawCare);
+    sizes = JSON.parse(rawSizes);
+  } catch (e) {
+    console.error("Erro ao analisar campos em JSON:", e);
+  }
+
   const validationResult = productSchema.safeParse({
+    code: formData.get("code") || null,
     name: formData.get("name"),
     slug: formData.get("slug"),
+    line: formData.get("line") || null,
+    tag: formData.get("tag") || null,
     description: formData.get("description"),
+    story: formData.get("story") || null,
     dropId: formData.get("dropId"),
     priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
+    specs,
+    highlights,
+    care,
+    sizes,
   });
 
   if (!validationResult.success) {
@@ -103,7 +180,17 @@ export async function updateProduct(id: string, formData: FormData) {
     throw new Error(firstErrorMessage);
   }
 
-  const { name, slug, description, dropId, priceCents } = validationResult.data;
+  const {
+    code,
+    name,
+    slug,
+    line,
+    tag,
+    description,
+    story,
+    dropId,
+    priceCents,
+  } = validationResult.data;
   const newImages = formData.getAll("images") as string[];
 
   // Fetch existing product to compare images and check slug collision
@@ -132,16 +219,52 @@ export async function updateProduct(id: string, formData: FormData) {
   );
 
   try {
-    await prisma.product.update({
-      where: { id },
-      data: {
-        name,
-        slug,
-        description,
-        priceCents,
-        dropId,
-        images: newImages,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: {
+          code,
+          name,
+          slug,
+          line,
+          tag,
+          description,
+          story,
+          priceCents,
+          dropId,
+          images: newImages,
+          specs,
+          highlights,
+          care,
+        },
+      });
+
+      // Remove variants that are no longer selected
+      await tx.productVariant.deleteMany({
+        where: {
+          productId: id,
+          size: { notIn: sizes },
+        },
+      });
+
+      // Fetch existing sizes for this product
+      const existingVariants = await tx.productVariant.findMany({
+        where: { productId: id },
+        select: { size: true },
+      });
+      const existingSizes = existingVariants.map((v) => v.size);
+
+      // Create newly added sizes
+      const sizesToCreate = sizes.filter((s) => !existingSizes.includes(s));
+      if (sizesToCreate.length > 0) {
+        await tx.productVariant.createMany({
+          data: sizesToCreate.map((size, idx) => ({
+            productId: id,
+            size,
+            sortOrder: existingSizes.length + idx,
+          })),
+        });
+      }
     });
 
     // Clean up orphaned blobs from storage
