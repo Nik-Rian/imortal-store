@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { UserPlusIcon, ShieldIcon, UsersIcon } from "@phosphor-icons/react";
+import { UserPlusIcon, ShieldIcon, UsersIcon } from "@phosphor-icons/react/ssr";
 
 export default async function AdminUsersPage() {
   const users = await getUsers();
@@ -28,7 +28,7 @@ export default async function AdminUsersPage() {
       </div>
 
       {/* Table Card */}
-      <Card className="border-border/80 bg-surface overflow-hidden">
+      <Card className="overflow-hidden border-border/80 bg-surface">
         <CardContent className="p-0">
           <Table>
             <TableHeader className="bg-muted/40">
@@ -59,7 +59,7 @@ export default async function AdminUsersPage() {
                   return (
                     <TableRow key={user.id} className="transition-colors hover:bg-accent/40">
                       <TableCell className="text-center">
-                        <Avatar className="size-8 border border-border mx-auto">
+                        <Avatar className="mx-auto size-8 border border-border">
                           <AvatarFallback className="bg-primary/20 text-xs font-bold text-primary">
                             {initial}
                           </AvatarFallback>
@@ -72,7 +72,7 @@ export default async function AdminUsersPage() {
                         {user.email}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary gap-1">
+                        <Badge variant="outline" className="gap-1 border-primary/40 bg-primary/10 text-primary">
                           <ShieldIcon className="size-3" />
                           <span>Admin</span>
                         </Badge>

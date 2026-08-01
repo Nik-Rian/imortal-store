@@ -15,7 +15,7 @@ import {
   ArrowUpRightIcon,
   ShoppingBagIcon,
   TrendUpIcon,
-} from "@phosphor-icons/react";
+} from "@phosphor-icons/react/ssr";
 
 
 export default async function AdminDashboardPage() {
@@ -52,7 +52,7 @@ export default async function AdminDashboardPage() {
         {/* Total Products */}
         <Card className="border-border/60 bg-surface/60 transition-colors hover:border-primary/40">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
               Total de Produtos
             </CardTitle>
             <div className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -70,7 +70,7 @@ export default async function AdminDashboardPage() {
         {/* Drops */}
         <Card className="border-border/60 bg-surface/60 transition-colors hover:border-primary/40">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
               Drops Ativos
             </CardTitle>
             <div className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -88,7 +88,7 @@ export default async function AdminDashboardPage() {
         {/* Administrators */}
         <Card className="border-border/60 bg-surface/60 transition-colors hover:border-primary/40">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
               Administradores
             </CardTitle>
             <div className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -106,7 +106,7 @@ export default async function AdminDashboardPage() {
         {/* Store Status */}
         <Card className="border-border/60 bg-surface/60 transition-colors hover:border-primary/40">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
               Status da Loja
             </CardTitle>
             <div className="flex size-8 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-400">
@@ -131,7 +131,7 @@ export default async function AdminDashboardPage() {
       {/* Main Grid: Quick Actions & Recent Products */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Recent Products List */}
-        <Card className="lg:col-span-2 border-border/80 bg-surface">
+        <Card className="border-border/80 bg-surface lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="font-display text-lg font-bold">Últimos Produtos</CardTitle>
@@ -154,14 +154,14 @@ export default async function AdminDashboardPage() {
                 {recentProducts.map((product) => (
                   <div
                     key={product.id}
-                    className="flex items-center justify-between py-3 transition-colors hover:bg-accent/30 rounded-md px-2"
+                    className="flex items-center justify-between rounded-md px-2 py-3 transition-colors hover:bg-accent/30"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex min-w-0 items-center gap-3">
                       {product.images && product.images.length > 0 ? (
                         <img
                           src={product.images[0]}
                           alt={product.name}
-                          className="size-10 rounded-md border border-border object-cover bg-background"
+                          className="size-10 rounded-md border border-border bg-background object-cover"
                         />
                       ) : (
                         <div className="flex size-10 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
@@ -177,7 +177,7 @@ export default async function AdminDashboardPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex shrink-0 items-center gap-3">
                       <span className="font-mono text-sm font-semibold text-primary">
                         {formatPrice(product.priceCents)}
                       </span>
@@ -207,9 +207,9 @@ export default async function AdminDashboardPage() {
           <CardContent className="space-y-3">
             <Link
               href="/admin/produtos/novo"
-              className="flex items-center gap-3 rounded-lg border border-border/80 bg-background/50 p-3 transition-colors hover:border-primary/50 hover:bg-accent/40 group"
+              className="group flex items-center gap-3 rounded-lg border border-border/80 bg-background/50 p-3 transition-colors hover:border-primary/50 hover:bg-accent/40"
             >
-              <div className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+              <div className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                 <PlusIcon className="size-5" />
               </div>
               <div>
@@ -220,9 +220,9 @@ export default async function AdminDashboardPage() {
 
             <Link
               href="/admin/usuarios/novo"
-              className="flex items-center gap-3 rounded-lg border border-border/80 bg-background/50 p-3 transition-colors hover:border-primary/50 hover:bg-accent/40 group"
+              className="group flex items-center gap-3 rounded-lg border border-border/80 bg-background/50 p-3 transition-colors hover:border-primary/50 hover:bg-accent/40"
             >
-              <div className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+              <div className="flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                 <UserPlusIcon className="size-5" />
               </div>
               <div>
@@ -234,9 +234,9 @@ export default async function AdminDashboardPage() {
             <Link
               href="/"
               target="_blank"
-              className="flex items-center gap-3 rounded-lg border border-border/80 bg-background/50 p-3 transition-colors hover:border-primary/50 hover:bg-accent/40 group"
+              className="group flex items-center gap-3 rounded-lg border border-border/80 bg-background/50 p-3 transition-colors hover:border-primary/50 hover:bg-accent/40"
             >
-              <div className="flex size-9 items-center justify-center rounded-md bg-accent text-foreground group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+              <div className="flex size-9 items-center justify-center rounded-md bg-accent text-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
                 <ArrowUpRightIcon className="size-5" />
               </div>
               <div>

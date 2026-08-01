@@ -11,7 +11,7 @@ import {
   PencilSimpleIcon,
   PackageIcon,
   ImageIcon,
-} from "@phosphor-icons/react";
+} from "@phosphor-icons/react/ssr";
 
 export default async function AdminProductsPage() {
   const products = await getProducts();
@@ -33,7 +33,7 @@ export default async function AdminProductsPage() {
       </div>
 
       {/* Table Card */}
-      <Card className="border-border/80 bg-surface overflow-hidden">
+      <Card className="overflow-hidden border-border/80 bg-surface">
         <CardContent className="p-0">
           <Table>
             <TableHeader className="bg-muted/40">
@@ -64,7 +64,7 @@ export default async function AdminProductsPage() {
                         <img
                           src={product.images[0]}
                           alt={product.name}
-                          className="size-9 rounded-md border border-border object-cover bg-background"
+                          className="size-9 rounded-md border border-border bg-background object-cover"
                         />
                       ) : (
                         <div className="flex size-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">

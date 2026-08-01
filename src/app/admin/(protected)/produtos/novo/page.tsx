@@ -3,7 +3,7 @@ import { ProductForm } from "@/components/admin/ProductForm";
 import { createProduct } from "@/actions/product.actions";
 import { getDrops } from "@/services/drop.service";
 import { Button } from "@/components/ui/button";
-import { ArrowLeftIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/ssr";
 
 export default async function NewProductPage() {
   const drops = await getDrops();

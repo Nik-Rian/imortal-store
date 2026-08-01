@@ -1,4 +1,4 @@
-import { EnvelopeSimpleIcon } from "@phosphor-icons/react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/ssr";
 import { Logo } from "@/components/layout/Logo";
 
 

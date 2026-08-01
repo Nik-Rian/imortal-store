@@ -13,7 +13,7 @@ import {
   StorefrontIcon,
   ShieldIcon,
   ArrowLeftIcon,
-} from "@phosphor-icons/react";
+} from "@phosphor-icons/react/ssr";
 
 export default async function ProtectedAdminLayout({
   children,
@@ -46,8 +46,8 @@ export default async function ProtectedAdminLayout({
             >
               Imortal Admin
             </Link>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <Badge variant="outline" className="h-4 px-1.5 text-[10px] uppercase border-primary/40 text-primary">
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <Badge variant="outline" className="h-4 border-primary/40 px-1.5 text-[10px] text-primary uppercase">
                 v1.0
               </Badge>
             </div>
@@ -58,21 +58,21 @@ export default async function ProtectedAdminLayout({
         <nav className="flex-1 space-y-1.5 p-4">
           <Link
             href="/admin"
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-all hover:bg-accent/60 hover:text-foreground group"
+            className="group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-all hover:bg-accent/60 hover:text-foreground"
           >
             <SquaresFourIcon className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
             <span>Dashboard</span>
           </Link>
           <Link
             href="/admin/produtos"
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-all hover:bg-accent/60 hover:text-foreground group"
+            className="group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-all hover:bg-accent/60 hover:text-foreground"
           >
             <PackageIcon className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
             <span>Produtos</span>
           </Link>
           <Link
             href="/admin/usuarios"
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-all hover:bg-accent/60 hover:text-foreground group"
+            className="group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-all hover:bg-accent/60 hover:text-foreground"
           >
             <UsersIcon className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
             <span>Usuários</span>
@@ -80,8 +80,8 @@ export default async function ProtectedAdminLayout({
         </nav>
 
         {/* User profile & actions footer */}
-        <div className="space-y-3 border-t border-border/60 p-4 bg-background/40">
-          <div className="flex items-center gap-3 px-1 py-1">
+        <div className="space-y-3 border-t border-border/60 bg-background/40 p-4">
+          <div className="flex items-center gap-3 p-1">
             <Avatar className="size-9 border border-border">
               <AvatarFallback className="bg-primary/20 text-xs font-bold text-primary">
                 {userInitial}
@@ -128,7 +128,7 @@ export default async function ProtectedAdminLayout({
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">{children}</main>
+        <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

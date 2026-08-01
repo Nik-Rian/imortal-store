@@ -1,4 +1,4 @@
-import { CpuIcon, FlameIcon, UsersIcon } from "@phosphor-icons/react";
+import { CpuIcon, FlameIcon, UsersIcon } from "@phosphor-icons/react/ssr";
 
 const pillars = [
   {

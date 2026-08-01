@@ -1,15 +1,23 @@
 "use client";
 
 import { useState, ChangeEvent } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { slugify } from "@/lib/utils";
 import { Product } from "@/types";
-import { productSchema } from "@/lib/validations/product.schema";
 import { uploadProductImage, deleteBlobImages } from "@/actions/blob.actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  FieldGroup,
+  Field,
+  FieldLabel,
+  FieldDescription,
+  FieldError,
+} from "@/components/ui/field";
 
 import {
   ImageSquareIcon,
@@ -18,6 +26,22 @@ import {
   WarningCircleIcon,
 } from "@phosphor-icons/react";
 
+const productFormSchema = z.object({
+  name: z.string().trim().min(1, "O nome do produto é obrigatório."),
+  slug: z.string().trim().min(1, "O link permanente é obrigatório."),
+  description: z.string().trim().min(1, "A descrição do produto é obrigatória."),
+  dropId: z.string().min(1, "Por favor, selecione um Drop para o produto."),
+  price: z
+    .string()
+    .min(1, "Por favor, insira um preço válido.")
+    .refine(
+      (val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0,
+      "O preço deve ser um valor numérico positivo."
+    ),
+  images: z.array(z.string()),
+});
+
+type ProductFormValues = z.infer<typeof productFormSchema>;
 
 
 type DropOption = {
@@ -33,49 +57,51 @@ interface ProductFormProps {
 
 export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   const isEditMode = !!initialData;
-
-  const [name, setName] = useState(initialData?.name ?? "");
-  const [selectedDropId, setSelectedDropId] = useState(
-    initialData?.dropId ?? (drops[0]?.id || "")
-  );
-
-  const originalSlug = initialData?.slug ?? "";
-  const currentSlug = slugify(name);
-
-  const initialPriceDisplay = initialData
-    ? (initialData.priceCents / 100).toFixed(2)
-    : "";
-  const [priceInput, setPriceInput] = useState(initialPriceDisplay);
-
-  // Image Management State
-  const [images, setImages] = useState<string[]>(initialData?.images ?? []);
   const [isUploading, setIsUploading] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, setIsPending] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<ProductFormValues>({
+    resolver: zodResolver(productFormSchema),
+    defaultValues: {
+      name: initialData?.name ?? "",
+      slug: initialData?.slug ?? "",
+      description: initialData?.description ?? "",
+      dropId: initialData?.dropId ?? (drops[0]?.id || ""),
+      price: initialData ? (initialData.priceCents / 100).toFixed(2) : "",
+      images: initialData?.images ?? [],
+    },
+  });
 
-  const handleNameChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setName(e.target.value);
-  };
+  const nameValue = watch("name");
+  const images = watch("images");
+  const currentSlug = slugify(nameValue || "");
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
-    setError(null);
+    setServerError(null);
 
     try {
+      const newUrls: string[] = [];
       for (const file of Array.from(files)) {
         const uploadFormData = new FormData();
         uploadFormData.append("file", file);
 
         const uploadedUrl = await uploadProductImage(uploadFormData);
-        setImages((prev) => [...prev, uploadedUrl]);
+        newUrls.push(uploadedUrl);
       }
+      setValue("images", [...images, ...newUrls], { shouldValidate: true });
     } catch (err) {
       console.error("Erro ao enviar imagem:", err);
-      setError(
+      setServerError(
         err instanceof Error ? err.message : "Falha ao enviar a imagem."
       );
     } finally {
@@ -86,246 +112,214 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
 
   const handleRemoveImage = async (indexToRemove: number) => {
     const urlToRemove = images[indexToRemove];
+    const updatedImages = images.filter((_, idx) => idx !== indexToRemove);
 
-    setImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+    setValue("images", updatedImages, { shouldValidate: true });
 
     try {
       await deleteBlobImages([urlToRemove]);
     } catch (err) {
       console.error("Erro ao remover imagem do servidor:", err);
-      setError("Não foi possível remover a imagem do servidor.");
-      setImages((prev) => [
-        ...prev.slice(0, indexToRemove),
-        urlToRemove,
-        ...prev.slice(indexToRemove),
-      ]);
+      setServerError("Não foi possível remover a imagem do servidor.");
+      setValue("images", images, { shouldValidate: true });
     }
   };
 
-  const clientAction = async (formData: FormData) => {
-    setError(null);
+  const onSubmit = async (data: ProductFormValues) => {
+    setServerError(null);
 
-    const description = (formData.get("description") as string) ?? "";
-    const parsedDisplayPrice = parseFloat(priceInput);
-    const priceCents = isNaN(parsedDisplayPrice)
-      ? NaN
-      : Math.round(parsedDisplayPrice * 100);
+    const parsedDisplayPrice = parseFloat(data.price);
+    const priceCents = Math.round(parsedDisplayPrice * 100);
 
-    const validationResult = productSchema.safeParse({
-      name,
-      slug: currentSlug,
-      description,
-      dropId: selectedDropId,
-      priceCents,
-    });
+    const formData = new FormData();
+    formData.set("name", data.name);
+    formData.set("slug", currentSlug);
+    formData.set("description", data.description);
+    formData.set("priceCents", priceCents.toString());
+    formData.set("dropId", data.dropId);
 
-    if (!validationResult.success) {
-      const firstErrorMessage =
-        validationResult.error.issues[0]?.message ??
-        "Por favor, verifique os campos do formulário.";
-      setError(firstErrorMessage);
-      return;
-    }
+    data.images.forEach((url) => formData.append("images", url));
 
-    const validData = validationResult.data;
-
-    formData.set("name", validData.name);
-    formData.set("slug", validData.slug);
-    formData.set("description", validData.description);
-    formData.set("priceCents", validData.priceCents.toString());
-    formData.set("dropId", validData.dropId);
-
-    // Append image URLs to formData
-    formData.delete("images");
-    images.forEach((url) => formData.append("images", url));
-
-    setIsPending(true);
     try {
       await action(formData);
     } catch (err) {
       console.error("Erro ao salvar produto:", err);
-      setError(
+      setServerError(
         err instanceof Error
           ? err.message
           : "Não foi possível salvar o produto."
       );
-    } finally {
-      setIsPending(false);
     }
   };
 
   return (
     <Card className="border-border/80 bg-surface shadow-panel">
       <CardContent className="p-6">
-        <form action={clientAction} className="space-y-6">
-          {error && (
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+          {serverError && (
             <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/15 p-3 text-xs text-destructive">
               <WarningCircleIcon className="size-4 shrink-0" />
-              <span>{error}</span>
+              <span>{serverError}</span>
             </div>
           )}
 
-          <input type="hidden" name="slug" value={currentSlug} />
-
-          {/* Drop Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="dropId">Drop / Coleção</Label>
-            <select
-              id="dropId"
-              name="dropId"
-              value={selectedDropId}
-              onChange={(e) => setSelectedDropId(e.target.value)}
-              disabled={isPending || drops.length === 0}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-            >
-              {drops.length === 0 ? (
-                <option value="" className="bg-surface text-foreground">Nenhum Drop cadastrado</option>
-              ) : (
-                drops.map((drop) => (
-                  <option key={drop.id} value={drop.id} className="bg-surface text-foreground">
-                    {drop.name}
+          <FieldGroup className="gap-6">
+            {/* Drop Selection */}
+            <Field data-invalid={!!errors.dropId}>
+              <FieldLabel htmlFor="dropId">Drop / Coleção</FieldLabel>
+              <select
+                id="dropId"
+                disabled={isSubmitting || drops.length === 0}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+                {...register("dropId")}
+              >
+                {drops.length === 0 ? (
+                  <option value="" className="bg-surface text-foreground">
+                    Nenhum Drop cadastrado
                   </option>
-                ))
+                ) : (
+                  drops.map((drop) => (
+                    <option
+                      key={drop.id}
+                      value={drop.id}
+                      className="bg-surface text-foreground"
+                    >
+                      {drop.name}
+                    </option>
+                  ))
+                )}
+              </select>
+              {drops.length === 0 && (
+                <FieldDescription className="text-destructive">
+                  É necessário criar pelo menos um Drop no banco antes de cadastrar produtos.
+                </FieldDescription>
               )}
-            </select>
-            {drops.length === 0 && (
-              <p className="text-xs text-destructive">
-                É necessário criar pelo menos um Drop no banco antes de cadastrar produtos.
-              </p>
-            )}
-          </div>
+              {errors.dropId?.message && (
+                <FieldError>{errors.dropId.message}</FieldError>
+              )}
+            </Field>
 
-          {/* Product Name */}
-          <div className="space-y-2">
-            <Label htmlFor="name">Nome do Produto</Label>
-            <Input
-              type="text"
-              id="name"
-              name="name"
-              placeholder="ex: Camiseta Oversized Imortal"
-              value={name}
-              onChange={handleNameChange}
-              disabled={isPending}
-            />
-
-            {!isEditMode ? (
-              <p className="text-xs text-muted-foreground">
+            {/* Product Name */}
+            <Field data-invalid={!!errors.name}>
+              <FieldLabel htmlFor="name">Nome do Produto</FieldLabel>
+              <Input
+                id="name"
+                placeholder="ex: Camiseta Oversized Imortal"
+                disabled={isSubmitting}
+                {...register("name", {
+                  onChange: (e) => {
+                    setValue("slug", slugify(e.target.value), { shouldValidate: true });
+                  },
+                })}
+              />
+              <FieldDescription>
                 Link permanente:{" "}
                 <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">
                   {currentSlug || "..."}
                 </span>
-              </p>
-            ) : (
-              <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-                <p>
-                  Link anterior:{" "}
-                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">
-                    {originalSlug}
-                  </span>
-                </p>
-                {currentSlug !== originalSlug && currentSlug !== "" && (
-                  <p className="text-primary">
-                    O link será alterado para:{" "}
-                    <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-primary">
-                      {currentSlug}
-                    </span>
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+              </FieldDescription>
+              {errors.name?.message && (
+                <FieldError>{errors.name.message}</FieldError>
+              )}
+            </Field>
 
-          {/* Product Images Management */}
-          <div className="space-y-2">
-            <Label>Fotos do Produto</Label>
-
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              {images.map((url, idx) => (
-                <div
-                  key={url}
-                  className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-background"
-                >
-                  <img
-                    src={url}
-                    alt={`Foto ${idx + 1}`}
-                    className="size-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveImage(idx)}
-                    disabled={isPending || isUploading}
-                    className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full bg-black/80 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive"
-                    title="Remover imagem"
+            {/* Product Images Management */}
+            <Field data-invalid={!!errors.images}>
+              <FieldLabel>Fotos do Produto</FieldLabel>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {images.map((url, idx) => (
+                  <div
+                    key={url}
+                    className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-background"
                   >
-                    <XIcon className="size-3.5" />
-                  </button>
-                </div>
-              ))}
+                    <img
+                      src={url}
+                      alt={`Foto ${idx + 1}`}
+                      className="size-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(idx)}
+                      disabled={isSubmitting || isUploading}
+                      className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full bg-black/80 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive"
+                      title="Remover imagem"
+                    >
+                      <XIcon className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
 
-              {/* Add Image Upload Slot */}
-              <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-background/50 p-2 text-center transition-colors hover:border-primary/60 hover:bg-accent/40">
-                {isUploading ? (
-                  <CircleNotchIcon className="size-6 animate-spin text-primary" />
-                ) : (
-                  <>
-                    <ImageSquareIcon className="mb-1.5 size-6 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">
-                      Adicionar Foto
-                    </span>
-                  </>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleFileChange}
-                  disabled={isPending || isUploading}
-                  className="hidden"
-                />
-              </label>
-            </div>
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description">Descrição</Label>
-            <Textarea
-              id="description"
-              name="description"
-              rows={4}
-              placeholder="Descreva os detalhes do produto, tecido, caimento..."
-              defaultValue={initialData?.description ?? ""}
-              disabled={isPending}
-            />
-          </div>
-
-          {/* Price */}
-          <div className="space-y-2">
-            <Label htmlFor="price">Preço (R$)</Label>
-            <div className="relative">
-              <div className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
-                <span className="text-sm font-medium text-muted-foreground">R$</span>
+                {/* Add Image Upload Slot */}
+                <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-background/50 p-2 text-center transition-colors hover:border-primary/60 hover:bg-accent/40">
+                  {isUploading ? (
+                    <CircleNotchIcon className="size-6 animate-spin text-primary" />
+                  ) : (
+                    <>
+                      <ImageSquareIcon className="mb-1.5 size-6 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Adicionar Foto
+                      </span>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleFileChange}
+                    disabled={isSubmitting || isUploading}
+                    className="hidden"
+                  />
+                </label>
               </div>
-              <Input
-                type="number"
-                id="price"
-                name="price"
-                step="0.01"
-                placeholder="0.00"
-                value={priceInput}
-                onChange={(e) => setPriceInput(e.target.value)}
-                disabled={isPending}
-                className="pl-9"
+              {errors.images?.message && (
+                <FieldError>{errors.images.message}</FieldError>
+              )}
+            </Field>
+
+            {/* Description */}
+            <Field data-invalid={!!errors.description}>
+              <FieldLabel htmlFor="description">Descrição</FieldLabel>
+              <Textarea
+                id="description"
+                rows={4}
+                placeholder="Descreva os detalhes do produto, tecido, caimento..."
+                disabled={isSubmitting}
+                {...register("description")}
               />
-            </div>
-          </div>
+              {errors.description?.message && (
+                <FieldError>{errors.description.message}</FieldError>
+              )}
+            </Field>
+
+            {/* Price */}
+            <Field data-invalid={!!errors.price}>
+              <FieldLabel htmlFor="price">Preço (R$)</FieldLabel>
+              <div className="relative">
+                <div className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
+                  <span className="text-sm font-medium text-muted-foreground">R$</span>
+                </div>
+                <Input
+                  type="number"
+                  id="price"
+                  step="0.01"
+                  placeholder="0.00"
+                  disabled={isSubmitting}
+                  className="pl-9"
+                  {...register("price")}
+                />
+              </div>
+              {errors.price?.message && (
+                <FieldError>{errors.price.message}</FieldError>
+              )}
+            </Field>
+          </FieldGroup>
 
           <div className="flex justify-end pt-2">
             <Button
               type="submit"
-              disabled={isPending || isUploading || drops.length === 0}
+              disabled={isSubmitting || isUploading || drops.length === 0}
             >
-              {isPending ? (
+              {isSubmitting ? (
                 <>
                   <CircleNotchIcon className="mr-2 size-4 animate-spin" />
                   Salvando...
@@ -337,10 +331,10 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
               )}
             </Button>
           </div>
-
         </form>
       </CardContent>
     </Card>
   );
 }
+
 

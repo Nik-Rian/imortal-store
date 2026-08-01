@@ -1,39 +1,62 @@
 "use client";
 
-import { useState, type SyntheticEvent } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { authClient } from "@/lib/auth-client";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  FieldGroup,
+  Field,
+  FieldLabel,
+  FieldError,
+} from "@/components/ui/field";
 import {
   ShieldCheckIcon,
   CircleNotchIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
 
+const loginSchema = z.object({
+  email: z
+    .string()
+    .min(1, "O e-mail é obrigatório.")
+    .email("Informe um endereço de e-mail válido."),
+  password: z.string().min(1, "A senha é obrigatória."),
+});
+
+type LoginValues = z.infer<typeof loginSchema>;
+
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  async function handleSubmit(e: SyntheticEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+
+  async function onSubmit(data: LoginValues) {
+    setAuthError(null);
 
     const { error: signInError } = await authClient.signIn.email({
-      email,
-      password,
+      email: data.email,
+      password: data.password,
     });
 
-    setIsLoading(false);
-
     if (signInError) {
-      setError("E-mail ou senha inválidos.");
+      setAuthError("E-mail ou senha inválidos.");
       return;
     }
 
@@ -60,46 +83,50 @@ export default function AdminLoginPage() {
         </CardHeader>
 
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+            {authError && (
               <div className="flex items-center gap-2 rounded-md bg-destructive/15 p-3 text-xs text-destructive border border-destructive/30">
                 <WarningCircleIcon className="size-4 shrink-0" />
-                <span>{error}</span>
+                <span>{authError}</span>
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                placeholder="admin@imortalstore.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-              />
-            </div>
+            <FieldGroup className="gap-4">
+              <Field data-invalid={!!errors.email}>
+                <FieldLabel htmlFor="email">E-mail</FieldLabel>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="admin@imortalstore.com"
+                  disabled={isSubmitting}
+                  {...register("email")}
+                />
+                {errors.email?.message && (
+                  <FieldError>{errors.email.message}</FieldError>
+                )}
+              </Field>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
-              />
-            </div>
+              <Field data-invalid={!!errors.password}>
+                <FieldLabel htmlFor="password">Senha</FieldLabel>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  disabled={isSubmitting}
+                  {...register("password")}
+                />
+                {errors.password?.message && (
+                  <FieldError>{errors.password.message}</FieldError>
+                )}
+              </Field>
+            </FieldGroup>
 
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={isSubmitting}
               className="mt-2 w-full font-medium"
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <>
                   <CircleNotchIcon className="mr-2 size-4 animate-spin" />
                   Entrando...
@@ -114,5 +141,6 @@ export default function AdminLoginPage() {
     </div>
   );
 }
+
 
 

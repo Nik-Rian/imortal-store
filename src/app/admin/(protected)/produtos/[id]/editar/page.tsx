@@ -5,7 +5,7 @@ import { updateProduct } from "@/actions/product.actions";
 import { ProductForm } from "@/components/admin/ProductForm";
 import { getDrops } from "@/services/drop.service";
 import { Button } from "@/components/ui/button";
-import { ArrowLeftIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon } from "@phosphor-icons/react/ssr";
 
 
 interface EditProductPageProps {
