@@ -1,22 +1,23 @@
-import { Cpu, Flame, Users } from "lucide-react";
+import { CpuIcon, FlameIcon, UsersIcon } from "@phosphor-icons/react";
 
 const pillars = [
   {
-    icon: Flame,
+    icon: FlameIcon,
     title: "Três cabeças",
     text: "Esporte, tecnologia e festa. O Imortal guarda os três portões do curso e não solta nenhum.",
   },
   {
-    icon: Cpu,
+    icon: CpuIcon,
     title: "Feito por quem compila",
     text: "Cada estampa nasce de um projeto autoral da diretoria de arte — nada de template genérico.",
   },
   {
-    icon: Users,
+    icon: UsersIcon,
     title: "Tudo volta pra base",
     text: "O lucro financia inscrições, uniformes e caravanas para os jogos universitários.",
   },
 ];
+
 
 export function Manifesto() {
   return (

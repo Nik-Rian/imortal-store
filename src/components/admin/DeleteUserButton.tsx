@@ -2,13 +2,31 @@
 
 import { useState, useTransition } from "react";
 import { deleteAdminUser } from "@/actions/user.actions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { UserMinusIcon, CircleNotchIcon } from "@phosphor-icons/react";
 
-export function DeleteUserButton({ userId }: { userId: string }) {
-  const [isConfirming, setIsConfirming] = useState(false);
+interface DeleteUserButtonProps {
+  userId: string;
+  userName?: string;
+}
+
+export function DeleteUserButton({ userId, userName }: DeleteUserButtonProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   const handleDelete = () => {
+    setError(null);
     startTransition(async () => {
       try {
         await deleteAdminUser(userId);
@@ -18,45 +36,55 @@ export function DeleteUserButton({ userId }: { userId: string }) {
             ? err.message
             : "Não foi possível remover o usuário."
         );
-        setIsConfirming(false);
       }
     });
   };
 
-  if (error) {
-    return <span className="text-xs text-red-600">{error}</span>;
-  }
-
-  if (isConfirming) {
-    return (
-      <div className="flex animate-in items-center gap-2 duration-200 fade-in">
-        <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-700">
-          {isPending ? "Removendo..." : "Certeza?"}
-        </span>
-        <button
-          onClick={handleDelete}
-          disabled={isPending}
-          className="text-xs font-bold text-red-600 transition-colors hover:text-red-800 disabled:opacity-50"
-        >
-          Sim
-        </button>
-        <button
-          onClick={() => setIsConfirming(false)}
-          disabled={isPending}
-          className="text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-700 disabled:opacity-50"
-        >
-          Não
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <button
-      onClick={() => setIsConfirming(true)}
-      className="text-sm font-medium text-red-600 transition-colors hover:text-red-800"
-    >
-      Remover
-    </button>
+    <div className="inline-flex items-center gap-2">
+      {error && <span className="text-xs text-destructive">{error}</span>}
+      <AlertDialog>
+        <AlertDialogTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-colors"
+              title="Remover usuário"
+            >
+              <UserMinusIcon className="size-4" />
+            </Button>
+          }
+        />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display">Remover Administrador</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover o usuário{" "}
+              {userName ? <strong className="text-foreground">{userName}</strong> : "selecionado"} do painel administrativo? Esta ação é irreversível.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isPending ? (
+                <>
+                  <CircleNotchIcon className="mr-2 size-4 animate-spin" />
+                  Removendo...
+                </>
+              ) : (
+                "Remover Usuário"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
+
+

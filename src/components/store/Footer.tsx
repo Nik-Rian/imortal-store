@@ -1,5 +1,6 @@
-import { Mail } from "lucide-react";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react";
 import { Logo } from "@/components/layout/Logo";
+
 
 function InstagramIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
@@ -48,7 +49,7 @@ export function Footer() {
             href="mailto:contato@atleticaimortal.com"
             className="inline-flex items-center gap-2 transition-colors hover:text-primary"
           >
-            <Mail className="size-4" /> contato@atleticaimortal.com
+            <EnvelopeSimpleIcon className="size-4" /> contato@atleticaimortal.com
           </a>
         </div>
       </div>

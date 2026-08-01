@@ -1,17 +1,27 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { deleteProduct } from "@/actions/product.actions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { TrashIcon, CircleNotchIcon } from "@phosphor-icons/react";
 
 interface DeleteProductButtonProps {
   productId: string;
+  productName?: string;
 }
 
-export function DeleteProductButton({ productId }: DeleteProductButtonProps) {
-  // Local state to track whether the user is in the confirmation step
-  const [isConfirming, setIsConfirming] = useState(false);
-
-  // useTransition hooks give an 'isPending' state for server interactions
+export function DeleteProductButton({ productId, productName }: DeleteProductButtonProps) {
   const [isPending, startTransition] = useTransition();
 
   const handleDelete = () => {
@@ -20,42 +30,52 @@ export function DeleteProductButton({ productId }: DeleteProductButtonProps) {
         await deleteProduct(productId);
       } catch (error) {
         console.error("Erro ao excluir produto:", error);
-        alert("Não foi possível excluir o produto.");
-        setIsConfirming(false);
       }
     });
   };
 
-  if (isConfirming) {
-    return (
-      <div className="flex animate-in items-center gap-2 duration-200 fade-in">
-        <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-700">
-          {isPending ? "Excluindo..." : "Certeza?"}
-        </span>
-        <button
-          onClick={handleDelete}
-          disabled={isPending}
-          className="text-xs font-bold text-red-600 transition-colors hover:text-red-800 disabled:opacity-50"
-        >
-          Sim
-        </button>
-        <button
-          onClick={() => setIsConfirming(false)}
-          disabled={isPending}
-          className="text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-700 disabled:opacity-50"
-        >
-          Não
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <button
-      onClick={() => setIsConfirming(true)}
-      className="text-sm font-medium text-red-600 transition-colors hover:text-red-800"
-    >
-      Excluir
-    </button>
+    <AlertDialog>
+      <AlertDialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-colors"
+            title="Excluir produto"
+          >
+            <TrashIcon className="size-4" />
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="font-display">Excluir Produto</AlertDialogTitle>
+          <AlertDialogDescription>
+            Tem certeza que deseja excluir o produto{" "}
+            {productName ? <strong className="text-foreground">{productName}</strong> : "selecionado"}? Esta ação não pode ser desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDelete}
+            disabled={isPending}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {isPending ? (
+              <>
+                <CircleNotchIcon className="mr-2 size-4 animate-spin" />
+                Excluindo...
+              </>
+            ) : (
+              "Excluir"
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
+
+

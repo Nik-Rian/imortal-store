@@ -5,7 +5,20 @@ import { slugify } from "@/lib/utils";
 import { Product } from "@/types";
 import { productSchema } from "@/lib/validations/product.schema";
 import { uploadProductImage, deleteBlobImages } from "@/actions/blob.actions";
-import { ImagePlus, Loader2, X } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+
+import {
+  ImageSquareIcon,
+  CircleNotchIcon,
+  XIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react";
+
+
 
 type DropOption = {
   id: string;
@@ -142,199 +155,192 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   };
 
   return (
-    <form
-      action={clientAction}
-      className="space-y-6 rounded-md border bg-white p-6 shadow-sm"
-    >
-      {error && (
-        <p className="animate-in rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 duration-200 fade-in">
-          {error}
-        </p>
-      )}
-
-      <input type="hidden" name="slug" value={currentSlug} />
-
-      {/* Drop Selection */}
-      <div className="space-y-2">
-        <label htmlFor="dropId" className="text-sm font-medium text-zinc-900">
-          Drop
-        </label>
-        <select
-          id="dropId"
-          name="dropId"
-          value={selectedDropId}
-          onChange={(e) => setSelectedDropId(e.target.value)}
-          disabled={isPending || drops.length === 0}
-          className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
-        >
-          {drops.length === 0 ? (
-            <option value="">Nenhum Drop cadastrado</option>
-          ) : (
-            drops.map((drop) => (
-              <option key={drop.id} value={drop.id}>
-                {drop.name}
-              </option>
-            ))
+    <Card className="border-border/80 bg-surface shadow-panel">
+      <CardContent className="p-6">
+        <form action={clientAction} className="space-y-6">
+          {error && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/15 p-3 text-xs text-destructive">
+              <WarningCircleIcon className="size-4 shrink-0" />
+              <span>{error}</span>
+            </div>
           )}
-        </select>
-        {drops.length === 0 && (
-          <p className="text-xs text-red-500">
-            É necessário criar pelo menos um Drop no banco antes de cadastrar
-            produtos.
-          </p>
-        )}
-      </div>
 
-      {/* Product Name */}
-      <div className="space-y-2">
-        <label htmlFor="name" className="text-sm font-medium text-zinc-900">
-          Nome do Produto
-        </label>
-        <input
-          type="text"
-          id="name"
-          name="name"
-          value={name}
-          onChange={handleNameChange}
-          disabled={isPending}
-          className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
-        />
+          <input type="hidden" name="slug" value={currentSlug} />
 
-        {!isEditMode ? (
-          <p className="mt-1 text-xs text-zinc-500">
-            Link permanente:{" "}
-            <span className="rounded bg-zinc-50 px-1 py-0.5 font-mono text-zinc-700">
-              {currentSlug || "..."}
-            </span>
-          </p>
-        ) : (
-          <div className="mt-2 flex flex-col gap-1">
-            <p className="text-xs text-zinc-500">
-              Link anterior:{" "}
-              <span className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-zinc-700">
-                {originalSlug}
-              </span>
-            </p>
-            {currentSlug !== originalSlug && currentSlug !== "" && (
-              <p className="text-xs text-orange-400">
-                O link será alterado para:{" "}
-                <span className="rounded bg-blue-50 px-1 py-0.5 font-mono">
-                  {currentSlug}
-                </span>
+          {/* Drop Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="dropId">Drop / Coleção</Label>
+            <select
+              id="dropId"
+              name="dropId"
+              value={selectedDropId}
+              onChange={(e) => setSelectedDropId(e.target.value)}
+              disabled={isPending || drops.length === 0}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+            >
+              {drops.length === 0 ? (
+                <option value="" className="bg-surface text-foreground">Nenhum Drop cadastrado</option>
+              ) : (
+                drops.map((drop) => (
+                  <option key={drop.id} value={drop.id} className="bg-surface text-foreground">
+                    {drop.name}
+                  </option>
+                ))
+              )}
+            </select>
+            {drops.length === 0 && (
+              <p className="text-xs text-destructive">
+                É necessário criar pelo menos um Drop no banco antes de cadastrar produtos.
               </p>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Product Images Management */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-zinc-900">
-          Fotos do Produto
-        </label>
-
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {images.map((url, idx) => (
-            <div
-              key={url}
-              className="group relative aspect-square overflow-hidden rounded-md border bg-zinc-100"
-            >
-              <img
-                src={url}
-                alt={`Foto ${idx + 1}`}
-                className="size-full object-cover"
-              />
-              <button
-                type="button"
-                onClick={() => handleRemoveImage(idx)}
-                disabled={isPending || isUploading}
-                className="absolute top-1 right-1 rounded-full bg-black/70 p-1 text-white opacity-90 transition-opacity hover:bg-black"
-                title="Remover imagem"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-          ))}
-
-          {/* Add Image Upload Slot */}
-          <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-zinc-300 bg-zinc-50 p-2 text-center transition-colors hover:border-zinc-500 hover:bg-zinc-100">
-            {isUploading ? (
-              <Loader2 className="size-6 animate-spin text-zinc-500" />
-            ) : (
-              <>
-                <ImagePlus className="mb-1 size-6 text-zinc-400" />
-                <span className="text-xs font-medium text-zinc-600">
-                  Adicionar Foto
-                </span>
-              </>
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleFileChange}
-              disabled={isPending || isUploading}
-              className="hidden"
+          {/* Product Name */}
+          <div className="space-y-2">
+            <Label htmlFor="name">Nome do Produto</Label>
+            <Input
+              type="text"
+              id="name"
+              name="name"
+              placeholder="ex: Camiseta Oversized Imortal"
+              value={name}
+              onChange={handleNameChange}
+              disabled={isPending}
             />
-          </label>
-        </div>
-      </div>
 
-      {/* Description */}
-      <div className="space-y-2">
-        <label
-          htmlFor="description"
-          className="text-sm font-medium text-zinc-900"
-        >
-          Descrição
-        </label>
-        <textarea
-          id="description"
-          name="description"
-          rows={4}
-          defaultValue={initialData?.description ?? ""}
-          disabled={isPending}
-          className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
-        />
-      </div>
-
-      {/* Price */}
-      <div className="space-y-2">
-        <label htmlFor="price" className="text-sm font-medium text-zinc-900">
-          Preço (R$)
-        </label>
-        <div className="relative">
-          <div className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
-            <span className="text-sm text-zinc-500">R$</span>
+            {!isEditMode ? (
+              <p className="text-xs text-muted-foreground">
+                Link permanente:{" "}
+                <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">
+                  {currentSlug || "..."}
+                </span>
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                <p>
+                  Link anterior:{" "}
+                  <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">
+                    {originalSlug}
+                  </span>
+                </p>
+                {currentSlug !== originalSlug && currentSlug !== "" && (
+                  <p className="text-primary">
+                    O link será alterado para:{" "}
+                    <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-primary">
+                      {currentSlug}
+                    </span>
+                  </p>
+                )}
+              </div>
+            )}
           </div>
-          <input
-            type="number"
-            id="price"
-            name="price"
-            step="0.01"
-            placeholder="0.00"
-            value={priceInput}
-            onChange={(e) => setPriceInput(e.target.value)}
-            disabled={isPending}
-            style={{ paddingLeft: "2.5rem" }}
-            className="block h-10 w-full rounded-md border border-zinc-200 bg-white py-2 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
-          />
-        </div>
-      </div>
 
-      <div className="flex justify-end pt-4">
-        <button
-          type="submit"
-          disabled={isPending || isUploading || drops.length === 0}
-          className="inline-flex h-10 cursor-pointer items-center justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 transition-colors hover:bg-zinc-900/90 disabled:opacity-50"
-        >
-          {isPending
-            ? "Salvando..."
-            : isEditMode
-              ? "Salvar Alterações"
-              : "Salvar Produto"}
-        </button>
-      </div>
-    </form>
+          {/* Product Images Management */}
+          <div className="space-y-2">
+            <Label>Fotos do Produto</Label>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {images.map((url, idx) => (
+                <div
+                  key={url}
+                  className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-background"
+                >
+                  <img
+                    src={url}
+                    alt={`Foto ${idx + 1}`}
+                    className="size-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(idx)}
+                    disabled={isPending || isUploading}
+                    className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full bg-black/80 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive"
+                    title="Remover imagem"
+                  >
+                    <XIcon className="size-3.5" />
+                  </button>
+                </div>
+              ))}
+
+              {/* Add Image Upload Slot */}
+              <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-background/50 p-2 text-center transition-colors hover:border-primary/60 hover:bg-accent/40">
+                {isUploading ? (
+                  <CircleNotchIcon className="size-6 animate-spin text-primary" />
+                ) : (
+                  <>
+                    <ImageSquareIcon className="mb-1.5 size-6 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Adicionar Foto
+                    </span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFileChange}
+                  disabled={isPending || isUploading}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div className="space-y-2">
+            <Label htmlFor="description">Descrição</Label>
+            <Textarea
+              id="description"
+              name="description"
+              rows={4}
+              placeholder="Descreva os detalhes do produto, tecido, caimento..."
+              defaultValue={initialData?.description ?? ""}
+              disabled={isPending}
+            />
+          </div>
+
+          {/* Price */}
+          <div className="space-y-2">
+            <Label htmlFor="price">Preço (R$)</Label>
+            <div className="relative">
+              <div className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
+                <span className="text-sm font-medium text-muted-foreground">R$</span>
+              </div>
+              <Input
+                type="number"
+                id="price"
+                name="price"
+                step="0.01"
+                placeholder="0.00"
+                value={priceInput}
+                onChange={(e) => setPriceInput(e.target.value)}
+                disabled={isPending}
+                className="pl-9"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button
+              type="submit"
+              disabled={isPending || isUploading || drops.length === 0}
+            >
+              {isPending ? (
+                <>
+                  <CircleNotchIcon className="mr-2 size-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : isEditMode ? (
+                "Salvar Alterações"
+              ) : (
+                "Salvar Produto"
+              )}
+            </Button>
+          </div>
+
+        </form>
+      </CardContent>
+    </Card>
   );
 }
+

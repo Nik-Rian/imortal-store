@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ShoppingBag } from "lucide-react";
+import { ShoppingBagIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+
 import { Logo } from "./Logo";
 import { useCart } from "@/context/CartContext";
 import { CartSheet } from "@/components/cart/CartSheet";
@@ -50,7 +51,7 @@ export function Header() {
             className="h-10 px-4"
             onClick={() => setIsOpen(true)}
           >
-            <ShoppingBag className="size-4" />
+            <ShoppingBagIcon className="size-4" />
             <span className="hidden sm:inline">Sacola</span>
             <span className="ml-1 rounded-sm bg-primary-foreground/15 px-1.5 py-0.5 text-[0.7rem] tabular-nums">
               {cartCount}

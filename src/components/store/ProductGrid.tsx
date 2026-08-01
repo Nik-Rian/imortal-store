@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRightIcon } from "@phosphor-icons/react";
 import {
   formatBRL,
   products as defaultProducts,
   type Product,
 } from "@/data/products";
+
 
 function ProductCard({ product }: { product: Product }) {
   const productHref = `/produto/${product.slug || product.id}`;
@@ -57,7 +58,7 @@ function ProductCard({ product }: { product: Product }) {
             href={productHref}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 font-display tracking-[0.14em] text-primary-foreground uppercase transition-colors hover:bg-primary/90"
           >
-            Ver peça <ArrowUpRight className="size-4" />
+            Ver peça <ArrowUpRightIcon className="size-4" />
           </Link>
         </div>
       </div>

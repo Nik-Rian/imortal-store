@@ -3,17 +3,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
-  Check,
-  Package,
-  Ruler,
-  ShoppingBag,
-  Truck,
-} from "lucide-react";
+  ArrowLeftIcon,
+  CheckIcon,
+  PackageIcon,
+  RulerIcon,
+  ShoppingBagIcon,
+  TruckIcon,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatBRL, products, type Product } from "@/data/products";
 import { useCart } from "@/context/CartContext";
+
 
 function Gallery({ product }: { product: Product }) {
   const [active, setActive] = useState(0);
@@ -90,7 +91,7 @@ export function ProductDetailView({ product }: { product: Product }) {
         href="/#colecao"
         className="inline-flex items-center gap-2 text-xs tracking-[0.18em] text-muted-foreground uppercase transition-colors hover:text-primary"
       >
-        <ArrowLeft className="size-4" /> Voltar para a coleção
+        <ArrowLeftIcon className="size-4" /> Voltar para a coleção
       </Link>
 
       <div className="mt-8 grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
@@ -129,7 +130,7 @@ export function ProductDetailView({ product }: { product: Product }) {
                 href="/#tabela"
                 className="inline-flex items-center gap-1.5 text-xs tracking-[0.16em] text-muted-foreground uppercase transition-colors hover:text-primary"
               >
-                <Ruler className="size-3.5" /> Tabela de medidas
+                <RulerIcon className="size-3.5" /> Tabela de medidas
               </Link>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -158,19 +159,19 @@ export function ProductDetailView({ product }: { product: Product }) {
             className="mt-8 w-full"
             onClick={handleAddToCart}
           >
-            <ShoppingBag className="size-4" /> Adicionar à sacola · Tam. {size}
+            <ShoppingBagIcon className="size-4" /> Adicionar à sacola · Tam. {size}
           </Button>
 
           <div className="mt-6 grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2">
             <div className="flex items-start gap-3 bg-surface p-4">
-              <Package className="mt-0.5 size-4 shrink-0 text-primary" />
+              <PackageIcon className="mt-0.5 size-4 shrink-0 text-primary" />
               <p className="text-xs leading-relaxed text-muted-foreground">
                 Produção sob demanda: pronta em até 15 dias após o fechamento do
                 lote.
               </p>
             </div>
             <div className="flex items-start gap-3 bg-surface p-4">
-              <Truck className="mt-0.5 size-4 shrink-0 text-primary" />
+              <TruckIcon className="mt-0.5 size-4 shrink-0 text-primary" />
               <p className="text-xs leading-relaxed text-muted-foreground">
                 Retirada no centro acadêmico ou entrega combinada pelo
                 Instagram.
@@ -184,11 +185,12 @@ export function ProductDetailView({ product }: { product: Product }) {
                 key={h}
                 className="flex items-start gap-3 text-sm text-muted-foreground"
               >
-                <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                <CheckIcon className="mt-0.5 size-4 shrink-0 text-primary" />
                 {h}
               </li>
             ))}
           </ul>
+
         </div>
       </div>
 

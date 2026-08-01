@@ -1,6 +1,7 @@
 "use client";
 
-import { Minus, Plus, Trash2 } from "lucide-react";
+import { MinusIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
+
 import { toast } from "sonner";
 import {
   Sheet,
@@ -75,7 +76,7 @@ export function CartSheet() {
                             updateQuantity(item.id, item.quantity - 1)
                           }
                         >
-                          <Minus className="size-3" />
+                          <MinusIcon className="size-3" />
                         </Button>
                         <span className="w-6 text-center text-sm tabular-nums">
                           {item.quantity}
@@ -89,7 +90,7 @@ export function CartSheet() {
                             updateQuantity(item.id, item.quantity + 1)
                           }
                         >
-                          <Plus className="size-3" />
+                          <PlusIcon className="size-3" />
                         </Button>
                       </div>
                       <span className="font-display">
@@ -104,7 +105,7 @@ export function CartSheet() {
                     aria-label={`Remover ${item.name}`}
                     onClick={() => removeItem(item.id)}
                   >
-                    <Trash2 className="size-4" />
+                    <TrashIcon className="size-4" />
                   </Button>
                 </li>
               ))}

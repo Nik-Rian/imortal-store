@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
-import { Minus, Plus, ShoppingBag } from "lucide-react";
+import { MinusIcon, PlusIcon, ShoppingBagIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 interface AddToCartButtonProps {
@@ -54,7 +54,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
           disabled={quantity <= 1}
           className="size-10 rounded-r-none"
         >
-          <Minus className="size-4" />
+          <MinusIcon className="size-4" />
         </Button>
         <span className="w-12 text-center text-sm font-medium select-none">
           {quantity}
@@ -65,7 +65,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
           onClick={handleIncrement}
           className="size-10 rounded-l-none"
         >
-          <Plus className="size-4" />
+          <PlusIcon className="size-4" />
         </Button>
       </div>
 
@@ -75,9 +75,10 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
         className="w-full gap-2 text-base font-semibold sm:w-64"
         size="lg"
       >
-        <ShoppingBag className="size-5" />
+        <ShoppingBagIcon className="size-5" />
         Adicionar ao Carrinho
       </Button>
     </div>
   );
 }
+

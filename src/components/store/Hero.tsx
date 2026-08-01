@@ -33,13 +33,14 @@ export function Hero() {
             dominar a arena, o laboratório e a madrugada de código.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
-            <Button variant="ember" size="xl" asChild>
-              <a href="#colecao">Ver coleção</a>
+            <Button variant="ember" size="xl" render={<a href="#colecao" />}>
+              Ver coleção
             </Button>
-            <Button variant="emberOutline" size="xl" asChild>
-              <a href="#manifesto">O manifesto</a>
+            <Button variant="emberOutline" size="xl" render={<a href="#manifesto" />}>
+              O manifesto
             </Button>
           </div>
+
 
           <dl className="mt-12 grid max-w-lg grid-cols-3 gap-px overflow-hidden rounded-md border border-border bg-border">
             {[
