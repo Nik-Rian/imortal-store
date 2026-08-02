@@ -85,7 +85,7 @@ export default function AdminLoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
             {authError && (
-              <div className="flex items-center gap-2 rounded-md bg-destructive/15 p-3 text-xs text-destructive border border-destructive/30">
+              <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/15 p-3 text-xs text-destructive">
                 <WarningCircleIcon className="size-4 shrink-0" />
                 <span>{authError}</span>
               </div>

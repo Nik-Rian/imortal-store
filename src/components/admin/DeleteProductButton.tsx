@@ -41,7 +41,7 @@ export function DeleteProductButton({ productId, productName }: DeleteProductBut
           <Button
             variant="ghost"
             size="icon"
-            className="size-8 text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-colors"
+            className="size-8 text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
             title="Excluir produto"
           >
             <TrashIcon className="size-4" />

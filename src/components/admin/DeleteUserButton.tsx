@@ -49,7 +49,7 @@ export function DeleteUserButton({ userId, userName }: DeleteUserButtonProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="size-8 text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-colors"
+              className="size-8 text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
               title="Remover usuário"
             >
               <UserMinusIcon className="size-4" />

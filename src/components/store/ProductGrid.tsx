@@ -28,7 +28,7 @@ function ProductCard({ product }: { product: Product }) {
           {product.code}
         </span>
         {product.tag && (
-          <span className="absolute top-3 right-3 rounded-sm bg-primary px-2 py-1 font-display font-bold tracking-[0.16em] text-primary-foreground uppercase">
+          <span className="absolute top-3 right-3 rounded-sm bg-primary px-2 py-1 font-display text-sm font-bold tracking-[0.16em] text-primary-foreground uppercase">
             {product.tag}
           </span>
         )}
@@ -53,10 +53,10 @@ function ProductCard({ product }: { product: Product }) {
         </p>
 
         <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-5">
-          <p className="font-display">{formatBRL(product.price)}</p>
+          <p className="font-display text-lg font-bold">{formatBRL(product.price)}</p>
           <Link
             href={productHref}
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 font-display tracking-[0.14em] text-primary-foreground uppercase transition-colors hover:bg-primary/90"
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 font-display font-semibold text-primary-foreground uppercase transition-colors hover:bg-primary/90"
           >
             Ver peça <ArrowUpRightIcon className="size-4" />
           </Link>
@@ -91,7 +91,7 @@ export function ProductGrid({ products = defaultProducts }: ProductGridProps) {
         </p>
       </div>
 
-      <div className="mt-12 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-12 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
         {displayProducts.map((p) => (
           <ProductCard key={p.id} product={p} />
         ))}

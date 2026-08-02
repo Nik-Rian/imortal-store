@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, ChangeEvent } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { slugify } from "@/lib/utils";
@@ -85,7 +85,6 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   const {
     register,
     handleSubmit,
-    watch,
     setValue,
     control,
     formState: { errors, isSubmitting },
@@ -121,11 +120,11 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     name: "specs",
   });
 
-  const nameValue = watch("name");
-  const images = watch("images");
-  const selectedSizes = watch("sizes");
-  const highlights = watch("highlights");
-  const care = watch("care");
+  const nameValue = useWatch({ control, name: "name" });
+  const images = useWatch({ control, name: "images" }) ?? [];
+  const selectedSizes = useWatch({ control, name: "sizes" }) ?? [];
+  const highlights = useWatch({ control, name: "highlights" }) ?? [];
+  const care = useWatch({ control, name: "care" }) ?? [];
   const currentSlug = slugify(nameValue || "");
 
   const toggleSize = (size: string) => {
@@ -531,7 +530,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
                       size="icon"
                       onClick={() => removeSpec(idx)}
                       disabled={isSubmitting}
-                      className="size-8 text-muted-foreground hover:text-destructive shrink-0"
+                      className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
                     >
                       <TrashIcon className="size-4" />
                     </Button>
@@ -573,7 +572,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
                       size="icon"
                       onClick={() => removeHighlight(idx)}
                       disabled={isSubmitting}
-                      className="size-8 text-muted-foreground hover:text-destructive shrink-0"
+                      className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
                     >
                       <TrashIcon className="size-4" />
                     </Button>
@@ -615,7 +614,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
                       size="icon"
                       onClick={() => removeCare(idx)}
                       disabled={isSubmitting}
-                      className="size-8 text-muted-foreground hover:text-destructive shrink-0"
+                      className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
                     >
                       <TrashIcon className="size-4" />
                     </Button>

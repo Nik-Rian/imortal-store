@@ -14,7 +14,7 @@ export type ProductVariant = PrismaProductVariant;
 export type Product = PrismaProduct & {
   drop?: PrismaDrop;
   variants?: PrismaProductVariant[];
-  specs?: ProductSpec[] | any;
+  specs?: ProductSpec[] | unknown;
 };
 
 export type ProductBase = Omit<Product, "createdAt" | "updatedAt">;

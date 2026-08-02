@@ -13,12 +13,13 @@ export default async function LojaPage() {
     if (dbProducts && dbProducts.length > 0) {
       dbFormattedProducts = dbProducts.map((p) => ({
         id: p.id,
-        code: `IMR-${p.id.slice(0, 3).toUpperCase()}`,
+        code: p.code || `IMO-${p.id.slice(0, 3).toUpperCase()}`,
         name: p.name,
         slug: p.slug,
-        line: p.drop?.name || "Linha Guardiã",
+        line: p.line || p.drop?.name || "Coleção Imortal",
+        tag: p.tag || undefined,
         description: p.description,
-        story: p.description,
+        story: p.story || p.description,
         price: p.priceCents / 100,
         image: p.images[0] || "/placeholder.png",
         photos: (p.images && p.images.length > 0
@@ -28,13 +29,15 @@ export default async function LojaPage() {
           src: img,
           label: i === 0 ? "Frente" : i === 1 ? "Costas" : `Detalhe ${i}`,
         })),
-        sizes: ["PP", "P", "M", "G", "GG", "XG"],
-        specs: [
-          { label: "Tecido", value: "100% algodão" },
-          { label: "Modelagem", value: "Unissex" },
-        ],
-        highlights: ["Produto Oficial Atlética Imortal"],
-        care: ["Lavar em ciclo delicado", "Secar à sombra"],
+        sizes:
+          p.variants && p.variants.length > 0
+            ? p.variants.map((v) => v.size)
+            : [],
+        specs: Array.isArray(p.specs)
+          ? (p.specs as { label: string; value: string }[])
+          : [],
+        highlights: p.highlights ?? [],
+        care: p.care ?? [],
       }));
     }
   } catch (error) {

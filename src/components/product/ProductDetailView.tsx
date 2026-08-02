@@ -140,11 +140,11 @@ export function ProductDetailView({ product }: { product: Product }) {
           </p>
 
           {product.story && (
-            <p className="mt-4 text-sm leading-relaxed text-muted-foreground/90 italic border-l-2 border-primary/40 pl-3">
+            <p className="mt-4 border-l-2 border-primary/40 pl-3 text-sm leading-relaxed text-muted-foreground/90 italic">
               {product.story}
             </p>
           )}
-
+ 
           <p className="mt-8 font-display text-4xl font-bold text-primary">
             {formatPrice(priceCents)}
           </p>
