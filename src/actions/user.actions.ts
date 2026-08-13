@@ -8,7 +8,9 @@ import { redirect } from "next/navigation";
 
 async function requireSession() {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) throw new Error("Não autenticado.");
+  if (!session || session.user.role !== "admin") {
+    throw new Error("Não autorizado.");
+  }
   return session;
 }
 
@@ -23,7 +25,18 @@ export async function createAdminUser(formData: FormData) {
     throw new Error("Missing required fields");
   }
 
-  await auth.api.signUpEmail({ body: { email, password, name } });
+  const result = await auth.api.signUpEmail({
+    body: { email, password, name },
+  });
+
+  if (!result?.user?.id) {
+    throw new Error("Falha ao criar usuário.");
+  }
+
+  await prisma.user.update({
+    where: { id: result.user.id },
+    data: { role: "admin" },
+  });
 
   revalidatePath("/admin/usuarios");
   redirect("/admin/usuarios");
