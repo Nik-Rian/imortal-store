@@ -89,7 +89,16 @@ export function Header() {
 
                 {/* Info and Item Actions */}
                 <div className="flex-1 min-w-0 flex flex-col gap-1">
-                  <h4 className="font-medium text-sm truncate">{item.name}</h4>
+                  <div className="flex items-center gap-2 pr-2">
+                    <h4 className="font-medium text-sm truncate">
+                      {item.name}
+                    </h4>
+                    {item.size && (
+                      <span className="shrink-0 rounded bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 px-2 py-0.5 text-xs font-black uppercase border border-orange-300 dark:border-orange-800">
+                        {item.size}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm font-semibold text-primary">
                     {formatPrice(item.priceCents * item.quantity)}
                   </p>
