@@ -5,7 +5,7 @@ import { formatPrice } from "@/lib/utils";
 import { DeleteProductButton } from "@/components/admin/DeleteProductButton";
 
 export default async function AdminProductsPage() {
-  const products = await getProducts();
+  const products = await getProducts({ activeOnly: false });
 
   return (
     <div className="space-y-6">
