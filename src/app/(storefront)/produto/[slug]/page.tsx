@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ProductGallery } from "@/components/product/ProductGallery";
@@ -11,6 +12,29 @@ export const revalidate = 3600;
 type Props = {
   params: Promise<{ slug: string }>;
 };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const product = await getProductBySlug(slug);
+
+  if (!product) {
+    return {
+      title: "Produto Não Encontrado | imortal-store",
+    };
+  }
+
+  const mainImage = product.images[0];
+
+  return {
+    title: `${product.name} | imortal-store`,
+    description: product.description,
+    openGraph: {
+      title: product.name,
+      description: product.description,
+      images: mainImage ? [{ url: mainImage, alt: product.name }] : [],
+    },
+  };
+}
 
 export default async function ProductPage({ params }: Props) {
   // Await the params to extract the slug
