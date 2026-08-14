@@ -29,6 +29,7 @@ model Product {
   description String
   priceCents  Int
   images      String[]
+  isAvailable Boolean  @default(true)
   sortOrder   Int      @default(0)
 
   dropId      String
@@ -44,17 +45,18 @@ model Product {
 }
 
 model ProductVariant {
-  id        String   @id @default(uuid())
-  productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  size      String
-  sortOrder Int      @default(0)
+  size        String
+  isAvailable Boolean  @default(true)
+  sortOrder   Int      @default(0)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  orderItems OrderItem[]
+  orderItems  OrderItem[]
 
   @@unique([productId, size])
 }

@@ -1,3 +1,5 @@
+// src/lib/validations/product.schema.ts
+
 import { z } from "zod";
 
 export const ALLOWED_SIZES = ["P", "M", "G"] as const;
@@ -8,6 +10,7 @@ export const productVariantSchema = z.object({
   size: z.enum(ALLOWED_SIZES, {
     message: "O tamanho deve ser P, M ou G.",
   }),
+  isAvailable: z.boolean().default(true),
   sortOrder: z
     .number({ message: "A ordem deve ser um número." })
     .int("A ordem deve ser um número inteiro.")
@@ -37,6 +40,7 @@ export const productSchema = z
       .number({ message: "Por favor, insira um preço válido." })
       .int("O preço deve ser um valor inteiro em centavos.")
       .nonnegative("O preço não pode ser negativo."),
+    isAvailable: z.boolean().default(true),
     sortOrder: z
       .number({ message: "A ordem de exibição deve ser um número." })
       .int("A ordem de exibição deve ser um número inteiro.")

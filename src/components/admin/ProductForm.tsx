@@ -37,6 +37,9 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   const [selectedDropId, setSelectedDropId] = useState(
     initialData?.dropId ?? (drops[0]?.id || ""),
   );
+  const [isAvailable, setIsAvailable] = useState<boolean>(
+    initialData?.isAvailable ?? true,
+  );
 
   const originalSlug = initialData?.slug ?? "";
   const currentSlug = slugify(name);
@@ -164,6 +167,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
       description,
       dropId: selectedDropId,
       priceCents,
+      isAvailable,
       variants,
     });
 
@@ -182,6 +186,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     formData.set("description", validData.description);
     formData.set("priceCents", validData.priceCents.toString());
     formData.set("dropId", validData.dropId);
+    formData.set("isAvailable", validData.isAvailable ? "true" : "false");
     formData.set("variants", JSON.stringify(validData.variants));
 
     // Append image URLs to formData
@@ -215,6 +220,30 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
       )}
 
       <input type="hidden" name="slug" value={currentSlug} />
+
+      {/* Product Availability Toggle */}
+      <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
+        <div className="space-y-0.5">
+          <label
+            htmlFor="isAvailable"
+            className="text-sm font-medium text-zinc-900 cursor-pointer"
+          >
+            Produto Disponível para Venda
+          </label>
+          <p className="text-xs text-zinc-500">
+            Desmarque para indicar que o produto está esgotado na loja.
+          </p>
+        </div>
+        <input
+          type="checkbox"
+          id="isAvailable"
+          name="isAvailable"
+          checked={isAvailable}
+          onChange={(e) => setIsAvailable(e.target.checked)}
+          disabled={isPending}
+          className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+        />
+      </div>
 
       {/* Drop Selection */}
       <div className="space-y-2">
