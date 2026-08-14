@@ -2,17 +2,9 @@
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-
-async function requireSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session || session.user.role !== "admin") {
-    throw new Error("Não autorizado.");
-  }
-  return session;
-}
+import { requireSession } from "@/lib/auth-guard";
 
 export async function createAdminUser(formData: FormData) {
   await requireSession();

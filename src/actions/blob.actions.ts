@@ -1,18 +1,7 @@
 "use server";
 
 import { put, del } from "@vercel/blob";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
-
-async function requireSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
-
-  if (!session) {
-    throw new Error("Não autenticado.");
-  }
-
-  return session;
-}
+import { requireSession } from "@/lib/auth-guard";
 
 /**
  * Uploads a single image file to Vercel Blob and returns its public URL.
