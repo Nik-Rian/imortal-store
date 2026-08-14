@@ -57,7 +57,9 @@ export const getProductById = cache(async (id: string) => {
     where: { id },
     include: {
       drop: true,
-      variants: true,
+      variants: {
+        orderBy: { sortOrder: "asc" },
+      },
     },
   });
 });
