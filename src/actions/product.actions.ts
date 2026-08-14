@@ -4,20 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
 import { productSchema } from "@/lib/validations/product.schema";
 import { deleteBlobImages } from "@/actions/blob.actions";
-
-async function requireSession() {
-  const session = await auth.api.getSession({ headers: await headers() });
-
-  if (!session) {
-    throw new Error("Não autenticado.");
-  }
-
-  return session;
-}
+import { requireSession } from "@/lib/auth-guard";
 
 export async function createProduct(formData: FormData) {
   await requireSession();
