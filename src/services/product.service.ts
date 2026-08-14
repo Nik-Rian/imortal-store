@@ -1,9 +1,23 @@
-// src/services/product.service.ts
 import { prisma } from "@/lib/prisma";
 import { cache } from "react";
 
-export const getProducts = cache(async () => {
+export interface GetProductsOptions {
+  activeOnly?: boolean;
+}
+
+export const getProducts = cache(async (options: GetProductsOptions = {}) => {
+  const { activeOnly = true } = options;
+  const now = new Date();
+
   return await prisma.product.findMany({
+    where: activeOnly
+      ? {
+          drop: {
+            startsAt: { lte: now },
+            endsAt: { gte: now },
+          },
+        }
+      : undefined,
     include: {
       drop: true,
     },
