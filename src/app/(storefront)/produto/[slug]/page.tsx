@@ -5,6 +5,9 @@ import { AddToCartButton } from "@/components/cart/AddToCartButton";
 import { getProductBySlug } from "@/services/product.service";
 import { formatPrice } from "@/lib/utils";
 
+// Time-based ISR fallback: revalidate product details every 1 hour (3600 seconds)
+export const revalidate = 3600;
+
 type Props = {
   params: Promise<{ slug: string }>;
 };
