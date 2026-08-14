@@ -20,12 +20,19 @@ export async function createProduct(formData: FormData) {
     }
   }
 
+  const rawIsAvailable = formData.get("isAvailable");
+  const isAvailable =
+    rawIsAvailable === "true" ||
+    rawIsAvailable === "on" ||
+    rawIsAvailable === null;
+
   const validationResult = productSchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
     description: formData.get("description"),
     dropId: formData.get("dropId"),
     priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
+    isAvailable,
     variants: variantsInput,
   });
 
@@ -49,10 +56,12 @@ export async function createProduct(formData: FormData) {
         description,
         priceCents,
         dropId,
+        isAvailable: validationResult.data.isAvailable,
         images,
         variants: {
           create: variants.map((v) => ({
             size: v.size,
+            isAvailable: v.isAvailable,
             sortOrder: v.sortOrder,
           })),
         },
@@ -65,9 +74,9 @@ export async function createProduct(formData: FormData) {
     throw new Error("Erro desconhecido ao criar produto.");
   }
 
-  revalidatePath("/admin/products");
-  revalidatePath("/products");
-  redirect("/admin/products");
+  revalidatePath("/");
+  revalidatePath("/admin/produtos");
+  redirect("/admin/produtos");
 }
 
 export async function updateProduct(id: string, formData: FormData) {
@@ -84,12 +93,16 @@ export async function updateProduct(id: string, formData: FormData) {
     }
   }
 
+  const rawIsAvailable = formData.get("isAvailable");
+  const isAvailable = rawIsAvailable === "true" || rawIsAvailable === "on";
+
   const validationResult = productSchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
     description: formData.get("description"),
     dropId: formData.get("dropId"),
     priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
+    isAvailable,
     variants: variantsInput,
   });
 
@@ -104,7 +117,6 @@ export async function updateProduct(id: string, formData: FormData) {
     validationResult.data;
   const newImages = formData.getAll("images") as string[];
 
-  // Fetch existing product with variants to compare images and diff variants
   const currentProduct = await prisma.product.findUnique({
     where: { id },
     include: { variants: true },
@@ -114,12 +126,10 @@ export async function updateProduct(id: string, formData: FormData) {
     throw new Error("Produto não encontrado.");
   }
 
-  // Identify removed blob images
   const removedImages = currentProduct.images.filter(
     (img) => !newImages.includes(img),
   );
 
-  // Identify variant changes (diffing)
   const toCreate = variants.filter((v) => !v.id);
   const toUpdate = variants.filter((v) => !!v.id);
   const incomingIds = toUpdate.map((v) => v.id!);
@@ -129,7 +139,6 @@ export async function updateProduct(id: string, formData: FormData) {
 
   try {
     await prisma.$transaction([
-      // 1. Delete removed variants
       ...(toDelete.length > 0
         ? [
             prisma.productVariant.deleteMany({
@@ -137,26 +146,28 @@ export async function updateProduct(id: string, formData: FormData) {
             }),
           ]
         : []),
-      // 2. Update modified existing variants
       ...toUpdate.map((v) =>
         prisma.productVariant.update({
           where: { id: v.id! },
-          data: { size: v.size, sortOrder: v.sortOrder },
+          data: {
+            size: v.size,
+            isAvailable: v.isAvailable,
+            sortOrder: v.sortOrder,
+          },
         }),
       ),
-      // 3. Create new variants
       ...(toCreate.length > 0
         ? [
             prisma.productVariant.createMany({
               data: toCreate.map((v) => ({
                 productId: id,
                 size: v.size,
+                isAvailable: v.isAvailable,
                 sortOrder: v.sortOrder,
               })),
             }),
           ]
         : []),
-      // 4. Update Product base attributes
       prisma.product.update({
         where: { id },
         data: {
@@ -165,12 +176,12 @@ export async function updateProduct(id: string, formData: FormData) {
           description,
           priceCents,
           dropId,
+          isAvailable: validationResult.data.isAvailable,
           images: newImages,
         },
       }),
     ]);
 
-    // Clean up orphaned blobs from storage
     if (removedImages.length > 0) {
       await deleteBlobImages(removedImages);
     }
@@ -181,10 +192,10 @@ export async function updateProduct(id: string, formData: FormData) {
     throw new Error("Erro desconhecido ao atualizar produto.");
   }
 
-  revalidatePath("/admin/products");
-  revalidatePath(`/admin/products/${id}`);
-  revalidatePath("/products");
-  redirect("/admin/products");
+  revalidatePath("/");
+  revalidatePath("/admin/produtos");
+  revalidatePath(`/admin/produtos/${id}/editar`);
+  redirect("/admin/produtos");
 }
 
 export async function deleteProduct(id: string) {

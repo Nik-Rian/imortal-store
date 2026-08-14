@@ -63,3 +63,50 @@ export const getProductById = cache(async (id: string) => {
     },
   });
 });
+
+export interface AvailabilityCheckResult {
+  available: boolean;
+  reason?:
+    | "DROP_ENDED"
+    | "PRODUCT_UNAVAILABLE"
+    | "VARIANT_UNAVAILABLE"
+    | "NOT_FOUND";
+}
+
+export async function checkProductAvailability(
+  productId: string,
+  variantId?: string,
+): Promise<AvailabilityCheckResult> {
+  const now = new Date();
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    include: {
+      drop: true,
+      variants: true,
+    },
+  });
+
+  if (!product) {
+    return { available: false, reason: "NOT_FOUND" };
+  }
+
+  // Check Drop active window
+  if (product.drop.startsAt > now || product.drop.endsAt < now) {
+    return { available: false, reason: "DROP_ENDED" };
+  }
+
+  // Master Product Availability switch
+  if (!product.isAvailable) {
+    return { available: false, reason: "PRODUCT_UNAVAILABLE" };
+  }
+
+  // Variant-level Availability switch (if item has a variant)
+  if (variantId) {
+    const variant = product.variants.find((v) => v.id === variantId);
+    if (!variant || !variant.isAvailable) {
+      return { available: false, reason: "VARIANT_UNAVAILABLE" };
+    }
+  }
+
+  return { available: true };
+}
