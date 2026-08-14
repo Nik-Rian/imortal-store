@@ -38,7 +38,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   let items: CartItem[] = [];
   try {
-    items = JSON.parse(rawCart);
+    const parsed = JSON.parse(rawCart);
+    items = Array.isArray(parsed)
+      ? parsed.map((item) => ({
+          ...item,
+          productId: item.productId || item.id,
+        }))
+      : [];
   } catch (error) {
     console.error("Failed to parse cart data from localStorage:", error);
   }
@@ -49,7 +55,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addItem = (newItem: Omit<CartItem, "quantity">, quantity = 1) => {
-    const existingIndex = items.findIndex((item) => item.id === newItem.id);
+    // Generate composite item key (e.g. "prod_123:var_456" or "prod_123")
+    const itemKey =
+      newItem.id ||
+      (newItem.variantId
+        ? `${newItem.productId}:${newItem.variantId}`
+        : newItem.productId);
+
+    const fullItem: Omit<CartItem, "quantity"> = {
+      ...newItem,
+      id: itemKey,
+      productId: newItem.productId || newItem.id,
+    };
+
+    const existingIndex = items.findIndex((item) => item.id === itemKey);
     let updatedItems: CartItem[];
 
     if (existingIndex > -1) {
@@ -59,7 +78,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           : item,
       );
     } else {
-      updatedItems = [...items, { ...newItem, quantity }];
+      updatedItems = [...items, { ...fullItem, quantity }];
     }
 
     saveCart(updatedItems);
