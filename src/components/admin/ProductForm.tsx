@@ -2,10 +2,22 @@
 
 import { useState, ChangeEvent } from "react";
 import { slugify } from "@/lib/utils";
-import { Product } from "@/types";
-import { productSchema } from "@/lib/validations/product.schema";
+import { ProductWithVariants } from "@/types";
+import {
+  productSchema,
+  ALLOWED_SIZES,
+  AllowedSize,
+} from "@/lib/validations/product.schema";
 import { uploadProductImage, deleteBlobImages } from "@/actions/blob.actions";
-import { ImagePlus, Loader2, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ImagePlus,
+  Loader2,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 
 type DropOption = {
   id: string;
@@ -14,7 +26,7 @@ type DropOption = {
 
 interface ProductFormProps {
   action: (formData: FormData) => Promise<void>;
-  initialData?: Product;
+  initialData?: ProductWithVariants;
   drops: DropOption[];
 }
 
@@ -33,6 +45,54 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     ? (initialData.priceCents / 100).toFixed(2)
     : "";
   const [priceInput, setPriceInput] = useState(initialPriceDisplay);
+
+  // Variants Management State
+  const [variants, setVariants] = useState<
+    { id?: string; size: AllowedSize; sortOrder: number }[]
+  >(
+    initialData?.variants?.map((v, idx) => ({
+      id: v.id,
+      size: v.size as AllowedSize,
+      sortOrder: v.sortOrder ?? idx,
+    })) ?? [],
+  );
+
+  const handleAddStandardShirtSizes = () => {
+    const defaultSizes: AllowedSize[] = ["P", "M", "G"];
+    setVariants(
+      defaultSizes.map((size, index) => ({
+        size,
+        sortOrder: index,
+      })),
+    );
+  };
+
+  const handleAddSize = (sizeToAdd: AllowedSize) => {
+    if (variants.some((v) => v.size === sizeToAdd)) return;
+    setVariants((prev) => [
+      ...prev,
+      { size: sizeToAdd, sortOrder: prev.length },
+    ]);
+  };
+
+  const handleRemoveVariant = (index: number) => {
+    setVariants((prev) =>
+      prev
+        .filter((_, idx) => idx !== index)
+        .map((item, idx) => ({ ...item, sortOrder: idx })),
+    );
+  };
+
+  const handleMoveVariant = (index: number, direction: "up" | "down") => {
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= variants.length) return;
+
+    const updated = [...variants];
+    const [movedItem] = updated.splice(index, 1);
+    updated.splice(targetIndex, 0, movedItem);
+
+    setVariants(updated.map((item, idx) => ({ ...item, sortOrder: idx })));
+  };
 
   // Image Management State
   const [images, setImages] = useState<string[]>(initialData?.images ?? []);
@@ -104,6 +164,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
       description,
       dropId: selectedDropId,
       priceCents,
+      variants,
     });
 
     if (!validationResult.success) {
@@ -121,6 +182,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     formData.set("description", validData.description);
     formData.set("priceCents", validData.priceCents.toString());
     formData.set("dropId", validData.dropId);
+    formData.set("variants", JSON.stringify(validData.variants));
 
     // Append image URLs to formData
     formData.delete("images");
@@ -320,6 +382,103 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
             className="w-full block h-10 rounded-md border border-zinc-200 bg-white pr-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
           />
         </div>
+      </div>
+
+      {/* Sizes / Variants Selection */}
+      <div className="space-y-3 pt-2 border-t border-zinc-100">
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="text-sm font-medium text-zinc-900">
+              Tamanhos (Camisetas)
+            </label>
+            <p className="text-xs text-zinc-500">
+              Adicione os tamanhos disponíveis para este produto (P, M, G).
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleAddStandardShirtSizes}
+            disabled={isPending}
+            className="text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1.5 rounded transition-colors"
+          >
+            Grade Padrão (P, M, G)
+          </button>
+        </div>
+
+        {/* Quick Add Badges */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">Adicionar:</span>
+          {ALLOWED_SIZES.map((size) => {
+            const isSelected = variants.some((v) => v.size === size);
+            return (
+              <button
+                key={size}
+                type="button"
+                onClick={() => handleAddSize(size)}
+                disabled={isPending || isSelected}
+                className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded border transition-colors ${
+                  isSelected
+                    ? "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed"
+                    : "bg-white text-zinc-800 border-zinc-300 hover:bg-zinc-50 cursor-pointer"
+                }`}
+              >
+                <Plus className="w-3 h-3" /> {size}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active Variants List */}
+        {variants.length > 0 && (
+          <div className="space-y-2 mt-2">
+            {variants.map((variant, index) => (
+              <div
+                key={variant.size}
+                className="flex items-center justify-between bg-zinc-50 border border-zinc-200 px-3 py-2 rounded-md"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs font-bold bg-zinc-900 text-white w-6 h-6 rounded flex items-center justify-center">
+                    {variant.size}
+                  </span>
+                  <span className="text-xs text-zinc-500">
+                    Ordem: {variant.sortOrder}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleMoveVariant(index, "up")}
+                    disabled={isPending || index === 0}
+                    className="p-1 text-zinc-500 hover:text-zinc-900 disabled:opacity-30"
+                    title="Mover para cima"
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleMoveVariant(index, "down")}
+                    disabled={isPending || index === variants.length - 1}
+                    className="p-1 text-zinc-500 hover:text-zinc-900 disabled:opacity-30"
+                    title="Mover para baixo"
+                  >
+                    <ArrowDown className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveVariant(index)}
+                    disabled={isPending}
+                    className="p-1 text-red-600 hover:text-red-800 disabled:opacity-30"
+                    title="Remover tamanho"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="pt-4 flex justify-end">
