@@ -2,6 +2,9 @@ import Link from "next/link";
 import { getProducts } from "@/services/product.service";
 import { formatPrice } from "@/lib/utils";
 
+// Time-based ISR fallback: revalidate static shell every 1 hour (3600 seconds)
+export const revalidate = 3600;
+
 export default async function LojaPage() {
   // fetch data
   const products = await getProducts();

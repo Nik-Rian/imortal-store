@@ -145,8 +145,12 @@ export async function updateProduct(id: string, formData: FormData) {
         );
       }
     }
-
     throw error;
+  }
+
+  // Purge old slug cache if the slug was modified
+  if (currentProduct.slug !== slug) {
+    revalidatePath(`/produto/${currentProduct.slug}`);
   }
 
   revalidatePath("/admin/produtos");
@@ -160,7 +164,7 @@ export async function deleteProduct(id: string) {
 
   const product = await prisma.product.findUnique({
     where: { id },
-    select: { images: true },
+    select: { slug: true, images: true },
   });
 
   if (!product) {
@@ -179,11 +183,11 @@ export async function deleteProduct(id: string) {
     throw error;
   }
 
-  // Delete all associated images from storage
   if (product.images.length > 0) {
     await deleteBlobImages(product.images);
   }
 
   revalidatePath("/admin/produtos");
+  revalidatePath(`/produto/${product.slug}`);
   revalidatePath("/");
 }
