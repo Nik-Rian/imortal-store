@@ -154,9 +154,13 @@ export function Header() {
             <p className="text-xs text-muted-foreground">
               Frete e taxas calculados no encerramento da compra.
             </p>
-            <Button className="w-full text-base font-semibold h-12" size="lg">
+            <Link
+              href="/checkout"
+              onClick={() => setIsOpen(false)}
+              className="w-full block text-center bg-black text-white py-3 rounded font-medium"
+            >
               Finalizar Compra
-            </Button>
+            </Link>
           </div>
         )}
       </div>
