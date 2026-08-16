@@ -1,58 +1,123 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import {
-  checkoutSchema,
-  CheckoutInput,
-} from "@/lib/validations/checkout.schema";
-import { CartItem } from "@/types/cart";
 import { randomUUID } from "crypto";
 
-export async function createOrder(input: CheckoutInput, items: CartItem[]) {
-  const validated = checkoutSchema.parse(input);
+interface CreateOrderInput {
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  items: Array<{
+    variantId: string;
+    quantity: number;
+  }>;
+}
 
-  if (!items || items.length === 0) {
-    return { success: false, error: "Seu carrinho está vazio." };
-  }
+interface OrderItemData {
+  productId: string;
+  variantId: string;
+  productName: string;
+  dropName: string;
+  variantSize: string;
+  unitPriceCents: number;
+  quantity: number;
+}
 
-  const totalPriceCents = items.reduce(
-    (acc, item) => acc + item.priceCents * item.quantity,
-    0,
-  );
-
-  const accessToken = randomUUID();
-  const cancelableUntil = new Date(Date.now() + 30 * 60 * 1000);
-
+export async function createOrder(payload: CreateOrderInput) {
   try {
+    const { customerName, customerPhone, customerEmail, items } = payload;
+
+    if (!items || items.length === 0) {
+      return { success: false, error: "O carrinho está vazio." };
+    }
+
+    const variantIds = items.map((item) => item.variantId);
+
+    const variants = await prisma.productVariant.findMany({
+      where: { id: { in: variantIds } },
+      include: {
+        product: {
+          include: {
+            drop: true,
+          },
+        },
+      },
+    });
+
+    if (variants.length !== items.length) {
+      return {
+        success: false,
+        error: "Um ou mais produtos selecionados não foram encontrados.",
+      };
+    }
+
+    let totalPriceCents = 0;
+    const orderItemsData: OrderItemData[] = [];
+    const now = new Date();
+
+    for (const item of items) {
+      const variant = variants.find((v) => v.id === item.variantId);
+
+      if (!variant) {
+        return { success: false, error: "Variante do produto inválida." };
+      }
+
+      // 1. Availability check using schema flags
+      if (!variant.isAvailable || !variant.product.isAvailable) {
+        return {
+          success: false,
+          error: `O produto "${variant.product.name}" (${variant.size}) não está disponível.`,
+        };
+      }
+
+      const drop = variant.product.drop;
+      if (now < drop.startsAt || now > drop.endsAt) {
+        return {
+          success: false,
+          error: `O drop do produto "${variant.product.name}" não está ativo no momento.`,
+        };
+      }
+
+      const unitPriceCents = variant.product.priceCents;
+      totalPriceCents += unitPriceCents * item.quantity;
+
+      orderItemsData.push({
+        productId: variant.productId,
+        variantId: variant.id,
+        productName: variant.product.name,
+        dropName: drop.name,
+        variantSize: variant.size,
+        unitPriceCents,
+        quantity: item.quantity,
+      });
+    }
+
+    const cancelableUntil = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const accessToken = randomUUID();
+
     const order = await prisma.order.create({
       data: {
         accessToken,
+        customerName,
+        customerPhone,
+        customerEmail,
         status: "PENDING",
-        customerName: validated.customerName,
-        customerPhone: validated.customerPhone,
-        customerEmail: validated.customerEmail,
         totalPriceCents,
         cancelableUntil,
         items: {
-          create: items.map((item) => ({
-            productId: item.productId,
-            productName: item.name,
-            dropName: "Geral",
-            variantId: item.variantId ?? null,
-            variantSize: item.size ?? null,
-            quantity: item.quantity,
-            unitPriceCents: item.priceCents,
-          })),
+          createMany: {
+            data: orderItemsData,
+          },
         },
       },
     });
 
     return { success: true, accessToken: order.accessToken };
   } catch (error) {
-    console.error("Failed to create order:", error);
+    console.error("Error creating order:", error);
     return {
       success: false,
-      error: "Não foi possível processar seu pedido. Tente novamente.",
+      error: "Ocorreu um erro ao processar o pedido. Tente novamente.",
     };
   }
 }
