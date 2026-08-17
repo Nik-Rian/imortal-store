@@ -26,7 +26,14 @@ export default function CheckoutPage() {
 
   const onSubmit = (data: CheckoutInput) => {
     startTransition(async () => {
-      const res = await createOrder(data, items);
+      const res = await createOrder({
+        ...data,
+        items: items.map((item) => ({
+          variantId: item.variantId!,
+          quantity: item.quantity,
+        })),
+      });
+
       if (res.success && res.accessToken) {
         clearCart();
         router.push(`/pedidos/${res.accessToken}`);

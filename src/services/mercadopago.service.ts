@@ -82,7 +82,7 @@ export async function createPixPayment(
   const cleanCpf = params.cpf ? params.cpf.replace(/\D/g, "") : undefined;
 
   const payload = {
-    transaction_amount: params.amount,
+    transaction_amount: Number(params.amount.toFixed(2)),
     description: params.description,
     payment_method_id: "pix",
     external_reference: params.orderId,
@@ -100,7 +100,6 @@ export async function createPixPayment(
         : {}),
     },
   };
-
   const response = await fetch("https://api.mercadopago.com/v1/payments", {
     method: "POST",
     headers: {
@@ -114,10 +113,22 @@ export async function createPixPayment(
   const data = await response.json();
 
   if (!response.ok) {
+    const causes = Array.isArray(data?.cause)
+      ? data.cause
+          .map(
+            (c: { description?: string; code?: number | string }) =>
+              c.description || c.code,
+          )
+          .filter(Boolean)
+          .join(" | ")
+      : null;
+
+    console.error("Mercado Pago Raw Response:", JSON.stringify(data, null, 2));
     const errorMessage =
+      causes ||
       data?.message ||
-      data?.cause?.[0]?.description ||
       `Mercado Pago API error (${response.status}): ${response.statusText}`;
+
     throw new Error(errorMessage);
   }
 
