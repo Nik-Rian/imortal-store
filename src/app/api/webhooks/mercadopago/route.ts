@@ -52,6 +52,13 @@ export async function POST(req: NextRequest) {
     // Authoritative check against Mercado Pago API
     const payment = await getMercadoPagoPayment(dataId);
 
+    if (!payment) {
+      return NextResponse.json(
+        { message: "Payment not found or test event ignored" },
+        { status: 200 },
+      );
+    }
+
     // Idempotent update: process payment approval and transition status
     if (payment.status === "approved" && payment.external_reference) {
       await prisma.order.updateMany({

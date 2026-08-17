@@ -13,7 +13,7 @@ export interface MercadoPagoPaymentResponse {
  */
 export async function getMercadoPagoPayment(
   paymentId: string | number,
-): Promise<MercadoPagoPaymentResponse> {
+): Promise<MercadoPagoPaymentResponse | null> {
   const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
 
   if (!accessToken) {
@@ -30,6 +30,11 @@ export async function getMercadoPagoPayment(
       },
     },
   );
+
+  // Retorna null caso o ID seja fictício (404)
+  if (response.status === 404) {
+    return null;
+  }
 
   if (!response.ok) {
     throw new Error(
