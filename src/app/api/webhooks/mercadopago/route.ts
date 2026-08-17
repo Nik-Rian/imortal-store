@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
-import { getMercadoPagoOrder } from "@/services/mercadopago.service";
+import {
+  getMercadoPagoOrder,
+  getMercadoPagoPayment,
+} from "@/services/mercadopago.service";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
@@ -54,24 +57,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing entity ID" }, { status: 400 });
     }
 
-    const order = await getMercadoPagoOrder(dataId);
+    let isApproved = false;
+    let externalReference: string | null = null;
 
-    if (!order) {
-      return NextResponse.json(
-        { message: "Order not found or test event ignored" },
-        { status: 200 },
-      );
+    if (isPaymentEvent) {
+      const payment = await getMercadoPagoPayment(dataId);
+      if (payment) {
+        isApproved = payment.status === "approved";
+        externalReference = payment.external_reference;
+      }
+    } else if (isOrderEvent) {
+      const order = await getMercadoPagoOrder(dataId);
+      if (order) {
+        isApproved =
+          order.status === "processed" ||
+          (order.transactions?.payments?.some((p) => p.status === "approved") ??
+            false);
+        externalReference = order.external_reference;
+      }
     }
 
-    // Check if order is processed or if underlying transaction is approved
-    const isApproved =
-      order.status === "processed" ||
-      order.transactions?.payments?.some((p) => p.status === "approved");
-
-    if (isApproved && order.external_reference) {
+    if (isApproved && externalReference) {
       await prisma.order.updateMany({
         where: {
-          id: order.external_reference,
+          id: externalReference,
           status: { not: "PAID" },
         },
         data: {
