@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     // Check if order is processed or if underlying transaction is approved
     const isApproved =
       order.status === "processed" ||
-      order.transactions?.some((t) => t.status === "approved");
+      order.transactions?.payments?.some((p) => p.status === "approved");
 
     if (isApproved && order.external_reference) {
       await prisma.order.updateMany({
