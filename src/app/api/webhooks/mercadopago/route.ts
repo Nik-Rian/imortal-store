@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
-import { getMercadoPagoPayment } from "@/services/mercadopago.service";
+import { getMercadoPagoOrder } from "@/services/mercadopago.service";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
@@ -37,33 +37,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
-    // Ignore non-payment events with a 200 acknowledgment
-    if (type !== "payment" && !body?.action?.startsWith("payment.")) {
+    // Accept order and payment events during transition
+    const isOrderEvent =
+      type === "order" ||
+      body?.action?.startsWith("order.") ||
+      type === "merchant_order";
+
+    const isPaymentEvent =
+      type === "payment" || body?.action?.startsWith("payment.");
+
+    if (!isOrderEvent && !isPaymentEvent) {
       return NextResponse.json({ message: "Event ignored" }, { status: 200 });
     }
 
     if (!dataId) {
-      return NextResponse.json(
-        { error: "Missing payment ID" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Missing entity ID" }, { status: 400 });
     }
 
-    // Authoritative check against Mercado Pago API
-    const payment = await getMercadoPagoPayment(dataId);
+    const order = await getMercadoPagoOrder(dataId);
 
-    if (!payment) {
+    if (!order) {
       return NextResponse.json(
-        { message: "Payment not found or test event ignored" },
+        { message: "Order not found or test event ignored" },
         { status: 200 },
       );
     }
 
-    // Idempotent update: process payment approval and transition status
-    if (payment.status === "approved" && payment.external_reference) {
+    // Check if order is processed or if underlying transaction is approved
+    const isApproved =
+      order.status === "processed" ||
+      order.transactions?.some((t) => t.status === "approved");
+
+    if (isApproved && order.external_reference) {
       await prisma.order.updateMany({
         where: {
-          id: payment.external_reference,
+          id: order.external_reference,
           status: { not: "PAID" },
         },
         data: {
