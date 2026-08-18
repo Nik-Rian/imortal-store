@@ -70,29 +70,25 @@ enum OrderStatus {
 }
 
 model Order {
-  id              String      @id @default(uuid())
-  accessToken     String      @unique
-
+  id              String      @id @default(cuid())
+  accessToken     String      @unique @default(uuid())
   customerName    String
   customerPhone   String?
   customerEmail   String?
-
   status          OrderStatus @default(PENDING)
-  cancelableUntil DateTime
   totalPriceCents Int
 
-  // Mercado Pago Pix Fields
+  // Mercado Pago Integration Identifiers
   mpPaymentId     String?     @unique
-  pixQrCode       String?     // Copy-and-paste key (point_of_interaction.transaction_data.qr_code)
-  pixQrCodeBase64 String?     // Base64 QR Image (point_of_interaction.transaction_data.qr_code_base64)
-  pixExpiration   DateTime?
+  mpOrderId       String?     @unique
+  pixQrCode       String?
+  pixQrCodeBase64 String?
 
+  cancelableUntil DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   items           OrderItem[]
-
-  @@index([status])
 }
 
 model OrderItem {
