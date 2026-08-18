@@ -7,6 +7,20 @@ import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { ArrowLeft, Loader2, ShoppingBag } from "lucide-react";
 
+import { useEffect } from "react";
+import { initMercadoPago } from "@mercadopago/sdk-react";
+
+export function MercadoPagoInitializer() {
+  useEffect(() => {
+    const publicKey = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY;
+    if (publicKey) {
+      initMercadoPago(publicKey, { locale: "pt-BR" });
+    }
+  }, []);
+
+  return null;
+}
+
 // Format CPF: 000.000.000-00
 function formatCPF(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 11);

@@ -27,8 +27,8 @@ export interface MercadoPagoPaymentDetail {
 }
 
 /**
-* Creates a Pix charge in Mercado Pago using the Payments API (v1/payments).
-*/
+ * Creates a Pix charge in Mercado Pago using the Orders API (v1/orders).
+ */
 export async function createPixPayment(
   params: CreatePixParams,
 ): Promise<PixPaymentResult> {
@@ -38,12 +38,12 @@ export async function createPixPayment(
   }
 
   const cleanCpf = params.cpf ? params.cpf.replace(/\D/g, "") : undefined;
+  const formattedAmount = params.amount.toFixed(2);
 
   const payload = {
-    transaction_amount: params.amount,
-    description: params.description,
-    payment_method_id: "pix",
+    type: "online",
     external_reference: params.orderId,
+    total_amount: formattedAmount,
     payer: {
       email: params.email,
       first_name: params.firstName || "Cliente",
@@ -57,9 +57,20 @@ export async function createPixPayment(
           }
         : {}),
     },
+    transactions: {
+      payments: [
+        {
+          amount: formattedAmount,
+          payment_method: {
+            id: "pix",
+            type: "bank_transfer",
+          },
+        },
+      ],
+    },
   };
 
-  const response = await fetch("https://api.mercadopago.com/v1/payments", {
+  const response = await fetch("https://api.mercadopago.com/v1/orders", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -72,18 +83,19 @@ export async function createPixPayment(
   const data = await response.json();
 
   if (!response.ok) {
-    console.error("Erro da API Mercado Pago ao criar Pix:", data);
+    console.error("Erro da API Mercado Pago Orders ao criar Pix:", data);
     throw new Error(
       `Falha na integração com o Mercado Pago: ${data.message || response.statusText}`,
     );
   }
 
-  const paymentMethod = data.point_of_interaction?.transaction_data;
+  const payment = data.transactions?.payments?.[0];
+  const paymentMethod = payment?.payment_method;
 
   return {
-    id: String(data.id),
-    status: data.status,
-    statusDetail: data.status_detail,
+    id: payment?.id ? String(payment.id) : String(data.id),
+    status: payment?.status ?? data.status ?? "pending",
+    statusDetail: payment?.status_detail ?? data.status_detail,
     externalReference: data.external_reference,
     qrCode: paymentMethod?.qr_code ?? "",
     qrCodeBase64: paymentMethod?.qr_code_base64 ?? "",
