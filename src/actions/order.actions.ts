@@ -8,17 +8,18 @@ interface CreateOrderInput {
   customerPhone?: string;
   customerEmail?: string;
   items: Array<{
-    variantId: string;
+    variantId?: string;
+    productId?: string;
     quantity: number;
   }>;
 }
 
 interface OrderItemData {
   productId: string;
-  variantId: string;
+  variantId?: string | null;
   productName: string;
   dropName: string;
-  variantSize: string;
+  variantSize?: string | null;
   unitPriceCents: number;
   quantity: number;
 }
@@ -31,20 +32,40 @@ export async function createOrder(payload: CreateOrderInput) {
       return { success: false, error: "O carrinho está vazio." };
     }
 
-    const variantIds = items.map((item) => item.variantId);
+    // Separate items by whether they use a variantId or direct productId
+    const variantItems = items.filter((item) => item.variantId);
+    const productItems = items.filter(
+      (item) => !item.variantId && item.productId,
+    );
 
-    const variants = await prisma.productVariant.findMany({
-      where: { id: { in: variantIds } },
-      include: {
-        product: {
-          include: {
-            drop: true,
-          },
-        },
-      },
-    });
+    const variantIds = variantItems.map((item) => item.variantId!);
+    const productIds = productItems.map((item) => item.productId!);
 
-    if (variants.length !== items.length) {
+    // Fetch variants and standalone products concurrently
+    const [variants, products] = await Promise.all([
+      variantIds.length > 0
+        ? prisma.productVariant.findMany({
+            where: { id: { in: variantIds } },
+            include: {
+              product: {
+                include: {
+                  drop: true,
+                },
+              },
+            },
+          })
+        : [],
+      productIds.length > 0
+        ? prisma.product.findMany({
+            where: { id: { in: productIds } },
+            include: {
+              drop: true,
+            },
+          })
+        : [],
+    ]);
+
+    if (variants.length + products.length !== items.length) {
       return {
         success: false,
         error: "Um ou mais produtos selecionados não foram encontrados.",
@@ -56,40 +77,75 @@ export async function createOrder(payload: CreateOrderInput) {
     const now = new Date();
 
     for (const item of items) {
-      const variant = variants.find((v) => v.id === item.variantId);
+      if (item.variantId) {
+        const variant = variants.find((v) => v.id === item.variantId);
 
-      if (!variant) {
-        return { success: false, error: "Variante do produto inválida." };
+        if (!variant) {
+          return { success: false, error: "Variante do produto inválida." };
+        }
+
+        if (!variant.isAvailable || !variant.product.isAvailable) {
+          return {
+            success: false,
+            error: `O produto "${variant.product.name}" (${variant.size}) não está disponível.`,
+          };
+        }
+
+        const drop = variant.product.drop;
+        if (now < drop.startsAt || now > drop.endsAt) {
+          return {
+            success: false,
+            error: `O drop do produto "${variant.product.name}" não está ativo no momento.`,
+          };
+        }
+
+        const unitPriceCents = variant.product.priceCents;
+        totalPriceCents += unitPriceCents * item.quantity;
+
+        orderItemsData.push({
+          productId: variant.productId,
+          variantId: variant.id,
+          productName: variant.product.name,
+          dropName: drop.name,
+          variantSize: variant.size,
+          unitPriceCents,
+          quantity: item.quantity,
+        });
+      } else if (item.productId) {
+        const product = products.find((p) => p.id === item.productId);
+
+        if (!product) {
+          return { success: false, error: "Produto inválido." };
+        }
+
+        if (!product.isAvailable) {
+          return {
+            success: false,
+            error: `O produto "${product.name}" não está disponível.`,
+          };
+        }
+
+        const drop = product.drop;
+        if (now < drop.startsAt || now > drop.endsAt) {
+          return {
+            success: false,
+            error: `O drop do produto "${product.name}" não está ativo no momento.`,
+          };
+        }
+
+        const unitPriceCents = product.priceCents;
+        totalPriceCents += unitPriceCents * item.quantity;
+
+        orderItemsData.push({
+          productId: product.id,
+          variantId: null,
+          productName: product.name,
+          dropName: drop.name,
+          variantSize: null,
+          unitPriceCents,
+          quantity: item.quantity,
+        });
       }
-
-      // 1. Availability check using schema flags
-      if (!variant.isAvailable || !variant.product.isAvailable) {
-        return {
-          success: false,
-          error: `O produto "${variant.product.name}" (${variant.size}) não está disponível.`,
-        };
-      }
-
-      const drop = variant.product.drop;
-      if (now < drop.startsAt || now > drop.endsAt) {
-        return {
-          success: false,
-          error: `O drop do produto "${variant.product.name}" não está ativo no momento.`,
-        };
-      }
-
-      const unitPriceCents = variant.product.priceCents;
-      totalPriceCents += unitPriceCents * item.quantity;
-
-      orderItemsData.push({
-        productId: variant.productId,
-        variantId: variant.id,
-        productName: variant.product.name,
-        dropName: drop.name,
-        variantSize: variant.size,
-        unitPriceCents,
-        quantity: item.quantity,
-      });
     }
 
     const cancelableUntil = new Date(now.getTime() + 2 * 60 * 60 * 1000);
