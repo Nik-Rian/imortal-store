@@ -71,7 +71,7 @@ enum OrderStatus {
 
 model Order {
   id              String      @id @default(uuid())
-  accessToken     String      @unique // generated in app code (crypto.randomBytes), no schema default
+  accessToken     String      @unique
 
   customerName    String
   customerPhone   String?
@@ -80,6 +80,12 @@ model Order {
   status          OrderStatus @default(PENDING)
   cancelableUntil DateTime
   totalPriceCents Int
+
+  // Mercado Pago Pix Fields
+  mpPaymentId     String?     @unique
+  pixQrCode       String?     // Copy-and-paste key (point_of_interaction.transaction_data.qr_code)
+  pixQrCodeBase64 String?     // Base64 QR Image (point_of_interaction.transaction_data.qr_code_base64)
+  pixExpiration   DateTime?
 
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
