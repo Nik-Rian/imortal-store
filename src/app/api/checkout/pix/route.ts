@@ -7,7 +7,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { orderId, amount, email, firstName, lastName, cpf } = body;
 
-    // Search for the existing order
     const order = await prisma.order.findUnique({
       where: { id: orderId },
     });
@@ -19,7 +18,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Creates the Pix payment order in Mercado Pago (Orders API)
     const pixResult = await createPixPayment({
       orderId: order.id,
       amount: amount ?? Number(order.totalPriceCents) / 100,
@@ -30,7 +28,6 @@ export async function POST(req: Request) {
       cpf,
     });
 
-    // The data returned persists in the Prisma schema.
     await prisma.order.update({
       where: { id: order.id },
       data: {
@@ -41,7 +38,6 @@ export async function POST(req: Request) {
       },
     });
 
-    // Returns the Pix data to the frontend.
     return NextResponse.json({
       success: true,
       orderId: order.id,
