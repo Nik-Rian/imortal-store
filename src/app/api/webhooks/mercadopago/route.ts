@@ -43,7 +43,7 @@ export async function POST(req: Request) {
         if (payment.status === "approved") {
           newStatus = "PAID";
         } else if (
-          payment.status === "cancelled" ||
+          payment.status === "canceled" ||
           payment.status === "rejected"
         ) {
           newStatus = "CANCELED";
