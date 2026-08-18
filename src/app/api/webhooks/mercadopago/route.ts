@@ -1,71 +1,102 @@
 import { NextResponse } from "next/server";
-import { getMercadoPagoPayment } from "@/services/mercadopago.service";
 import { prisma } from "@/lib/prisma";
+import {
+  getMercadoPagoPayment,
+  getMercadoPagoOrder,
+} from "@/services/mercadopago.service";
 
 export async function POST(req: Request) {
   try {
     const url = new URL(req.url);
     const body = await req.json().catch(() => ({}));
 
-    // MP sends data via query string or body.
-    const type =
-      body.type ||
-      body.topic ||
+    const topic =
+      url.searchParams.get("topic") ||
       url.searchParams.get("type") ||
-      url.searchParams.get("topic");
-    const dataId =
-      body.data?.id ||
-      url.searchParams.get("data.id") ||
-      url.searchParams.get("id");
+      body.type ||
+      body.action;
 
-    if (!dataId) {
-      return NextResponse.json(
-        { message: "Evento sem ID ignorado." },
-        { status: 200 },
-      );
+    const resourceId = url.searchParams.get("id") || body.data?.id;
+
+    if (!resourceId) {
+      return NextResponse.json({ received: true });
     }
 
-    // Processing for Payment-type notifications
-    if (type === "payment" || body.action?.startsWith("payment.")) {
-      const paymentData = await getMercadoPagoPayment(dataId);
+    // Process Payment Notifications (/v1/payments)
+    if (topic === "payment" || topic?.startsWith("payment.")) {
+      const payment = await getMercadoPagoPayment(String(resourceId));
+      if (!payment) return NextResponse.json({ received: true });
 
-      if (!paymentData) {
-        return NextResponse.json(
-          { message: "Pagamento não encontrado no Mercado Pago." },
-          { status: 200 },
-        );
-      }
+      const order = await prisma.order.findFirst({
+        where: {
+          OR: [
+            { mpPaymentId: payment.paymentId },
+            ...(payment.externalReference
+              ? [{ id: payment.externalReference }]
+              : []),
+          ],
+        },
+      });
 
-      const statusMap: Record<string, "PAID" | "CANCELLED" | "PENDING"> = {
-        approved: "PAID",
-        cancelled: "CANCELLED",
-        rejected: "CANCELLED",
-        refunded: "CANCELLED",
-        charged_back: "CANCELLED",
-      };
+      if (order) {
+        let newStatus = order.status;
+        if (payment.status === "approved") {
+          newStatus = "PAID";
+        } else if (
+          payment.status === "cancelled" ||
+          payment.status === "rejected"
+        ) {
+          newStatus = "CANCELED";
+        }
 
-      const newStatus = statusMap[paymentData.status] ?? "PENDING";
-      const orderId = paymentData.external_reference;
-
-      if (orderId) {
         await prisma.order.update({
-          where: { id: orderId },
-          data: { status: newStatus },
-        });
-      } else {
-        await prisma.order.updateMany({
-          where: { mpPaymentId: String(dataId) },
-          data: { status: newStatus },
+          where: { id: order.id },
+          data: {
+            mpPaymentId: payment.paymentId,
+            ...(payment.orderId ? { mpOrderId: payment.orderId } : {}),
+            status: newStatus,
+          },
         });
       }
     }
 
-    return NextResponse.json({ received: true }, { status: 200 });
-  } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Erro desconhecido";
+    // Process Merchant Order Notifications (/merchant_orders)
+    if (topic === "merchant_order" || topic === "order") {
+      const merchantOrder = await getMercadoPagoOrder(String(resourceId));
+      if (!merchantOrder) return NextResponse.json({ received: true });
 
-    console.error("Erro no processamento do Webhook Mercado Pago:", error);
-    return NextResponse.json({ error: errorMessage }, { status: 200 });
+      const order = await prisma.order.findFirst({
+        where: {
+          OR: [
+            { mpOrderId: merchantOrder.orderId },
+            ...(merchantOrder.externalReference
+              ? [{ id: merchantOrder.externalReference }]
+              : []),
+          ],
+        },
+      });
+
+      if (order) {
+        const hasApprovedPayment = merchantOrder.payments.some(
+          (p) => p.status === "approved",
+        );
+
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            mpOrderId: merchantOrder.orderId,
+            ...(hasApprovedPayment ? { status: "PAID" } : {}),
+          },
+        });
+      }
+    }
+
+    return NextResponse.json({ received: true });
+  } catch (error) {
+    console.error("Mercado Pago Webhook Error:", error);
+    return NextResponse.json(
+      { error: "Webhook processing failed" },
+      { status: 500 },
+    );
   }
 }

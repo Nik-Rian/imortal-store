@@ -1,57 +1,51 @@
 import { NextResponse } from "next/server";
-import { createPixPayment } from "@/services/mercadopago.service";
 import { prisma } from "@/lib/prisma";
+import { createPixPayment } from "@/services/mercadopago.service";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { orderId, amount, email, firstName, lastName, cpf } = body;
+    const { orderId } = body;
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
     });
 
     if (!order) {
-      return NextResponse.json(
-        { error: "Pedido não encontrado." },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const pixResult = await createPixPayment({
+    const paymentResult = await createPixPayment({
       orderId: order.id,
-      amount: amount ?? Number(order.totalPriceCents) / 100,
-      email: email ?? order.customerEmail,
-      description: `Pedido #${order.id.slice(0, 8)} - Imortal Store`,
-      firstName,
-      lastName,
-      cpf,
+      amount: order.totalPriceCents / 100,
+      email: order.customerEmail,
+      description: `Order #${order.id}`,
+      firstName: order.customerName.split(" ")[0],
+      lastName: order.customerName.split(" ").slice(1).join(" ") || undefined,
     });
 
     await prisma.order.update({
       where: { id: order.id },
       data: {
-        mpPaymentId: pixResult.id,
-        pixQrCode: pixResult.qrCode,
-        pixQrCodeBase64: pixResult.qrCodeBase64,
-        status: "PENDING",
+        mpPaymentId: paymentResult.paymentId,
+        mpOrderId: paymentResult.orderId,
+        pixQrCode: paymentResult.qrCode,
+        pixQrCodeBase64: paymentResult.qrCodeBase64,
       },
     });
 
     return NextResponse.json({
       success: true,
-      orderId: order.id,
-      paymentId: pixResult.id,
-      qrCode: pixResult.qrCode,
-      qrCodeBase64: pixResult.qrCodeBase64,
-      ticketUrl: pixResult.ticketUrl,
+      paymentId: paymentResult.paymentId,
+      orderId: paymentResult.orderId,
+      pixQrCode: paymentResult.qrCode,
+      pixQrCodeBase64: paymentResult.qrCodeBase64,
+      ticketUrl: paymentResult.ticketUrl,
     });
   } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Erro interno ao processar Pix.";
-
-    console.error("Erro na rota checkout/pix:", error);
-
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    const message =
+      error instanceof Error ? error.message : "Failed to process Pix payment";
+    console.error("Pix Checkout Error:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
