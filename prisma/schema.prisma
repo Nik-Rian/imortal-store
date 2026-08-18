@@ -71,23 +71,20 @@ enum OrderStatus {
 
 model Order {
   id              String      @id @default(cuid())
-  accessToken     String      @unique @default(uuid())
+  accessToken     String      @unique
   customerName    String
   customerPhone   String?
-  customerEmail   String?
+  customerEmail   String
   status          OrderStatus @default(PENDING)
   totalPriceCents Int
-
-  // Mercado Pago Integration Identifiers
-  mpPaymentId     String?     @unique
-  mpOrderId       String?     @unique
+  cancelableUntil DateTime
+  mpPaymentId     String?
+  mpOrderId       String?
   pixQrCode       String?
   pixQrCodeBase64 String?
-
-  cancelableUntil DateTime?
+  idempotencyKey  String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
-
   items           OrderItem[]
 }
 

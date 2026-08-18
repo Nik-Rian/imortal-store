@@ -3,6 +3,7 @@ const MP_BASE_URL = "https://api.mercadopago.com";
 
 export interface CreatePixPaymentInput {
   orderId: string;
+  idempotencyKey?: string;
   amount: number;
   email?: string | null;
   description: string;
@@ -47,12 +48,14 @@ export async function createPixPayment(
     throw new Error("MERCADOPAGO_ACCESS_TOKEN is not configured.");
   }
 
+  const idempotencyHeader = input.idempotencyKey || input.orderId;
+
   const response = await fetch(`${MP_BASE_URL}/v1/payments`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
-      "X-Idempotency-Key": input.orderId,
+      "X-Idempotency-Key": idempotencyHeader,
     },
     body: JSON.stringify({
       transaction_amount: input.amount,
