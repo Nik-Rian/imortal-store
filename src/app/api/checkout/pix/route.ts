@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     // Convert total price from cents to float for Mercado Pago (e.g., 10000 -> 100.00)
     const amountInReais = totalPriceCents / 100;
 
-    // 3. Generate Pix payment via Mercado Pago v2 Orders API
+    // Generate Pix payment via Mercado Pago
     const pixResult = await createPixPayment({
       amount: amountInReais,
       description: `Order #${dbOrder.id}`,
@@ -77,10 +77,17 @@ export async function POST(req: NextRequest) {
       lastName,
     });
 
+    // Update database order with the Mercado Pago Payment ID
+    //await prisma.order.update({
+    //  where: { id: dbOrder.id },
+    //  data: { paymentId: pixResult.id },
+    //});
+
     return NextResponse.json({
       success: true,
       orderId: dbOrder.id,
       accessToken: dbOrder.accessToken,
+      paymentId: pixResult.id,
       qrCode: pixResult.qrCode,
       qrCodeBase64: pixResult.qrCodeBase64,
       ticketUrl: pixResult.ticketUrl,

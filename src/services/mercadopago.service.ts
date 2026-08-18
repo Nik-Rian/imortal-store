@@ -33,6 +33,7 @@ export interface CreatePixPaymentParams {
 
 export interface PixPaymentResult {
   id: string;
+  mpOrderId: string;
   status: string;
   statusDetail: string;
   externalReference: string;
@@ -130,7 +131,6 @@ export async function createPixPayment(
   const data = await response.json();
 
   if (!response.ok) {
-    // Extract precise error causes returned by Mercado Pago
     const causeMessages = Array.isArray(data?.cause)
       ? data.cause
           .map(
@@ -149,16 +149,18 @@ export async function createPixPayment(
     throw new Error(errorDetails);
   }
 
-  const paymentMethod = data.transactions?.payments?.[0]?.payment_method;
+  const firstPayment = data.transactions?.payments?.[0];
+  const paymentMethod = firstPayment?.payment_method;
 
   if (!paymentMethod?.qr_code || !paymentMethod?.qr_code_base64) {
     throw new Error("Mercado Pago API returned incomplete Pix payload.");
   }
 
   return {
-    id: data.id,
-    status: data.status,
-    statusDetail: data.status_detail ?? data.status,
+    id: firstPayment.id,
+    mpOrderId: data.id,
+    status: firstPayment.status ?? data.status,
+    statusDetail: firstPayment.status_detail ?? data.status,
     externalReference: data.external_reference,
     qrCode: paymentMethod.qr_code,
     qrCodeBase64: paymentMethod.qr_code_base64,
