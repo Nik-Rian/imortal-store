@@ -1,144 +1,172 @@
-export interface PixPaymentData {
-  amount: number;
-  description: string;
+const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN;
+const MP_BASE_URL = "https://api.mercadopago.com";
+
+export interface CreatePixPaymentInput {
   orderId: string;
-  email: string;
-  cpf?: string;
+  amount: number;
+  email?: string | null;
+  description: string;
   firstName?: string;
   lastName?: string;
+  cpf?: string;
 }
 
-export type CreatePixParams = PixPaymentData;
-
-export interface PixPaymentResult {
-  id: string;
-  status: string;
-  statusDetail?: string;
-  externalReference?: string;
+export interface CreatePixPaymentResult {
+  paymentId: string;
+  orderId?: string;
   qrCode: string;
-  qrCodeBase64?: string;
+  qrCodeBase64: string;
   ticketUrl?: string;
+  status: string;
 }
 
-export interface MercadoPagoPaymentDetail {
-  id: number;
+export interface MercadoPagoPaymentDetails {
+  paymentId: string;
+  orderId?: string;
   status: string;
-  status_detail: string;
-  external_reference: string | null;
-  transaction_amount: number;
+  externalReference?: string;
+}
+
+export interface MercadoPagoOrderDetails {
+  orderId: string;
+  status: string;
+  externalReference?: string;
+  payments: Array<{
+    paymentId: string;
+    status: string;
+  }>;
 }
 
 /**
- * Creates a Pix charge in Mercado Pago using the Orders API (v1/orders).
+ * Creates a Pix payment via Mercado Pago Payments API (/v1/payments).
  */
 export async function createPixPayment(
-  data: PixPaymentData,
-): Promise<PixPaymentResult> {
-  const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
-  if (!token) {
-    throw new Error("MERCADOPAGO_ACCESS_TOKEN não está configurado.");
+  input: CreatePixPaymentInput,
+): Promise<CreatePixPaymentResult> {
+  if (!MP_ACCESS_TOKEN) {
+    throw new Error("MERCADOPAGO_ACCESS_TOKEN is not configured.");
   }
 
-  const body = {
-    type: "online",
-    processing_mode: "automatic",
-    external_reference: data.orderId,
-    description: data.description,
-    total_amount: data.amount,
-    transactions: {
-      payments: [
-        {
-          amount: data.amount,
-          payment_method: {
-            id: "pix",
-            type: "bank_transfer",
-          },
-        },
-      ],
-    },
-    payer: {
-      email: data.email,
-      first_name: data.firstName || "Cliente",
-      last_name: data.lastName || "Imortal",
-      ...(data.cpf
-        ? {
-            identification: {
-              type: "CPF",
-              number: data.cpf.replace(/\D/g, ""),
-            },
-          }
-        : {}),
-    },
-  };
-
-  const response = await fetch("https://api.mercadopago.com/v1/orders", {
+  const response = await fetch(`${MP_BASE_URL}/v1/payments`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      "X-Idempotency-Key": `${data.orderId}-${Date.now()}`,
+      Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
+      "X-Idempotency-Key": input.orderId,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      transaction_amount: input.amount,
+      description: input.description,
+      payment_method_id: "pix",
+      external_reference: input.orderId,
+      payer: {
+        email: input.email || "cliente@imortalstore.com",
+        first_name: input.firstName,
+        last_name: input.lastName,
+        ...(input.cpf
+          ? {
+              identification: {
+                type: "CPF",
+                number: input.cpf,
+              },
+            }
+          : {}),
+      },
+    }),
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    console.error("Erro Mercado Pago Orders API:", errorData);
+    const errorData = await response.json();
     throw new Error(
-      `Falha ao criar pagamento Pix: ${
-        errorData.message || response.statusText
-      }`,
+      `Mercado Pago API Error: ${errorData.message || response.statusText}`,
     );
   }
 
-  const responseData = await response.json();
+  const data = await response.json();
+  const paymentId = String(data.id);
+  const orderId = data.order?.id ? String(data.order.id) : undefined;
 
-  const payment = responseData.transactions?.payments?.[0];
-  const paymentMethod = payment?.payment_method;
+  const qrCode = data.point_of_interaction?.transaction_data?.qr_code ?? "";
+  const qrCodeBase64 =
+    data.point_of_interaction?.transaction_data?.qr_code_base64 ?? "";
+  const ticketUrl =
+    data.point_of_interaction?.transaction_data?.ticket_url ?? undefined;
 
   return {
-    id: payment?.id ? String(payment.id) : String(responseData.id ?? ""),
-    status: payment?.status ?? responseData.status ?? "pending",
-    statusDetail: payment?.status_detail,
-    externalReference: responseData.external_reference,
-    qrCode: paymentMethod?.qr_code ?? "",
-    qrCodeBase64: paymentMethod?.qr_code_base64 ?? "",
-    ticketUrl: paymentMethod?.ticket_url ?? "",
+    paymentId,
+    orderId,
+    qrCode,
+    qrCodeBase64,
+    ticketUrl,
+    status: data.status,
   };
 }
 
 /**
- * Retrieves payment details from Mercado Pago using the payment ID.
+ * Fetches payment details from Mercado Pago Payments API (/v1/payments/{id}).
  */
 export async function getMercadoPagoPayment(
   paymentId: string,
-): Promise<MercadoPagoPaymentDetail | null> {
-  const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
-  if (!accessToken) {
-    throw new Error("MERCADOPAGO_ACCESS_TOKEN não configurado no ambiente.");
+): Promise<MercadoPagoPaymentDetails | null> {
+  if (!MP_ACCESS_TOKEN) {
+    throw new Error("MERCADOPAGO_ACCESS_TOKEN is not configured.");
   }
 
-  const response = await fetch(
-    `https://api.mercadopago.com/v1/payments/${paymentId}`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      cache: "no-store",
+  const response = await fetch(`${MP_BASE_URL}/v1/payments/${paymentId}`, {
+    headers: {
+      Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
     },
-  );
-
-  if (response.status === 404) return null;
+  });
 
   if (!response.ok) {
-    console.error(
-      `Erro ao buscar pagamento MP ID ${paymentId}:`,
-      response.statusText,
-    );
-    return null;
+    if (response.status === 404) return null;
+    throw new Error(`Failed to fetch payment ${paymentId} from Mercado Pago.`);
   }
 
-  return response.json();
+  const data = await response.json();
+
+  return {
+    paymentId: String(data.id),
+    orderId: data.order?.id ? String(data.order.id) : undefined,
+    status: data.status,
+    externalReference: data.external_reference ?? undefined,
+  };
+}
+
+/**
+ * Fetches order details from Mercado Pago Merchant Orders API (/merchant_orders/{id}).
+ */
+export async function getMercadoPagoOrder(
+  orderId: string,
+): Promise<MercadoPagoOrderDetails | null> {
+  if (!MP_ACCESS_TOKEN) {
+    throw new Error("MERCADOPAGO_ACCESS_TOKEN is not configured.");
+  }
+
+  const response = await fetch(`${MP_BASE_URL}/merchant_orders/${orderId}`, {
+    headers: {
+      Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    throw new Error(
+      `Failed to fetch merchant order ${orderId} from Mercado Pago.`,
+    );
+  }
+
+  const data = await response.json();
+
+  return {
+    orderId: String(data.id),
+    status: data.status,
+    externalReference: data.external_reference ?? undefined,
+    payments: Array.isArray(data.payments)
+      ? data.payments.map((p: { id: number | string; status: string }) => ({
+          paymentId: String(p.id),
+          status: p.status,
+        }))
+      : [],
+  };
 }
