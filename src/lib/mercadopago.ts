@@ -39,17 +39,18 @@ export function verifyMercadoPagoSignature({
 
   const manifest = `id:${dataId};request-id:${xRequestIdHeader};ts:${ts};`;
 
-  const calculatedHash = crypto
-    .createHmac("sha256", webhookSecret)
-    .update(manifest)
-    .digest("hex");
-
   try {
+    const calculatedHash = crypto
+      .createHmac("sha256", webhookSecret)
+      .update(manifest)
+      .digest("hex");
+
     return crypto.timingSafeEqual(
       Buffer.from(calculatedHash, "hex"),
       Buffer.from(hash, "hex"),
     );
-  } catch {
+  } catch (error) {
+    console.error("Erro na validação da assinatura do Webhook:", error);
     return false;
   }
 }

@@ -1,4 +1,5 @@
 import { PrismaPg } from "@prisma/adapter-pg";
+import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 const products = [
@@ -44,7 +45,7 @@ async function main() {
   const prisma = new PrismaClient({ adapter });
 
   console.log("Cleaning up database...");
-  
+
   // Clean up dependent tables first to avoid foreign key errors
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();

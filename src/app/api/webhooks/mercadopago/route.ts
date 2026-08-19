@@ -1,99 +1,114 @@
-import { NextRequest, NextResponse } from "next/server";
-import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
-import {
-  getMercadoPagoOrder,
-  getMercadoPagoPayment,
-} from "@/services/mercadopago.service";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getMercadoPagoOrder } from "@/services/mercadopago.service";
+import { MercadoPagoPaymentDetails } from "@/services/mercadopago.service";
+import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
 
-export async function POST(req: NextRequest) {
+const MP_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+
+export async function POST(req: Request) {
   try {
-    const xSignature = req.headers.get("x-signature");
-    const xRequestId = req.headers.get("x-request-id");
-
+    const url = new URL(req.url);
     const body = await req.json().catch(() => ({}));
-    const searchParams = req.nextUrl.searchParams;
 
-    const dataId =
-      body?.data?.id || searchParams.get("id") || searchParams.get("data.id");
-    const type =
-      body?.type || searchParams.get("topic") || searchParams.get("type");
+    const topic =
+      url.searchParams.get("topic") ||
+      url.searchParams.get("type") ||
+      body.type ||
+      body.action;
 
-    const webhookSecret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+    const resourceId =
+      url.searchParams.get("data.id") ||
+      url.searchParams.get("id") ||
+      body.data?.id;
 
-    if (!webhookSecret) {
-      console.error("MERCADOPAGO_WEBHOOK_SECRET is not configured");
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 },
-      );
+    if (!resourceId) {
+      return NextResponse.json({ received: true });
     }
 
-    const isValidSignature = verifyMercadoPagoSignature({
-      xSignatureHeader: xSignature,
-      xRequestIdHeader: xRequestId,
-      dataId: dataId ? String(dataId) : null,
-      webhookSecret,
+    // Verify x-signature HMAC before trusting the notification.
+    // MP's own reference implementations lowercase data.id in the manifest.
+    const isValid = verifyMercadoPagoSignature({
+      xSignatureHeader: req.headers.get("x-signature"),
+      xRequestIdHeader: req.headers.get("x-request-id"),
+      dataId: String(resourceId).toLowerCase(),
+      webhookSecret: MP_WEBHOOK_SECRET ?? "",
     });
 
-    if (!isValidSignature) {
+    console.log("DEBUG webhook", {
+      xSignature: req.headers.get("x-signature"),
+      xRequestId: req.headers.get("x-request-id"),
+      resourceId,
+      dataIdLower: String(resourceId).toLowerCase(),
+      secretPresent: !!MP_WEBHOOK_SECRET,
+      secretPreview:
+        MP_WEBHOOK_SECRET?.slice(0, 4) + "..." + MP_WEBHOOK_SECRET?.slice(-4),
+      secretLength: MP_WEBHOOK_SECRET?.length,
+    });
+
+    if (!isValid) {
+      console.warn("Mercado Pago Webhook: invalid signature", {
+        topic,
+        resourceId,
+      });
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
-    // Accept order and payment events during transition
-    const isOrderEvent =
-      type === "order" ||
-      body?.action?.startsWith("order.") ||
-      type === "merchant_order";
+    if (topic === "order") {
+      const mpOrder = await getMercadoPagoOrder(String(resourceId));
 
-    const isPaymentEvent =
-      type === "payment" || body?.action?.startsWith("payment.");
-
-    if (!isOrderEvent && !isPaymentEvent) {
-      return NextResponse.json({ message: "Event ignored" }, { status: 200 });
-    }
-
-    if (!dataId) {
-      return NextResponse.json({ error: "Missing entity ID" }, { status: 400 });
-    }
-
-    let isApproved = false;
-    let externalReference: string | null = null;
-
-    if (isPaymentEvent) {
-      const payment = await getMercadoPagoPayment(dataId);
-      if (payment) {
-        isApproved = payment.status === "approved";
-        externalReference = payment.external_reference;
+      if (!mpOrder) {
+        return NextResponse.json({ received: true });
       }
-    } else if (isOrderEvent) {
-      const order = await getMercadoPagoOrder(dataId);
-      if (order) {
-        isApproved =
-          order.status === "processed" ||
-          (order.transactions?.payments?.some((p) => p.status === "approved") ??
-            false);
-        externalReference = order.external_reference;
-      }
-    }
 
-    if (isApproved && externalReference) {
-      await prisma.order.updateMany({
+      const order = await prisma.order.findFirst({
         where: {
-          id: externalReference,
-          status: { not: "PAID" },
-        },
-        data: {
-          status: "PAID",
+          OR: [
+            { mpOrderId: mpOrder.orderId },
+            ...(mpOrder.externalReference
+              ? [{ id: mpOrder.externalReference }]
+              : []),
+          ],
         },
       });
+
+      if (order) {
+        const payment = mpOrder.payments[0] as
+          | MercadoPagoPaymentDetails
+          | undefined;
+
+        const newStatus =
+          mpOrder.status === "processed"
+            ? "PAID"
+            : mpOrder.status === "failed" || mpOrder.status === "canceled"
+              ? "CANCELED"
+              : order.status;
+
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            mpOrderId: mpOrder.orderId,
+
+            ...(payment?.paymentId ? { mpPaymentId: payment.paymentId } : {}),
+
+            ...(payment?.qrCode
+              ? {
+                  pixQrCode: payment.qrCode,
+                  pixQrCodeBase64: payment.qrCodeBase64 ?? null,
+                }
+              : {}),
+
+            status: newStatus,
+          },
+        });
+      }
     }
 
-    return NextResponse.json({ received: true }, { status: 200 });
+    return NextResponse.json({ received: true });
   } catch (error) {
     console.error("Mercado Pago Webhook Error:", error);
     return NextResponse.json(
-      { error: "Webhook handler failed" },
+      { error: "Webhook processing failed" },
       { status: 500 },
     );
   }
