@@ -74,7 +74,7 @@ model Order {
   accessToken     String      @unique
   customerName    String
   customerPhone   String?
-  customerEmail   String
+  customerEmail   String?
   status          OrderStatus @default(PENDING)
   totalPriceCents Int
   cancelableUntil DateTime

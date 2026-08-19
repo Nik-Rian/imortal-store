@@ -6,7 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { ArrowLeft, Loader2, ShoppingBag } from "lucide-react";
-
+import { createOrder } from "@/actions/order.actions";
 import { useEffect } from "react";
 import { initMercadoPago } from "@mercadopago/sdk-react";
 
@@ -77,65 +77,74 @@ export default function CheckoutPage() {
     );
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+ const handleSubmit = async (e: React.FormEvent) => {
+   e.preventDefault();
+   setError(null);
 
-    const cleanCpf = customerCpf.replace(/\D/g, "");
-    const cleanPhone = customerPhone.replace(/\D/g, "");
+   const cleanCpf = customerCpf.replace(/\D/g, "");
+   const cleanPhone = customerPhone.replace(/\D/g, "");
 
-    if (cleanCpf.length < 11) {
-      setError("Por favor, informe um CPF válido com 11 dígitos.");
-      return;
-    }
+   if (cleanCpf.length < 11) {
+     setError("Por favor, informe um CPF válido com 11 dígitos.");
+     return;
+   }
 
-    if (cleanPhone.length < 10) {
-      setError("Por favor, informe um telefone válido com DDD.");
-      return;
-    }
+   if (cleanPhone.length < 10) {
+     setError("Por favor, informe um telefone válido com DDD.");
+     return;
+   }
 
-    setIsLoading(true);
+   setIsLoading(true);
 
-    try {
-      // Map cart items into payload format required by backend API
-      const formattedItems = items.map((item) => ({
-        productId: item.productId,
-        variantId: item.variantId || item.id,
-        quantity: item.quantity,
-      }));
+   try {
+     const formattedItems = items.map((item) => ({
+       productId: item.variantId ? undefined : item.productId || item.id,
+       variantId: item.variantId || undefined,
+       quantity: item.quantity,
+     }));
 
-      const response = await fetch("/api/checkout/pix", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerName,
-          customerEmail,
-          customerCpf: cleanCpf,
-          customerPhone: cleanPhone,
-          items: formattedItems,
-        }),
-      });
+     // Create order record in database first
+     const orderResult = await createOrder({
+       customerName,
+       customerEmail,
+       customerPhone: cleanPhone,
+       items: formattedItems,
+     });
 
-      const data = await response.json();
+     if (!orderResult.success || !orderResult.orderId) {
+       throw new Error(orderResult.error || "Falha ao criar o pedido.");
+     }
 
-      if (!response.ok) {
-        throw new Error(data.error || "Falha ao processar o checkout.");
-      }
+     // Request Pix QR code generation using the created orderId
+     const response = await fetch("/api/checkout/pix", {
+       method: "POST",
+       headers: { "Content-Type": "application/json" },
+       body: JSON.stringify({
+         orderId: orderResult.orderId,
+         customerCpf: cleanCpf,
+       }),
+     });
 
-      // Clear cart on successful order creation and redirect to order status page
-      clearCart();
-      router.push(`/pedidos/${data.accessToken}`);
-    } catch (err) {
-      console.error("[CHECKOUT_SUBMIT_ERROR]", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Ocorreu um erro inesperado ao gerar o pagamento Pix.",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+     const data = await response.json();
+
+     if (!response.ok) {
+       throw new Error(data.error || "Falha ao processar o pagamento Pix.");
+     }
+
+     // Clear cart and redirect using the order accessToken
+     clearCart();
+     router.push(`/pedidos/${orderResult.accessToken}`);
+   } catch (err) {
+     console.error("[CHECKOUT_SUBMIT_ERROR]", err);
+     setError(
+       err instanceof Error
+         ? err.message
+         : "Ocorreu um erro inesperado ao gerar o pagamento Pix.",
+     );
+   } finally {
+     setIsLoading(false);
+   }
+ };
 
   return (
     <div className="container mx-auto px-4 py-10 max-w-5xl">

@@ -1,16 +1,25 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createPixPayment } from "@/services/mercadopago.service";
+import { createPixOrder } from "@/services/mercadopago.service";
 import { randomUUID } from "node:crypto";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { orderId } = body;
+    const { orderId, customerCpf } = body;
 
     if (!orderId) {
       return NextResponse.json(
         { error: "Order ID is required" },
+        { status: 400 },
+      );
+    }
+
+    const cleanedCpf =
+      typeof customerCpf === "string" ? customerCpf.replace(/\D/g, "") : "";
+    if (cleanedCpf.length !== 11) {
+      return NextResponse.json(
+        { error: "CPF válido é obrigatório para pagamento via Pix" },
         { status: 400 },
       );
     }
@@ -53,16 +62,18 @@ export async function POST(req: Request) {
       });
     }
 
-    // Create Pix payment with Mercado Pago using per-attempt key
-    const paymentResult = await createPixPayment({
+    const paymentResult = await createPixOrder({
       orderId: order.id,
       amount: order.totalPriceCents / 100,
       email: order.customerEmail,
       description: `Order #${order.id}`,
       firstName: order.customerName.split(" ")[0],
       lastName: order.customerName.split(" ").slice(1).join(" ") || undefined,
+      phone: order.customerPhone,
+      cpf: cleanedCpf,
       idempotencyKey,
     });
+
 
     // Store payment response details on order
     await prisma.order.update({

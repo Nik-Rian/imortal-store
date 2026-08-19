@@ -32,14 +32,14 @@ export async function createOrder(payload: CreateOrderInput) {
       return { success: false, error: "O carrinho está vazio." };
     }
 
-    // Separate items by whether they use a variantId or direct productId
-    const variantItems = items.filter((item) => item.variantId);
-    const productItems = items.filter(
-      (item) => !item.variantId && item.productId,
-    );
+    const variantIds = items
+      .map((item) => item.variantId)
+      .filter((id): id is string => Boolean(id));
 
-    const variantIds = variantItems.map((item) => item.variantId!);
-    const productIds = productItems.map((item) => item.productId!);
+    const productIds = items
+      .filter((item) => !item.variantId)
+      .map((item) => item.productId)
+      .filter((id): id is string => Boolean(id));
 
     // Fetch variants and standalone products concurrently
     const [variants, products] = await Promise.all([
@@ -92,7 +92,7 @@ export async function createOrder(payload: CreateOrderInput) {
         }
 
         const drop = variant.product.drop;
-        if (now < drop.startsAt || now > drop.endsAt) {
+        if (drop && (now < drop.startsAt || now > drop.endsAt)) {
           return {
             success: false,
             error: `O drop do produto "${variant.product.name}" não está ativo no momento.`,
@@ -106,8 +106,8 @@ export async function createOrder(payload: CreateOrderInput) {
           productId: variant.productId,
           variantId: variant.id,
           productName: variant.product.name,
-          dropName: drop.name,
-          variantSize: variant.size,
+          dropName: drop?.name ?? "",
+          variantSize: variant.size ?? null,
           unitPriceCents,
           quantity: item.quantity,
         });
@@ -126,7 +126,7 @@ export async function createOrder(payload: CreateOrderInput) {
         }
 
         const drop = product.drop;
-        if (now < drop.startsAt || now > drop.endsAt) {
+        if (drop && (now < drop.startsAt || now > drop.endsAt)) {
           return {
             success: false,
             error: `O drop do produto "${product.name}" não está ativo no momento.`,
@@ -140,7 +140,7 @@ export async function createOrder(payload: CreateOrderInput) {
           productId: product.id,
           variantId: null,
           productName: product.name,
-          dropName: drop.name,
+          dropName: drop?.name ?? "",
           variantSize: null,
           unitPriceCents,
           quantity: item.quantity,
@@ -155,8 +155,8 @@ export async function createOrder(payload: CreateOrderInput) {
       data: {
         accessToken,
         customerName,
-        customerPhone,
-        customerEmail,
+        customerPhone: customerPhone ?? null,
+        customerEmail: customerEmail ?? null,
         status: "PENDING",
         totalPriceCents,
         cancelableUntil,
@@ -168,7 +168,11 @@ export async function createOrder(payload: CreateOrderInput) {
       },
     });
 
-    return { success: true, accessToken: order.accessToken };
+    return {
+      success: true,
+      orderId: order.id,
+      accessToken: order.accessToken,
+    };
   } catch (error) {
     console.error("Error creating order:", error);
     return {
