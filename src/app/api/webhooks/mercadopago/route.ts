@@ -35,17 +35,6 @@ export async function POST(req: Request) {
       webhookSecret: MP_WEBHOOK_SECRET ?? "",
     });
 
-    console.log("DEBUG webhook", {
-      xSignature: req.headers.get("x-signature"),
-      xRequestId: req.headers.get("x-request-id"),
-      resourceId,
-      dataIdLower: String(resourceId).toLowerCase(),
-      secretPresent: !!MP_WEBHOOK_SECRET,
-      secretPreview:
-        MP_WEBHOOK_SECRET?.slice(0, 4) + "..." + MP_WEBHOOK_SECRET?.slice(-4),
-      secretLength: MP_WEBHOOK_SECRET?.length,
-    });
-
     if (!isValid) {
       console.warn("Mercado Pago Webhook: invalid signature", {
         topic,
