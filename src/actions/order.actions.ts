@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
+import { checkProductAvailability } from "@/services/product.service";
 
 interface CreateOrderInput {
   customerName: string;
@@ -84,7 +85,17 @@ export async function createOrder(payload: CreateOrderInput) {
           return { success: false, error: "Variante do produto inválida." };
         }
 
-        if (!variant.isAvailable || !variant.product.isAvailable) {
+        const availability = await checkProductAvailability(
+          variant.productId,
+          variant.id,
+        );
+        if (!availability.available) {
+          if (availability.reason === "DROP_ENDED") {
+            return {
+              success: false,
+              error: `O drop do produto "${variant.product.name}" não está ativo no momento.`,
+            };
+          }
           return {
             success: false,
             error: `O produto "${variant.product.name}" (${variant.size}) não está disponível.`,
@@ -92,13 +103,6 @@ export async function createOrder(payload: CreateOrderInput) {
         }
 
         const drop = variant.product.drop;
-        if (drop && (now < drop.startsAt || now > drop.endsAt)) {
-          return {
-            success: false,
-            error: `O drop do produto "${variant.product.name}" não está ativo no momento.`,
-          };
-        }
-
         const unitPriceCents = variant.product.priceCents;
         totalPriceCents += unitPriceCents * item.quantity;
 
@@ -118,7 +122,14 @@ export async function createOrder(payload: CreateOrderInput) {
           return { success: false, error: "Produto inválido." };
         }
 
-        if (!product.isAvailable) {
+        const availability = await checkProductAvailability(product.id);
+        if (!availability.available) {
+          if (availability.reason === "DROP_ENDED") {
+            return {
+              success: false,
+              error: `O drop do produto "${product.name}" não está ativo no momento.`,
+            };
+          }
           return {
             success: false,
             error: `O produto "${product.name}" não está disponível.`,
@@ -126,13 +137,6 @@ export async function createOrder(payload: CreateOrderInput) {
         }
 
         const drop = product.drop;
-        if (drop && (now < drop.startsAt || now > drop.endsAt)) {
-          return {
-            success: false,
-            error: `O drop do produto "${product.name}" não está ativo no momento.`,
-          };
-        }
-
         const unitPriceCents = product.priceCents;
         totalPriceCents += unitPriceCents * item.quantity;
 
