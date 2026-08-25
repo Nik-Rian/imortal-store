@@ -7,15 +7,13 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Package,
-  CheckCheck,
+  RefreshCw,
 } from "lucide-react";
 
 interface OrderPageProps {
   params: Promise<{ accessToken: string }> | { accessToken: string };
 }
 
-// Map database order status to localized labels and visual badge styles
 // Map database order status to localized labels and visual badge styles
 function getStatusBadge(status: string) {
   switch (status) {
@@ -33,26 +31,19 @@ function getStatusBadge(status: string) {
         className:
           "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800",
       };
-    case "READY_FOR_PICKUP":
-      return {
-        label: "Pronto para Retirada",
-        icon: Package,
-        className:
-          "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800",
-      };
-    case "COMPLETED":
-      return {
-        label: "Concluído",
-        icon: CheckCheck,
-        className:
-          "bg-zinc-800 text-zinc-100 border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-200",
-      };
-    case "CANCELED":
+    case "CANCELLED":
       return {
         label: "Cancelado",
         icon: XCircle,
         className:
           "bg-red-100 text-red-800 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800",
+      };
+    case "REFUNDED":
+      return {
+        label: "Reembolsado",
+        icon: RefreshCw,
+        className:
+          "bg-zinc-100 text-zinc-800 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700",
       };
     default:
       return {
