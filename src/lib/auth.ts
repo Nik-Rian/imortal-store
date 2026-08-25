@@ -20,5 +20,7 @@ export const auth = betterAuth({
     }),
     nextCookies(), // must be last — propagates Set-Cookie from Server Actions
   ],
-  trustedOrigins: ["https://aside-drew-flavored.ngrok-free.dev"],
+  trustedOrigins: process.env.BETTER_AUTH_URL
+    ? [process.env.BETTER_AUTH_URL]
+    : [],
 });
