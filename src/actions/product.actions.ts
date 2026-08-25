@@ -5,8 +5,11 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { productSchema } from "@/lib/validations/product.schema";
 import { deleteBlobImages } from "@/actions/blob.actions";
+import { requireSession } from "@/lib/auth-guard";
 
 export async function createProduct(formData: FormData) {
+  await requireSession();
+
   const rawPrice = (formData.get("priceCents") ??
     formData.get("price")) as string;
 
@@ -80,6 +83,8 @@ export async function createProduct(formData: FormData) {
 }
 
 export async function updateProduct(id: string, formData: FormData) {
+await requireSession();
+
   const rawPrice = (formData.get("priceCents") ??
     formData.get("price")) as string;
 
@@ -199,6 +204,8 @@ export async function updateProduct(id: string, formData: FormData) {
 }
 
 export async function deleteProduct(id: string) {
+  await requireSession();
+
   const currentProduct = await prisma.product.findUnique({
     where: { id },
     select: { images: true },
