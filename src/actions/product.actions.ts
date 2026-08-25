@@ -223,6 +223,6 @@ export async function deleteProduct(id: string) {
     throw new Error("Erro desconhecido ao deletar produto.");
   }
 
-  revalidatePath("/admin/products");
-  revalidatePath("/products");
+  revalidatePath("/admin/produtos");
+  revalidatePath("/");
 }
