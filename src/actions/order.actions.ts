@@ -3,11 +3,14 @@
 import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
 import { checkProductAvailability } from "@/services/product.service";
+import { createPixOrder } from "@/services/mercadopago.service";
 
 interface CreateOrderInput {
+  orderId?: string;
   customerName: string;
   customerPhone?: string;
   customerEmail?: string;
+  customerCpf: string;
   items: Array<{
     variantId?: string;
     productId?: string;
@@ -26,149 +29,216 @@ interface OrderItemData {
 }
 
 export async function createOrder(payload: CreateOrderInput) {
+  let orderIdForRetry: string | undefined;
   try {
-    const { customerName, customerPhone, customerEmail, items } = payload;
+    const {
+      orderId,
+      customerName,
+      customerPhone,
+      customerEmail,
+      customerCpf,
+      items,
+    } = payload;
 
     if (!items || items.length === 0) {
       return { success: false, error: "O carrinho está vazio." };
     }
 
-    const variantIds = items
-      .map((item) => item.variantId)
-      .filter((id): id is string => Boolean(id));
+    let order = orderId
+      ? await prisma.order.findUnique({ where: { id: orderId } })
+      : null;
 
-    const productIds = items
-      .filter((item) => !item.variantId)
-      .map((item) => item.productId)
-      .filter((id): id is string => Boolean(id));
+    if (!order) {
+      const variantIds = items
+        .map((item) => item.variantId)
+        .filter((id): id is string => Boolean(id));
 
-    // Fetch variants and standalone products concurrently
-    const [variants, products] = await Promise.all([
-      variantIds.length > 0
-        ? prisma.productVariant.findMany({
-            where: { id: { in: variantIds } },
-            include: {
-              product: {
-                include: {
-                  drop: true,
+      const productIds = items
+        .filter((item) => !item.variantId)
+        .map((item) => item.productId)
+        .filter((id): id is string => Boolean(id));
+
+      // Fetch variants and standalone products concurrently
+      const [variants, products] = await Promise.all([
+        variantIds.length > 0
+          ? prisma.productVariant.findMany({
+              where: { id: { in: variantIds } },
+              include: {
+                product: {
+                  include: {
+                    drop: true,
+                  },
                 },
               },
-            },
-          })
-        : [],
-      productIds.length > 0
-        ? prisma.product.findMany({
-            where: { id: { in: productIds } },
-            include: {
-              drop: true,
-            },
-          })
-        : [],
-    ]);
+            })
+          : [],
+        productIds.length > 0
+          ? prisma.product.findMany({
+              where: { id: { in: productIds } },
+              include: {
+                drop: true,
+              },
+            })
+          : [],
+      ]);
 
-    if (variants.length + products.length !== items.length) {
+      if (variants.length + products.length !== items.length) {
+        return {
+          success: false,
+          error: "Um ou mais produtos selecionados não foram encontrados.",
+        };
+      }
+
+      let totalPriceCents = 0;
+      const orderItemsData: OrderItemData[] = [];
+      const now = new Date();
+
+      for (const item of items) {
+        if (item.variantId) {
+          const variant = variants.find((v) => v.id === item.variantId);
+
+          if (!variant) {
+            return { success: false, error: "Variante do produto inválida." };
+          }
+
+          const availability = await checkProductAvailability(
+            variant.productId,
+            variant.id,
+          );
+          if (!availability.available) {
+            if (availability.reason === "DROP_ENDED") {
+              return {
+                success: false,
+                error: `O drop do produto "${variant.product.name}" não está ativo no momento.`,
+              };
+            }
+            return {
+              success: false,
+              error: `O produto "${variant.product.name}" (${variant.size}) não está disponível.`,
+            };
+          }
+
+          const drop = variant.product.drop;
+          const unitPriceCents = variant.product.priceCents;
+          totalPriceCents += unitPriceCents * item.quantity;
+
+          orderItemsData.push({
+            productId: variant.productId,
+            variantId: variant.id,
+            productName: variant.product.name,
+            dropName: drop?.name ?? "",
+            variantSize: variant.size ?? null,
+            unitPriceCents,
+            quantity: item.quantity,
+          });
+        } else if (item.productId) {
+          const product = products.find((p) => p.id === item.productId);
+
+          if (!product) {
+            return { success: false, error: "Produto inválido." };
+          }
+
+          const availability = await checkProductAvailability(product.id);
+          if (!availability.available) {
+            if (availability.reason === "DROP_ENDED") {
+              return {
+                success: false,
+                error: `O drop do produto "${product.name}" não está ativo no momento.`,
+              };
+            }
+            return {
+              success: false,
+              error: `O produto "${product.name}" não está disponível.`,
+            };
+          }
+
+          const drop = product.drop;
+          const unitPriceCents = product.priceCents;
+          totalPriceCents += unitPriceCents * item.quantity;
+
+          orderItemsData.push({
+            productId: product.id,
+            variantId: null,
+            productName: product.name,
+            dropName: drop?.name ?? "",
+            variantSize: null,
+            unitPriceCents,
+            quantity: item.quantity,
+          });
+        }
+      }
+
+      const cancelableUntil = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      const accessToken = randomUUID();
+      const idempotencyKey = randomUUID();
+
+      order = await prisma.order.create({
+        data: {
+          accessToken,
+          customerName,
+          customerPhone: customerPhone ?? null,
+          customerEmail: customerEmail ?? null,
+          status: "PENDING",
+          totalPriceCents,
+          cancelableUntil,
+          idempotencyKey,
+          items: {
+            createMany: {
+              data: orderItemsData,
+            },
+          },
+        },
+      });
+    }
+
+    orderIdForRetry = order.id;
+
+    if (order.status === "PAID") {
       return {
-        success: false,
-        error: "Um ou mais produtos selecionados não foram encontrados.",
+        success: true,
+        orderId: order.id,
+        accessToken: order.accessToken,
       };
     }
 
-    let totalPriceCents = 0;
-    const orderItemsData: OrderItemData[] = [];
-    const now = new Date();
-
-    for (const item of items) {
-      if (item.variantId) {
-        const variant = variants.find((v) => v.id === item.variantId);
-
-        if (!variant) {
-          return { success: false, error: "Variante do produto inválida." };
-        }
-
-        const availability = await checkProductAvailability(
-          variant.productId,
-          variant.id,
-        );
-        if (!availability.available) {
-          if (availability.reason === "DROP_ENDED") {
-            return {
-              success: false,
-              error: `O drop do produto "${variant.product.name}" não está ativo no momento.`,
-            };
-          }
-          return {
-            success: false,
-            error: `O produto "${variant.product.name}" (${variant.size}) não está disponível.`,
-          };
-        }
-
-        const drop = variant.product.drop;
-        const unitPriceCents = variant.product.priceCents;
-        totalPriceCents += unitPriceCents * item.quantity;
-
-        orderItemsData.push({
-          productId: variant.productId,
-          variantId: variant.id,
-          productName: variant.product.name,
-          dropName: drop?.name ?? "",
-          variantSize: variant.size ?? null,
-          unitPriceCents,
-          quantity: item.quantity,
-        });
-      } else if (item.productId) {
-        const product = products.find((p) => p.id === item.productId);
-
-        if (!product) {
-          return { success: false, error: "Produto inválido." };
-        }
-
-        const availability = await checkProductAvailability(product.id);
-        if (!availability.available) {
-          if (availability.reason === "DROP_ENDED") {
-            return {
-              success: false,
-              error: `O drop do produto "${product.name}" não está ativo no momento.`,
-            };
-          }
-          return {
-            success: false,
-            error: `O produto "${product.name}" não está disponível.`,
-          };
-        }
-
-        const drop = product.drop;
-        const unitPriceCents = product.priceCents;
-        totalPriceCents += unitPriceCents * item.quantity;
-
-        orderItemsData.push({
-          productId: product.id,
-          variantId: null,
-          productName: product.name,
-          dropName: drop?.name ?? "",
-          variantSize: null,
-          unitPriceCents,
-          quantity: item.quantity,
-        });
-      }
+    if (order.status === "PENDING" && order.pixQrCode && order.mpPaymentId) {
+      return {
+        success: true,
+        orderId: order.id,
+        accessToken: order.accessToken,
+      };
     }
 
-    const cancelableUntil = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-    const accessToken = randomUUID();
+    let currentIdempotencyKey = order.idempotencyKey;
+    if (!currentIdempotencyKey) {
+      currentIdempotencyKey = randomUUID();
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { idempotencyKey: currentIdempotencyKey },
+      });
+    }
 
-    const order = await prisma.order.create({
+    const cleanedCpf = customerCpf.replace(/\D/g, "");
+
+    const paymentResult = await createPixOrder({
+      orderId: order.id,
+      amount: order.totalPriceCents / 100,
+      email: customerEmail,
+      description: `Order #${order.id}`,
+      firstName: customerName.split(" ")[0],
+      lastName: customerName.split(" ").slice(1).join(" ") || undefined,
+      phone: customerPhone,
+      cpf: cleanedCpf,
+      idempotencyKey: currentIdempotencyKey,
+    });
+
+    await prisma.order.update({
+      where: { id: order.id },
       data: {
-        accessToken,
-        customerName,
-        customerPhone: customerPhone ?? null,
-        customerEmail: customerEmail ?? null,
-        status: "PENDING",
-        totalPriceCents,
-        cancelableUntil,
-        items: {
-          createMany: {
-            data: orderItemsData,
-          },
-        },
+        mpPaymentId: paymentResult.paymentId,
+        mpOrderId: paymentResult.orderId,
+        pixQrCode: paymentResult.qrCode,
+        pixQrCodeBase64: paymentResult.qrCodeBase64,
       },
     });
 
@@ -181,7 +251,11 @@ export async function createOrder(payload: CreateOrderInput) {
     console.error("Error creating order:", error);
     return {
       success: false,
-      error: "Ocorreu um erro ao processar o pedido. Tente novamente.",
+      error:
+        error instanceof Error
+          ? error.message
+          : "Ocorreu um erro ao processar o pedido. Tente novamente.",
+      orderId: orderIdForRetry,
     };
   }
 }
