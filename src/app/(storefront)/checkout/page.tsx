@@ -56,6 +56,10 @@ export default function CheckoutPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [pendingOrderId, setPendingOrderId] = useState<string | undefined>(
+    undefined,
+  );
+
   if (items.length === 0) {
     return (
       <div className="container mx-auto px-4 py-16 text-center max-w-md">
@@ -109,32 +113,20 @@ const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
       quantity: item.quantity,
     }));
 
-    // Create order record in database first
     const orderResult = await createOrder({
+      orderId: pendingOrderId,
       customerName: validData.customerName,
       customerEmail: validData.customerEmail,
       customerPhone: cleanPhone,
+      customerCpf: validData.customerCpf,
       items: formattedItems,
     });
 
-    if (!orderResult.success || !orderResult.orderId) {
-      throw new Error(orderResult.error || "Falha ao criar o pedido.");
-    }
-
-    // Request Pix QR code generation using the created orderId
-    const response = await fetch("/api/checkout/pix", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        orderId: orderResult.orderId,
-        customerCpf: validData.customerCpf,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || "Falha ao processar o pagamento Pix.");
+    if (!orderResult.success || !orderResult.accessToken) {
+      if (orderResult.orderId) {
+        setPendingOrderId(orderResult.orderId);
+      }
+      throw new Error(orderResult.error || "Falha ao processar o pedido.");
     }
 
     // Clear cart and redirect using the order accessToken
