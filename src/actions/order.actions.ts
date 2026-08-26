@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
 import { checkProductAvailability } from "@/services/product.service";
 import { createPixOrder } from "@/services/mercadopago.service";
+import { requireSession } from "@/lib/auth-guard";
+import { revalidatePath } from "next/cache";
+import { OrderStatus } from "@/generated/prisma/client";
 
 interface CreateOrderInput {
   orderId?: string;
@@ -258,4 +261,35 @@ export async function createOrder(payload: CreateOrderInput) {
       orderId: orderIdForRetry,
     };
   }
+}
+
+/**
+ * Updates an order's status and revalidates the admin table.
+ */
+export async function updateOrderStatus(
+  orderId: string,
+  newStatus: OrderStatus,
+) {
+  await requireSession();
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { status: newStatus },
+  });
+
+  revalidatePath("/admin/pedidos");
+}
+
+/**
+ * Mass updates all currently "PAID" orders to "READY_FOR_PICKUP".
+ */
+export async function markAllPaidAsReady() {
+  await requireSession();
+
+  await prisma.order.updateMany({
+    where: { status: "PAID" },
+    data: { status: "READY_FOR_PICKUP" },
+  });
+
+  revalidatePath("/admin/pedidos");
 }

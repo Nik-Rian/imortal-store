@@ -1,3 +1,4 @@
+// src/app/admin/(protected)/layout.tsx
 import Link from "next/link";
 import { ReactNode } from "react";
 import { redirect } from "next/navigation";
@@ -17,8 +18,8 @@ export default async function ProtectedAdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-zinc-50">
-      <aside className="w-64 bg-zinc-900 text-zinc-50 flex flex-col">
+    <div className="flex min-h-screen w-full bg-zinc-50 print:bg-white">
+      <aside className="w-64 bg-zinc-900 text-zinc-50 flex flex-col print:hidden">
         <div className="p-6">
           <Link
             href="/admin"
@@ -34,6 +35,12 @@ export default async function ProtectedAdminLayout({
             className="block px-4 py-2 rounded-md hover:bg-zinc-800 transition-colors text-sm font-medium"
           >
             Dashboard
+          </Link>
+          <Link
+            href="/admin/pedidos"
+            className="block px-4 py-2 rounded-md hover:bg-zinc-800 transition-colors text-sm font-medium"
+          >
+            Pedidos
           </Link>
           <Link
             href="/admin/produtos"
@@ -61,8 +68,8 @@ export default async function ProtectedAdminLayout({
         </div>
       </aside>
 
-      <div className="flex flex-col w-full min-w-0">
-        <main className="flex-1 p-6 lg:p-8">{children}</main>
+      <div className="flex flex-col w-full min-w-0 print:m-0 print:p-0">
+        <main className="flex-1 p-6 lg:p-8 print:p-0">{children}</main>
       </div>
     </div>
   );
