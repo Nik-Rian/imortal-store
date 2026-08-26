@@ -10,3 +10,14 @@ export const getDrops = cache(async () => {
     },
   });
 });
+
+export const getActiveDrop = cache(async () => {
+  const now = new Date();
+  return prisma.drop.findFirst({
+    where: {
+      startsAt: { lte: now },
+      endsAt: { gte: now },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+});
