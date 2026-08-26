@@ -9,6 +9,7 @@ import { ArrowLeft, Loader2, ShoppingBag } from "lucide-react";
 import { createOrder } from "@/actions/order.actions";
 import { useEffect } from "react";
 import { initMercadoPago } from "@mercadopago/sdk-react";
+import { checkoutSchema } from "@/lib/validations/checkout.schema";
 
 export function MercadoPagoInitializer() {
   useEffect(() => {
@@ -77,74 +78,79 @@ export default function CheckoutPage() {
     );
   }
 
- const handleSubmit = async (e: React.FormEvent) => {
-   e.preventDefault();
-   setError(null);
+const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
+  e.preventDefault();
+  setError(null);
 
-   const cleanCpf = customerCpf.replace(/\D/g, "");
-   const cleanPhone = customerPhone.replace(/\D/g, "");
+  const validationResult = checkoutSchema.safeParse({
+    customerName,
+    customerEmail,
+    customerPhone,
+    customerCpf,
+  });
 
-   if (cleanCpf.length < 11) {
-     setError("Por favor, informe um CPF válido com 11 dígitos.");
-     return;
-   }
+  if (!validationResult.success) {
+    setError(
+      validationResult.error.issues[0]?.message ||
+        "Verifique os dados informados.",
+    );
+    return;
+  }
 
-   if (cleanPhone.length < 10) {
-     setError("Por favor, informe um telefone válido com DDD.");
-     return;
-   }
+  const validData = validationResult.data;
+  const cleanPhone = validData.customerPhone.replace(/\D/g, "");
 
-   setIsLoading(true);
+  setIsLoading(true);
 
-   try {
-     const formattedItems = items.map((item) => ({
-       productId: item.variantId ? undefined : item.productId || item.id,
-       variantId: item.variantId || undefined,
-       quantity: item.quantity,
-     }));
+  try {
+    const formattedItems = items.map((item) => ({
+      productId: item.variantId ? undefined : item.productId || item.id,
+      variantId: item.variantId || undefined,
+      quantity: item.quantity,
+    }));
 
-     // Create order record in database first
-     const orderResult = await createOrder({
-       customerName,
-       customerEmail,
-       customerPhone: cleanPhone,
-       items: formattedItems,
-     });
+    // Create order record in database first
+    const orderResult = await createOrder({
+      customerName: validData.customerName,
+      customerEmail: validData.customerEmail,
+      customerPhone: cleanPhone,
+      items: formattedItems,
+    });
 
-     if (!orderResult.success || !orderResult.orderId) {
-       throw new Error(orderResult.error || "Falha ao criar o pedido.");
-     }
+    if (!orderResult.success || !orderResult.orderId) {
+      throw new Error(orderResult.error || "Falha ao criar o pedido.");
+    }
 
-     // Request Pix QR code generation using the created orderId
-     const response = await fetch("/api/checkout/pix", {
-       method: "POST",
-       headers: { "Content-Type": "application/json" },
-       body: JSON.stringify({
-         orderId: orderResult.orderId,
-         customerCpf: cleanCpf,
-       }),
-     });
+    // Request Pix QR code generation using the created orderId
+    const response = await fetch("/api/checkout/pix", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId: orderResult.orderId,
+        customerCpf: validData.customerCpf,
+      }),
+    });
 
-     const data = await response.json();
+    const data = await response.json();
 
-     if (!response.ok) {
-       throw new Error(data.error || "Falha ao processar o pagamento Pix.");
-     }
+    if (!response.ok) {
+      throw new Error(data.error || "Falha ao processar o pagamento Pix.");
+    }
 
-     // Clear cart and redirect using the order accessToken
-     clearCart();
-     router.push(`/pedidos/${orderResult.accessToken}`);
-   } catch (err) {
-     console.error("[CHECKOUT_SUBMIT_ERROR]", err);
-     setError(
-       err instanceof Error
-         ? err.message
-         : "Ocorreu um erro inesperado ao gerar o pagamento Pix.",
-     );
-   } finally {
-     setIsLoading(false);
-   }
- };
+    // Clear cart and redirect using the order accessToken
+    clearCart();
+    router.push(`/pedidos/${orderResult.accessToken}`);
+  } catch (err) {
+    console.error("[CHECKOUT_SUBMIT_ERROR]", err);
+    setError(
+      err instanceof Error
+        ? err.message
+        : "Ocorreu um erro inesperado ao gerar o pagamento Pix.",
+    );
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="container mx-auto px-4 py-10 max-w-5xl">

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createPixOrder } from "@/services/mercadopago.service";
 import { randomUUID } from "node:crypto";
+import { checkoutSchema } from "@/lib/validations/checkout.schema";
 
 export async function POST(req: Request) {
   try {
@@ -15,14 +16,21 @@ export async function POST(req: Request) {
       );
     }
 
-    const cleanedCpf =
-      typeof customerCpf === "string" ? customerCpf.replace(/\D/g, "") : "";
-    if (cleanedCpf.length !== 11) {
+    const cpfValidation =
+      checkoutSchema.shape.customerCpf.safeParse(customerCpf);
+
+    if (!cpfValidation.success) {
       return NextResponse.json(
-        { error: "CPF válido é obrigatório para pagamento via Pix" },
+        {
+          error:
+            cpfValidation.error.issues[0]?.message ||
+            "CPF válido é obrigatório para pagamento via Pix",
+        },
         { status: 400 },
       );
     }
+
+    const cleanedCpf = cpfValidation.data;
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -73,7 +81,6 @@ export async function POST(req: Request) {
       cpf: cleanedCpf,
       idempotencyKey,
     });
-
 
     // Store payment response details on order
     await prisma.order.update({
