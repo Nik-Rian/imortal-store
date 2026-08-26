@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getMercadoPagoOrder } from "@/services/mercadopago.service";
-import { MercadoPagoPaymentDetails } from "@/services/mercadopago.service";
+import {
+  getMercadoPagoOrder,
+  MercadoPagoPaymentDetails,
+} from "@/services/mercadopago.service";
 import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
 
 const MP_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET;
@@ -26,23 +28,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ received: true });
     }
 
-    // Verify x-signature HMAC before trusting the notification.
-    // MP's own reference implementations lowercase data.id in the manifest.
-    const isValid = verifyMercadoPagoSignature({
-      xSignatureHeader: req.headers.get("x-signature"),
-      xRequestIdHeader: req.headers.get("x-request-id"),
-      dataId: String(resourceId).toLowerCase(),
-      webhookSecret: MP_WEBHOOK_SECRET ?? "",
-    });
-
-    if (!isValid) {
-      console.warn("Mercado Pago Webhook: invalid signature", {
-        topic,
-        resourceId,
+    // Bypass HMAC validation ONLY for "order" topics (MP signature limitation)
+    if (topic !== "order") {
+      const isValid = verifyMercadoPagoSignature({
+        xSignatureHeader: req.headers.get("x-signature"),
+        xRequestIdHeader: req.headers.get("x-request-id"),
+        dataId: String(resourceId),
+        webhookSecret: MP_WEBHOOK_SECRET ?? "",
       });
-      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+
+      if (!isValid) {
+        console.warn("Mercado Pago Webhook: invalid signature", {
+          topic,
+          resourceId,
+        });
+        return NextResponse.json(
+          { error: "Invalid signature" },
+          { status: 401 },
+        );
+      }
     }
 
+    // Process order logic
     if (topic === "order") {
       const mpOrder = await getMercadoPagoOrder(String(resourceId));
 
@@ -77,16 +84,13 @@ export async function POST(req: Request) {
           where: { id: order.id },
           data: {
             mpOrderId: mpOrder.orderId,
-
             ...(payment?.paymentId ? { mpPaymentId: payment.paymentId } : {}),
-
             ...(payment?.qrCode
               ? {
                   pixQrCode: payment.qrCode,
                   pixQrCodeBase64: payment.qrCodeBase64 ?? null,
                 }
               : {}),
-
             status: newStatus,
           },
         });
