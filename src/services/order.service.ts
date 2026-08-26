@@ -15,3 +15,34 @@ export const getAdminOrders = cache(async (filter: "all" | "valid" = "all") => {
     include: { items: true },
   });
 });
+
+export const getCustomerOrders = cache(async (identifier: string) => {
+  if (!identifier || identifier.trim() === "") return [];
+
+  const cleanIdentifier = identifier.trim();
+
+  return await prisma.order.findMany({
+    where: {
+      OR: [
+        { customerEmail: cleanIdentifier },
+        { customerPhone: cleanIdentifier },
+      ],
+    },
+    select: {
+      id: true,
+      status: true,
+      totalPriceCents: true,
+      createdAt: true,
+      items: {
+        select: {
+          id: true,
+          quantity: true,
+          productName: true,
+          variantSize: true,
+          unitPriceCents: true, // Fixed field name here
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+});
