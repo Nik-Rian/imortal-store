@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
+import { deleteBlobImages } from "./blob.actions";
 
 /**
  * Instantly closes sales for an entire drop by setting its endsAt date to now.
@@ -56,16 +57,22 @@ export async function createDrop() {
 export async function purgeDrop(dropId: string) {
   await requireSession();
 
+
   if (!dropId) {
     throw new Error("ID do drop não fornecido.");
   }
 
+  let imagesToDelete: string[] = [];
+
   await prisma.$transaction(async (tx) => {
     const products = await tx.product.findMany({
       where: { dropId },
-      select: { id: true },
+      select: { id: true, images: true },
     });
+
     const productIds = products.map((p) => p.id);
+
+    imagesToDelete = products.flatMap((p) => p.images);
 
     if (productIds.length > 0) {
       const orderItems = await tx.orderItem.findMany({
@@ -104,6 +111,10 @@ export async function purgeDrop(dropId: string) {
       where: { id: dropId },
     });
   });
+
+  if (imagesToDelete.length > 0) {
+    await deleteBlobImages(imagesToDelete);
+  }
 
   revalidatePath("/");
   revalidatePath("/admin");
