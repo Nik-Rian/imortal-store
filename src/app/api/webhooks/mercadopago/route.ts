@@ -65,25 +65,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ received: true });
     }
 
-    // Bypass HMAC validation ONLY for "order" topics (MP signature limitation)
-    if (topic !== "order") {
-      const isValid = verifyMercadoPagoSignature({
-        xSignatureHeader: req.headers.get("x-signature"),
-        xRequestIdHeader: req.headers.get("x-request-id"),
-        dataId: String(resourceId),
-        webhookSecret: MP_WEBHOOK_SECRET ?? "",
-      });
+    const isValid = verifyMercadoPagoSignature({
+      xSignatureHeader: req.headers.get("x-signature"),
+      xRequestIdHeader: req.headers.get("x-request-id"),
+      dataId: String(resourceId),
+      webhookSecret: MP_WEBHOOK_SECRET ?? "",
+    });
 
-      if (!isValid) {
-        console.warn("Mercado Pago Webhook: invalid signature", {
-          topic,
-          resourceId,
-        });
-        return NextResponse.json(
-          { error: "Invalid signature" },
-          { status: 401 },
-        );
-      }
+    if (!isValid) {
+      console.warn("Mercado Pago Webhook: invalid signature", {
+        topic,
+        resourceId,
+      });
+      return NextResponse.json(
+        { error: "Invalid signature" },
+        { status: 401 },
+      );
     }
 
     // Process order logic

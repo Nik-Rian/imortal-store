@@ -37,7 +37,7 @@ export function verifyMercadoPagoSignature({
     return false;
   }
 
-  const manifest = `id:${dataId};request-id:${xRequestIdHeader};ts:${ts};`;
+  const manifest = `id:${dataId.toLowerCase()};request-id:${xRequestIdHeader};ts:${ts};`;
 
   try {
     const calculatedHash = crypto
