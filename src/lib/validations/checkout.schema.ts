@@ -44,6 +44,8 @@ export const orderItemSchema = z
 
 export const createOrderSchema = checkoutSchema.extend({
   orderId: z.string().optional(),
+  accessToken: z.string().optional(),
+  attemptKey: z.string().optional(),
   customerPhone: z
     .string()
     .min(10, "Informe um telefone válido com DDD")
