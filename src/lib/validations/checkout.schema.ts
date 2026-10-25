@@ -27,3 +27,32 @@ export const checkoutSchema = z.object({
 });
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
+
+export const orderItemSchema = z
+  .object({
+    variantId: z.string().optional(),
+    productId: z.string().optional(),
+    quantity: z
+      .number({ message: "A quantidade é obrigatória" })
+      .int("A quantidade deve ser um valor inteiro")
+      .positive("A quantidade deve ser maior que zero")
+      .max(100, "A quantidade máxima por item é 100"),
+  })
+  .refine((data) => data.variantId || data.productId, {
+    message: "O item deve ter um variantId ou productId",
+  });
+
+export const createOrderSchema = checkoutSchema.extend({
+  orderId: z.string().optional(),
+  customerPhone: z
+    .string()
+    .min(10, "Informe um telefone válido com DDD")
+    .optional(),
+  customerEmail: z.email("Informe um e-mail válido").optional(),
+  items: z
+    .array(orderItemSchema)
+    .min(1, "O carrinho está vazio.")
+    .max(50, "O carrinho excedeu o limite de itens permitidos."),
+});
+
+export type CreateOrderInput = z.infer<typeof createOrderSchema>;
