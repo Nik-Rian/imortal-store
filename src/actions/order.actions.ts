@@ -7,19 +7,10 @@ import { createPixOrder } from "@/services/mercadopago.service";
 import { requireSession } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { OrderStatus } from "@/generated/prisma/client";
-
-interface CreateOrderInput {
-  orderId?: string;
-  customerName: string;
-  customerPhone?: string;
-  customerEmail?: string;
-  customerCpf: string;
-  items: Array<{
-    variantId?: string;
-    productId?: string;
-    quantity: number;
-  }>;
-}
+import {
+  createOrderSchema,
+  type CreateOrderInput,
+} from "@/lib/validations/checkout.schema";
 
 interface OrderItemData {
   productId: string;
@@ -34,6 +25,14 @@ interface OrderItemData {
 export async function createOrder(payload: CreateOrderInput) {
   let orderIdForRetry: string | undefined;
   try {
+    const parsed = createOrderSchema.safeParse(payload);
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: parsed.error.issues[0].message,
+      };
+    }
+
     const {
       orderId,
       customerName,
@@ -41,11 +40,7 @@ export async function createOrder(payload: CreateOrderInput) {
       customerEmail,
       customerCpf,
       items,
-    } = payload;
-
-    if (!items || items.length === 0) {
-      return { success: false, error: "O carrinho está vazio." };
-    }
+    } = parsed.data;
 
     let order = orderId
       ? await prisma.order.findUnique({ where: { id: orderId } })
