@@ -8,6 +8,10 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+  rateLimit: {
+    enabled: true,
+    storage: "database",
+  },
   emailAndPassword: {
     enabled: true,
     // No public sign-up route exists anywhere in the app — accounts are only
