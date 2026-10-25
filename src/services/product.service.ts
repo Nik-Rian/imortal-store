@@ -9,20 +9,28 @@ export const getProducts = cache(async (options: GetProductsOptions = {}) => {
   const { activeOnly = true } = options;
   const now = new Date();
 
-  return await prisma.product.findMany({
-    where: activeOnly
-      ? {
-          drop: {
-            startsAt: { lte: now },
-            endsAt: { gte: now },
-          },
-        }
-      : undefined,
-    include: {
-      drop: true,
-    },
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-  });
+  try {
+    return await prisma.product.findMany({
+      where: activeOnly
+        ? {
+            drop: {
+              startsAt: { lte: now },
+              endsAt: { gte: now },
+            },
+          }
+        : undefined,
+      include: {
+        drop: true,
+      },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+    });
+  } catch (error) {
+    console.warn(
+      "[getProducts] Database connection failed. Returning fallback empty list.",
+      error,
+    );
+    return [];
+  }
 });
 
 export const getProductBySlug = cache(
@@ -30,18 +38,40 @@ export const getProductBySlug = cache(
     const { activeOnly = true } = options;
     const now = new Date();
 
-    return await prisma.product.findFirst({
-      where: {
-        slug,
-        ...(activeOnly
-          ? {
-              drop: {
-                startsAt: { lte: now },
-                endsAt: { gte: now },
-              },
-            }
-          : {}),
-      },
+    try {
+      return await prisma.product.findFirst({
+        where: {
+          slug,
+          ...(activeOnly
+            ? {
+                drop: {
+                  startsAt: { lte: now },
+                  endsAt: { gte: now },
+                },
+              }
+            : {}),
+        },
+        include: {
+          drop: true,
+          variants: {
+            orderBy: { sortOrder: "asc" },
+          },
+        },
+      });
+    } catch (error) {
+      console.warn(
+        `[getProductBySlug] Database connection failed for slug '${slug}'. Returning null.`,
+        error,
+      );
+      return null;
+    }
+  },
+);
+
+export const getProductById = cache(async (id: string) => {
+  try {
+    return await prisma.product.findUnique({
+      where: { id },
       include: {
         drop: true,
         variants: {
@@ -49,19 +79,13 @@ export const getProductBySlug = cache(
         },
       },
     });
-  },
-);
-
-export const getProductById = cache(async (id: string) => {
-  return await prisma.product.findUnique({
-    where: { id },
-    include: {
-      drop: true,
-      variants: {
-        orderBy: { sortOrder: "asc" },
-      },
-    },
-  });
+  } catch (error) {
+    console.warn(
+      `[getProductById] Database connection failed for id '${id}'. Returning null.`,
+      error,
+    );
+    return null;
+  }
 });
 
 export interface AvailabilityCheckResult {

@@ -11,7 +11,7 @@ import { useEffect } from "react";
 import { initMercadoPago } from "@mercadopago/sdk-react";
 import { checkoutSchema } from "@/lib/validations/checkout.schema";
 
-export function MercadoPagoInitializer() {
+function MercadoPagoInitializer() {
   useEffect(() => {
     const publicKey = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY;
     if (publicKey) {
@@ -146,6 +146,7 @@ const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
 
   return (
     <div className="container mx-auto px-4 py-10 max-w-5xl">
+      <MercadoPagoInitializer />
       <div className="mb-6">
         <Link
           href="/"
