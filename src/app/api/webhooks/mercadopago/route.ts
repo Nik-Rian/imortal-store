@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { OrderStatus } from "@/generated/prisma/client";
 import {
   getMercadoPagoOrder,
   MercadoPagoPaymentDetails,
@@ -7,6 +8,42 @@ import {
 import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
 
 const MP_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+
+export function determineNextOrderStatus(
+  currentStatus: OrderStatus,
+  mpStatus: string,
+  mpTotalAmount: number,
+  localTotalPriceCents: number,
+  orderId: string,
+): OrderStatus {
+  if (mpStatus === "processed") {
+    if (currentStatus === "PENDING") {
+      const mpAmountCents = Math.round(mpTotalAmount * 100);
+      if (mpAmountCents !== localTotalPriceCents) {
+        console.error(
+          `Webhook amount mismatch for order ${orderId}: provider amount ${mpAmountCents} cents, local amount ${localTotalPriceCents} cents.`,
+        );
+        return currentStatus;
+      }
+      return "PAID";
+    }
+    if (currentStatus === "CANCELED") {
+      console.warn(
+        `Manual review required: Received 'processed' webhook for already CANCELED order ${orderId}`,
+      );
+    }
+    return currentStatus; // Forward-only: preserves READY_FOR_PICKUP, COMPLETED, CANCELED
+  }
+
+  if (["failed", "canceled", "expired"].includes(mpStatus)) {
+    if (currentStatus === "PENDING") {
+      return "CANCELED";
+    }
+    return currentStatus;
+  }
+
+  return currentStatus;
+}
 
 export async function POST(req: Request) {
   try {
@@ -73,27 +110,34 @@ export async function POST(req: Request) {
           | MercadoPagoPaymentDetails
           | undefined;
 
-        const newStatus =
-          mpOrder.status === "processed"
-            ? "PAID"
-            : mpOrder.status === "failed" || mpOrder.status === "canceled"
-              ? "CANCELED"
-              : order.status;
+        const newStatus = determineNextOrderStatus(
+          order.status,
+          mpOrder.status,
+          mpOrder.totalAmount,
+          order.totalPriceCents,
+          order.id,
+        );
 
-        await prisma.order.update({
-          where: { id: order.id },
-          data: {
-            mpOrderId: mpOrder.orderId,
-            ...(payment?.paymentId ? { mpPaymentId: payment.paymentId } : {}),
-            ...(payment?.qrCode
-              ? {
-                  pixQrCode: payment.qrCode,
-                  pixQrCodeBase64: payment.qrCodeBase64 ?? null,
-                }
-              : {}),
-            status: newStatus,
-          },
-        });
+        const shouldUpdateStatus = newStatus !== order.status;
+        const shouldUpdatePayment =
+          payment?.paymentId && payment.paymentId !== order.mpPaymentId;
+
+        if (shouldUpdateStatus || shouldUpdatePayment) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: {
+              mpOrderId: mpOrder.orderId,
+              ...(payment?.paymentId ? { mpPaymentId: payment.paymentId } : {}),
+              ...(payment?.qrCode
+                ? {
+                    pixQrCode: payment.qrCode,
+                    pixQrCodeBase64: payment.qrCodeBase64 ?? null,
+                  }
+                : {}),
+              status: newStatus,
+            },
+          });
+        }
       }
     }
 

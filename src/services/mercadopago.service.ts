@@ -37,6 +37,7 @@ export interface MercadoPagoPaymentDetails {
 export interface MercadoPagoOrderDetails {
   orderId: string;
   status: string;
+  totalAmount: number;
   externalReference?: string;
   payments: Array<{
     paymentId: string;
@@ -226,6 +227,7 @@ export async function getMercadoPagoOrder(
   return {
     orderId: String(data.id),
     status: String(data.status),
+    totalAmount: Number(data.total_amount) || 0,
     externalReference: data.external_reference ?? undefined,
     payments: Array.isArray(data.transactions?.payments)
       ? data.transactions.payments.map(
