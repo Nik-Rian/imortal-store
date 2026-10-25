@@ -56,9 +56,14 @@ export default function CheckoutPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [pendingOrderId, setPendingOrderId] = useState<string | undefined>(
-    undefined,
+  const [attemptKey] = useState(() =>
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).substring(2) + Date.now().toString(36),
   );
+  const [pendingOrder, setPendingOrder] = useState<
+    { id: string; accessToken: string } | undefined
+  >(undefined);
 
   if (items.length === 0) {
     return (
@@ -114,17 +119,22 @@ const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     }));
 
     const orderResult = await createOrder({
-      orderId: pendingOrderId,
+      orderId: pendingOrder?.id,
+      accessToken: pendingOrder?.accessToken,
+      attemptKey,
       customerName: validData.customerName,
       customerEmail: validData.customerEmail,
       customerPhone: cleanPhone,
-      customerCpf: validData.customerCpf,
+      customerCpf: validData.customerCpf, // Stays in memory
       items: formattedItems,
     });
 
     if (!orderResult.success || !orderResult.accessToken) {
-      if (orderResult.orderId) {
-        setPendingOrderId(orderResult.orderId);
+      if (orderResult.orderId && orderResult.accessToken) {
+        setPendingOrder({
+          id: orderResult.orderId,
+          accessToken: orderResult.accessToken,
+        });
       }
       throw new Error(orderResult.error || "Falha ao processar o pedido.");
     }

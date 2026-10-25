@@ -82,7 +82,7 @@ model Order {
   mpOrderId       String?
   pixQrCode       String?
   pixQrCodeBase64 String?
-  idempotencyKey  String?
+  idempotencyKey  String?     @unique
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   items           OrderItem[]

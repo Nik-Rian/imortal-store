@@ -24,6 +24,7 @@ interface OrderItemData {
 
 export async function createOrder(payload: CreateOrderInput) {
   let orderIdForRetry: string | undefined;
+  let accessTokenForRetry: string | undefined;
   try {
     const parsed = createOrderSchema.safeParse(payload);
     if (!parsed.success) {
@@ -35,6 +36,8 @@ export async function createOrder(payload: CreateOrderInput) {
 
     const {
       orderId,
+      accessToken,
+      attemptKey,
       customerName,
       customerPhone,
       customerEmail,
@@ -42,9 +45,24 @@ export async function createOrder(payload: CreateOrderInput) {
       items,
     } = parsed.data;
 
-    let order = orderId
-      ? await prisma.order.findUnique({ where: { id: orderId } })
-      : null;
+    let order = null;
+
+    if (orderId) {
+      if (!accessToken) {
+        return {
+          success: false,
+          error: "Acesso negado: token ausente para tentativa.",
+        };
+      }
+      order = await prisma.order.findUnique({ where: { id: orderId } });
+      if (order && order.accessToken !== accessToken) {
+        return { success: false, error: "Acesso negado: token inválido." };
+      }
+    }
+
+    if (!order && attemptKey) {
+      order = await prisma.order.findFirst({ where: { idempotencyKey: attemptKey } });
+    }
 
     if (!order) {
       const variantIds = items
@@ -56,26 +74,17 @@ export async function createOrder(payload: CreateOrderInput) {
         .map((item) => item.productId)
         .filter((id): id is string => Boolean(id));
 
-      // Fetch variants and standalone products concurrently
       const [variants, products] = await Promise.all([
         variantIds.length > 0
           ? prisma.productVariant.findMany({
               where: { id: { in: variantIds } },
-              include: {
-                product: {
-                  include: {
-                    drop: true,
-                  },
-                },
-              },
+              include: { product: { include: { drop: true } } },
             })
           : [],
         productIds.length > 0
           ? prisma.product.findMany({
               where: { id: { in: productIds } },
-              include: {
-                drop: true,
-              },
+              include: { drop: true },
             })
           : [],
       ]);
@@ -94,92 +103,75 @@ export async function createOrder(payload: CreateOrderInput) {
       for (const item of items) {
         if (item.variantId) {
           const variant = variants.find((v) => v.id === item.variantId);
-
-          if (!variant) {
+          if (!variant)
             return { success: false, error: "Variante do produto inválida." };
-          }
 
           const availability = await checkProductAvailability(
             variant.productId,
             variant.id,
           );
           if (!availability.available) {
-            if (availability.reason === "DROP_ENDED") {
-              return {
-                success: false,
-                error: `O drop do produto "${variant.product.name}" não está ativo no momento.`,
-              };
-            }
             return {
               success: false,
-              error: `O produto "${variant.product.name}" (${variant.size}) não está disponível.`,
+              error:
+                availability.reason === "DROP_ENDED"
+                  ? `O drop do produto "${variant.product.name}" não está ativo no momento.`
+                  : `O produto "${variant.product.name}" (${variant.size}) não está disponível.`,
             };
           }
 
-          const drop = variant.product.drop;
-          const unitPriceCents = variant.product.priceCents;
-          totalPriceCents += unitPriceCents * item.quantity;
-
+          totalPriceCents += variant.product.priceCents * item.quantity;
           orderItemsData.push({
             productId: variant.productId,
             variantId: variant.id,
             productName: variant.product.name,
-            dropName: drop?.name ?? "",
+            dropName: variant.product.drop?.name ?? "",
             variantSize: variant.size ?? null,
-            unitPriceCents,
+            unitPriceCents: variant.product.priceCents,
             quantity: item.quantity,
           });
         } else if (item.productId) {
           const product = products.find((p) => p.id === item.productId);
-
-          if (!product) {
-            return { success: false, error: "Produto inválido." };
-          }
+          if (!product) return { success: false, error: "Produto inválido." };
 
           const availability = await checkProductAvailability(product.id);
           if (!availability.available) {
-            if (availability.reason === "DROP_ENDED") {
-              return {
-                success: false,
-                error: `O drop do produto "${product.name}" não está ativo no momento.`,
-              };
-            }
             return {
               success: false,
-              error: `O produto "${product.name}" não está disponível.`,
+              error:
+                availability.reason === "DROP_ENDED"
+                  ? `O drop do produto "${product.name}" não está ativo no momento.`
+                  : `O produto "${product.name}" não está disponível.`,
             };
           }
 
-          const drop = product.drop;
-          const unitPriceCents = product.priceCents;
-          totalPriceCents += unitPriceCents * item.quantity;
-
+          totalPriceCents += product.priceCents * item.quantity;
           orderItemsData.push({
             productId: product.id,
             variantId: null,
             productName: product.name,
-            dropName: drop?.name ?? "",
+            dropName: product.drop?.name ?? "",
             variantSize: null,
-            unitPriceCents,
+            unitPriceCents: product.priceCents,
             quantity: item.quantity,
           });
         }
       }
 
       const cancelableUntil = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-      const accessToken = randomUUID();
-      const idempotencyKey = randomUUID();
+      const newAccessToken = randomUUID();
+      const newIdempotencyKey = attemptKey || randomUUID();
 
       order = await prisma.order.create({
         data: {
-          accessToken,
+          accessToken: newAccessToken,
           customerName,
           customerPhone: customerPhone ?? null,
           customerEmail: customerEmail ?? null,
           status: "PENDING",
           totalPriceCents,
           cancelableUntil,
-          idempotencyKey,
+          idempotencyKey: newIdempotencyKey,
           items: {
             createMany: {
               data: orderItemsData,
@@ -190,8 +182,9 @@ export async function createOrder(payload: CreateOrderInput) {
     }
 
     orderIdForRetry = order.id;
+    accessTokenForRetry = order.accessToken;
 
-    if (order.status === "PAID") {
+    if (order.status !== "PENDING") {
       return {
         success: true,
         orderId: order.id,
@@ -209,23 +202,24 @@ export async function createOrder(payload: CreateOrderInput) {
 
     let currentIdempotencyKey = order.idempotencyKey;
     if (!currentIdempotencyKey) {
-      currentIdempotencyKey = randomUUID();
+      currentIdempotencyKey = attemptKey || randomUUID();
       await prisma.order.update({
         where: { id: order.id },
         data: { idempotencyKey: currentIdempotencyKey },
       });
     }
 
+    // Clean and use the stateless CPF straight from the payload for the provider call
     const cleanedCpf = customerCpf.replace(/\D/g, "");
 
     const paymentResult = await createPixOrder({
       orderId: order.id,
       amount: order.totalPriceCents / 100,
-      email: customerEmail,
+      email: order.customerEmail ?? undefined,
       description: `Order #${order.id}`,
-      firstName: customerName.split(" ")[0],
-      lastName: customerName.split(" ").slice(1).join(" ") || undefined,
-      phone: customerPhone,
+      firstName: order.customerName.split(" ")[0],
+      lastName: order.customerName.split(" ").slice(1).join(" ") || undefined,
+      phone: order.customerPhone ?? undefined,
       cpf: cleanedCpf,
       idempotencyKey: currentIdempotencyKey,
     });
@@ -254,6 +248,7 @@ export async function createOrder(payload: CreateOrderInput) {
           ? error.message
           : "Ocorreu um erro ao processar o pedido. Tente novamente.",
       orderId: orderIdForRetry,
+      accessToken: accessTokenForRetry,
     };
   }
 }
