@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -47,7 +48,8 @@
     "prisma": "^7.10.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.12",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.0"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

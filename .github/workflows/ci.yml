@@ -36,3 +36,13 @@ jobs:
 
       - name: Lint
         run: pnpm exec eslint .
+
+      - name: Run unit tests
+        run: pnpm test
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+
+      - name: Build application
+        run: pnpm run build
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
