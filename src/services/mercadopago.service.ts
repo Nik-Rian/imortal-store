@@ -184,6 +184,14 @@ export async function createPixOrder(
   };
 }
 
+function validateMercadoPagoOrderId(orderId: string): string {
+  if (typeof orderId !== "string" || !/^ORD[A-Z0-9]{1,61}$/.test(orderId)) {
+    throw new Error("Invalid Mercado Pago order ID.");
+  }
+
+  return orderId;
+}
+
 /**
  * Fetches order details from Mercado Pago Checkout Transparente Orders API.
  */
@@ -194,10 +202,18 @@ export async function getMercadoPagoOrder(
     throw new Error("MERCADOPAGO_ACCESS_TOKEN is not configured.");
   }
 
-  const response = await fetch(`${MP_BASE_URL}/v1/orders/${orderId}`, {
+  const safeOrderId = validateMercadoPagoOrderId(orderId);
+
+  const orderUrl = new URL(
+    `/v1/orders/${encodeURIComponent(safeOrderId)}`,
+    MP_BASE_URL,
+  );
+
+  const response = await fetch(orderUrl, {
     headers: {
       Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
     },
+    redirect: "error",
   });
 
   if (!response.ok) {
