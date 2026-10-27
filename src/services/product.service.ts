@@ -53,6 +53,9 @@ export const getProductBySlug = cache(
         },
         include: {
           drop: true,
+          sizes: {
+            orderBy: { sortOrder: "asc" },
+          },
           variants: {
             orderBy: { sortOrder: "asc" },
           },
@@ -74,6 +77,9 @@ export const getProductById = cache(async (id: string) => {
       where: { id },
       include: {
         drop: true,
+        sizes: {
+          orderBy: { sortOrder: "asc" },
+        },
         variants: {
           orderBy: { sortOrder: "asc" },
         },

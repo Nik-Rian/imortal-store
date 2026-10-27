@@ -93,9 +93,9 @@ export function Header() {
                     <h4 className="font-medium text-sm truncate">
                       {item.name}
                     </h4>
-                    {item.size && (
-                      <span className="shrink-0 rounded bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 px-2 py-0.5 text-xs font-black uppercase border border-orange-300 dark:border-orange-800">
-                        {item.size}
+                    {item.sizeLabel && (
+                      <span className="text-xs text-zinc-500">
+                        Tamanho: {item.sizeLabel}
                       </span>
                     )}
                   </div>

@@ -1,14 +1,16 @@
 import {
-  Product as PrismaProduct,
+  Product,
   ProductVariant,
+  ProductSize,
   Drop,
-} from "../generated/prisma/client";
+} from "@/generated/prisma/client";
 
-export type Product = PrismaProduct;
+export type { Product, ProductVariant, ProductSize, Drop };
 
-export type ProductWithVariants = PrismaProduct & {
-  variants?: ProductVariant[];
-  drop?: Drop | null;
+export type ProductWithVariants = Product & {
+  drop?: Drop;
+  sizes: ProductSize[];
+  variants: ProductVariant[];
 };
 
 export type ProductBase = Omit<Product, "createdAt" | "updatedAt">;

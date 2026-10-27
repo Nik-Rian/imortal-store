@@ -92,6 +92,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   >(
     initialData?.variants?.map((v, idx) => ({
       ...v,
+      image: v.image ?? undefined, // <-- Add this to fix the string | null error
       sortOrder: v.sortOrder ?? idx,
       isAvailable: v.isAvailable ?? true,
     })) ?? [],
@@ -333,24 +334,6 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
             className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
           />
         </div>
-
-        {/* Has Sizes */}
-        <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
-          <div className="space-y-0.5">
-            <label className="text-sm font-medium text-zinc-900 cursor-pointer">
-              Possui Tamanhos
-            </label>
-            <p className="text-xs text-zinc-500">Exige escolha (ex: P/M/G).</p>
-          </div>
-          <input
-            type="checkbox"
-            checked={hasSizes}
-            onChange={(e) => setHasSizes(e.target.checked)}
-            disabled={isPending}
-            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
-          />
-        </div>
-
         {/* Has Variants */}
         <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
           <div className="space-y-0.5">
@@ -367,6 +350,43 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
             className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
           />
         </div>
+
+        {/* Show Variants in Store */}
+        <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
+          <div className="space-y-0.5">
+            <label className="text-sm font-medium text-zinc-900 cursor-pointer">
+              Exibir Variantes
+            </label>
+            <p className="text-xs text-zinc-500">
+              Mostra variantes na vitrine.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={showVariantsInStore}
+            onChange={(e) => setShowVariantsInStore(e.target.checked)}
+            disabled={isPending}
+            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+          />
+        </div>
+      </div>
+
+      {/* Show Variants in Store */}
+      <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
+        <div className="space-y-0.5">
+          <label className="text-sm font-medium text-zinc-900 cursor-pointer">
+            Exibir Variantes
+          </label>
+          <p className="text-xs text-zinc-500">Mostra variantes na vitrine.</p>
+        </div>
+
+        <input
+          type="checkbox"
+          checked={showVariantsInStore}
+          onChange={(e) => setShowVariantsInStore(e.target.checked)}
+          disabled={isPending}
+          className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+        />
       </div>
 
       {/* Drop Selection */}
@@ -528,8 +548,8 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
               Tamanhos
             </label>
             <p className="text-xs text-zinc-500">
-              Adicione os tamanhos disponíveis (Ative "Possui Tamanhos" acima
-              para editar).
+              Adicione os tamanhos disponíveis (Ative &quot;Possui
+              Tamanhos&quot; acima para editar).
             </p>
           </div>
           <button
@@ -621,8 +641,8 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
               Variantes
             </label>
             <p className="text-xs text-zinc-500">
-              Cores, materiais ou modelos. (Ative "Possui Variantes" acima para
-              editar).
+              Cores, materiais ou modelos. (Ative &quot;Possui Variantes&quot;
+              acima para editar).
             </p>
           </div>
           <button

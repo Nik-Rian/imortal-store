@@ -122,7 +122,7 @@ export default async function AdminOrdersPage({
                             {item.quantity}x
                           </span>{" "}
                           {item.productName}{" "}
-                          {item.variantSize && `(${item.variantSize})`}
+                          {item.sizeLabel && `(${item.sizeLabel})`}
                         </li>
                       ))}
                     </ul>

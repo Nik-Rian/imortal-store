@@ -155,7 +155,7 @@ if (!order) {
                     {item.productName}
                   </p>
                   <p className="text-xs text-zinc-500">
-                    {item.variantSize ? `Tamanho: ${item.variantSize} | ` : ""}
+                    {item.sizeLabel ? `Tamanho: ${item.sizeLabel} | ` : ""}
                     Qtd: {item.quantity}
                   </p>
                 </div>
