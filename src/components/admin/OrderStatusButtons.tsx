@@ -7,9 +7,11 @@ import type { OrderStatus } from "@/generated/prisma/client";
 export function OrderStatusButtons({
   orderId,
   currentStatus,
+  paymentStatus,
 }: {
   orderId: string;
   currentStatus: OrderStatus | string;
+  paymentStatus: string;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -19,7 +21,7 @@ export function OrderStatusButtons({
     });
   };
 
-  if (currentStatus === "PAID") {
+  if (paymentStatus === "PAID" && currentStatus === "PENDING") {
     return (
       <button
         onClick={() => handleUpdate("READY_FOR_PICKUP" as OrderStatus)}

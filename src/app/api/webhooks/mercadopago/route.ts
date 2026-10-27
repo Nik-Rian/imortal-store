@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { OrderStatus } from "@/generated/prisma/client";
-import {
+import { PaymentStatus } from "@/generated/prisma/client";import {
   getMercadoPagoOrder,
   MercadoPagoPaymentDetails,
 } from "@/services/mercadopago.service";
@@ -9,50 +8,36 @@ import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
 
 const MP_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET;
 
-export function determineNextOrderStatus(
-  currentStatus: OrderStatus,
+export function mapPaymentStatus(
   mpStatus: string,
-  mpTotalAmount: number,
-  localTotalPriceCents: number,
-  orderId: string,
-): OrderStatus {
-  if (mpStatus === "processed") {
-    if (currentStatus === "PENDING") {
-      const mpAmountCents = Math.round(mpTotalAmount * 100);
-      if (mpAmountCents !== localTotalPriceCents) {
-        console.error(
-          `Webhook amount mismatch for order ${orderId}: provider amount ${mpAmountCents} cents, local amount ${localTotalPriceCents} cents.`,
-        );
-        return currentStatus;
-      }
+  mpStatusDetail?: string,
+): PaymentStatus {
+  switch (mpStatus) {
+    case "pending":
+      return "PENDING";
+    case "in_process":
+      return "IN_REVIEW";
+    case "processed":
+    case "approved":
       return "PAID";
-    }
-    if (currentStatus === "CANCELED") {
-      console.warn(
-        `Manual review required: Received 'processed' webhook for already CANCELED order ${orderId}`,
-      );
-    }
-    return currentStatus; // Forward-only: preserves READY_FOR_PICKUP, COMPLETED, CANCELED
-  }
-
-  if (["failed", "canceled", "cancelled", "expired"].includes(mpStatus)) {
-    if (currentStatus === "PENDING") {
+    case "failed":
+    case "rejected":
+      return "FAILED";
+    case "expired":
+    case "cancelled":
+    case "canceled":
       return "CANCELED";
-    }
-    return currentStatus;
+    case "partially_refunded":
+      return "PARTIALLY_REFUNDED";
+    case "refunded":
+      return "REFUNDED";
+    case "charged_back":
+      if (mpStatusDetail === "in_process") return "CHARGEBACK_IN_REVIEW";
+      if (mpStatusDetail === "reimbursed") return "CHARGEBACK_WON";
+      return "CHARGEBACK_LOST";
+    default:
+      return "PENDING";
   }
-
-  // Handle chargebacks and refunds
-  if (["charged_back", "refunded"].includes(mpStatus)) {
-    if (["PAID", "READY_FOR_PICKUP", "PENDING"].includes(currentStatus)) {
-      console.warn(
-        `Order ${orderId} received status ${mpStatus}. Canceling order.`,
-      );
-      return "CANCELED";
-    }
-  }
-
-  return currentStatus;
 }
 
 export async function POST(req: Request) {
@@ -120,23 +105,48 @@ export async function POST(req: Request) {
           | MercadoPagoPaymentDetails
           | undefined;
 
-        const newStatus = determineNextOrderStatus(
-          order.status,
-          mpOrder.status,
-          mpOrder.totalAmount,
-          order.totalPriceCents,
-          order.id,
-        );
+        const mpStatus = mpOrder.status;
+        const mpStatusDetail = mpOrder.status_detail;
 
-        const shouldUpdateStatus = newStatus !== order.status;
+        const newPaymentStatus = mapPaymentStatus(mpStatus, mpStatusDetail);
+
+        // Keep fulfillment status unchanged by default
+        let newFulfillmentStatus = order.status;
+
+        // If payment fails/cancels while fulfillment hasn't started, cancel fulfillment
+        if (
+          order.status === "PENDING" &&
+          [
+            "FAILED",
+            "CANCELED",
+            "EXPIRED",
+            "REFUNDED",
+            "CHARGEBACK_LOST",
+          ].includes(newPaymentStatus)
+        ) {
+          newFulfillmentStatus = "CANCELED";
+        }
+
         const shouldUpdatePayment =
           payment?.paymentId && payment.paymentId !== order.mpPaymentId;
 
-        if (shouldUpdateStatus || shouldUpdatePayment) {
+        if (
+          newPaymentStatus !== order.paymentStatus ||
+          newFulfillmentStatus !== order.status ||
+          shouldUpdatePayment
+        ) {
           await prisma.order.update({
             where: { id: order.id },
             data: {
               mpOrderId: mpOrder.orderId,
+              paymentStatus: newPaymentStatus,
+              status: newFulfillmentStatus,
+              providerStatus: mpStatus,
+              providerStatusDetail: mpStatusDetail || null,
+              paidAmount: mpOrder.totalAmount
+                ? Math.round(mpOrder.totalAmount * 100)
+                : null,
+              lastPaymentSync: new Date(),
               ...(payment?.paymentId ? { mpPaymentId: payment.paymentId } : {}),
               ...(payment?.qrCode
                 ? {
@@ -144,7 +154,6 @@ export async function POST(req: Request) {
                     pixQrCodeBase64: payment.qrCodeBase64 ?? null,
                   }
                 : {}),
-              status: newStatus,
             },
           });
         }
