@@ -244,7 +244,9 @@ export async function createOrder(payload: CreateOrderInput) {
 }
 
 /**
- * Updates an order's status and revalidates the admin table.
+ * Moves an order through the fulfillment lifecycle only
+ * (PENDING -> READY_FOR_PICKUP -> COMPLETED). Payment status is owned by the
+ * Mercado Pago webhook and is never changed here.
  */
 export async function updateOrderStatus(
   orderId: string,
@@ -252,12 +254,41 @@ export async function updateOrderStatus(
 ) {
   await requireSession();
 
-  await prisma.order.update({
-    where: { id: orderId },
+  // target status -> status the order must currently have
+  const requiredCurrentStatus: Partial<Record<OrderStatus, OrderStatus>> = {
+    READY_FOR_PICKUP: "PENDING",
+    COMPLETED: "READY_FOR_PICKUP",
+  };
+  const from = requiredCurrentStatus[newStatus];
+  if (!from) {
+    return {
+      success: false as const,
+      error: "Transição de status não permitida.",
+    };
+  }
+
+  // The paid check is part of the UPDATE itself, so it cannot race with a
+  // webhook that reverts the payment between a read and a write.
+  const result = await prisma.order.updateMany({
+    where: {
+      id: orderId,
+      status: from,
+      ...(newStatus === "READY_FOR_PICKUP"
+        ? { paymentStatus: "PAID" as const }
+        : {}),
+    },
     data: { status: newStatus },
   });
 
   revalidatePath("/admin/pedidos");
+
+  if (result.count === 0) {
+    return {
+      success: false as const,
+      error: "Pedido não está elegível para esta transição.",
+    };
+  }
+  return { success: true as const };
 }
 
 /**

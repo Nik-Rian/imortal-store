@@ -1,45 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { PaymentStatus } from "@/generated/prisma/client";import {
+import {
   getMercadoPagoOrder,
   MercadoPagoPaymentDetails,
 } from "@/services/mercadopago.service";
 import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
+import {
+  mapPaymentStatus,
+  resolveFulfillmentStatus,
+} from "@/lib/payment-status";
 import { revalidatePath } from "next/cache";
 
 const MP_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET;
-
-export function mapPaymentStatus(
-  mpStatus: string,
-  mpStatusDetail?: string,
-): PaymentStatus {
-  switch (mpStatus) {
-    case "pending":
-      return "PENDING";
-    case "in_process":
-      return "IN_REVIEW";
-    case "processed":
-    case "approved":
-      return "PAID";
-    case "failed":
-    case "rejected":
-      return "FAILED";
-    case "expired":
-    case "cancelled":
-    case "canceled":
-      return "CANCELED";
-    case "partially_refunded":
-      return "PARTIALLY_REFUNDED";
-    case "refunded":
-      return "REFUNDED";
-    case "charged_back":
-      if (mpStatusDetail === "in_process") return "CHARGEBACK_IN_REVIEW";
-      if (mpStatusDetail === "reimbursed") return "CHARGEBACK_WON";
-      return "CHARGEBACK_LOST";
-    default:
-      return "PENDING";
-  }
-}
 
 export async function POST(req: Request) {
   try {
@@ -106,58 +78,43 @@ export async function POST(req: Request) {
         const payment = mpOrder.payments[0] as
           | MercadoPagoPaymentDetails
           | undefined;
-
         const mpStatus = mpOrder.status;
         const mpStatusDetail = mpOrder.status_detail || payment?.statusDetail;
-
         const newPaymentStatus = mapPaymentStatus(mpStatus, mpStatusDetail);
+        const newFulfillmentStatus = resolveFulfillmentStatus(
+          order.status,
+          newPaymentStatus,
+        );
+        const newPaidAmount = Math.round(mpOrder.totalPaidAmount * 100);
 
-        // Keep fulfillment status unchanged by default
-        let newFulfillmentStatus = order.status;
-
-        // If payment fails/cancels while fulfillment hasn't started, cancel fulfillment
-        if (
-          order.status === "PENDING" &&
-          [
-            "FAILED",
-            "CANCELED",
-            "EXPIRED",
-            "REFUNDED",
-            "CHARGEBACK_LOST",
-          ].includes(newPaymentStatus)
-        ) {
-          newFulfillmentStatus = "CANCELED";
-        }
-
-        const shouldUpdatePayment =
-          payment?.paymentId && payment.paymentId !== order.mpPaymentId;
-
-        if (
+        const hasVisibleChange =
           newPaymentStatus !== order.paymentStatus ||
           newFulfillmentStatus !== order.status ||
-          shouldUpdatePayment
-        ) {
-          await prisma.order.update({
-            where: { id: order.id },
-            data: {
-              mpOrderId: mpOrder.orderId,
-              paymentStatus: newPaymentStatus,
-              status: newFulfillmentStatus,
-              providerStatus: mpStatus,
-              providerStatusDetail: mpStatusDetail || null,
-              paidAmount: mpOrder.totalAmount
-                ? Math.round(mpOrder.totalAmount * 100)
-                : null,
-              lastPaymentSync: new Date(),
-              ...(payment?.paymentId ? { mpPaymentId: payment.paymentId } : {}),
-              ...(payment?.qrCode
-                ? {
-                    pixQrCode: payment.qrCode,
-                    pixQrCodeBase64: payment.qrCodeBase64 ?? null,
-                  }
-                : {}),
-            },
-          });
+          newPaidAmount !== order.paidAmount;
+
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            mpOrderId: mpOrder.orderId,
+            paymentStatus: newPaymentStatus,
+            ...(newFulfillmentStatus !== order.status
+              ? { status: newFulfillmentStatus }
+              : {}),
+            providerStatus: mpStatus,
+            providerStatusDetail: mpStatusDetail || null,
+            paidAmount: newPaidAmount,
+            lastPaymentSync: new Date(),
+            ...(payment?.paymentId ? { mpPaymentId: payment.paymentId } : {}),
+            ...(payment?.qrCode
+              ? {
+                  pixQrCode: payment.qrCode,
+                  pixQrCodeBase64: payment.qrCodeBase64 ?? null,
+                }
+              : {}),
+          },
+        });
+
+        if (hasVisibleChange) {
           revalidatePath(`/pedidos/${order.accessToken}`);
           revalidatePath("/admin/pedidos");
         }

@@ -34,6 +34,7 @@ ALTER TABLE "Order" ALTER COLUMN "status" SET DEFAULT 'PENDING';
 COMMIT;
 
 -- AlterTable (Other tables)
+DELETE FROM "rateLimit";
 ALTER TABLE "rateLimit" DROP COLUMN "lastRequest",
 ADD COLUMN     "lastRequest" DOUBLE PRECISION NOT NULL;
 
