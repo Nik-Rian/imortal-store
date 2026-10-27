@@ -35,11 +35,21 @@ export function determineNextOrderStatus(
     return currentStatus; // Forward-only: preserves READY_FOR_PICKUP, COMPLETED, CANCELED
   }
 
-  if (["failed", "canceled", "expired"].includes(mpStatus)) {
+  if (["failed", "canceled", "cancelled", "expired"].includes(mpStatus)) {
     if (currentStatus === "PENDING") {
       return "CANCELED";
     }
     return currentStatus;
+  }
+
+  // Handle chargebacks and refunds
+  if (["charged_back", "refunded"].includes(mpStatus)) {
+    if (["PAID", "READY_FOR_PICKUP", "PENDING"].includes(currentStatus)) {
+      console.warn(
+        `Order ${orderId} received status ${mpStatus}. Canceling order.`,
+      );
+      return "CANCELED";
+    }
   }
 
   return currentStatus;
@@ -77,14 +87,17 @@ export async function POST(req: Request) {
         topic,
         resourceId,
       });
-      return NextResponse.json(
-        { error: "Invalid signature" },
-        { status: 401 },
-      );
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     // Process order logic
-    if (topic === "order") {
+    const isOrderEvent =
+      topic === "order" ||
+      topic === "chargebacks" ||
+      topic === "order.charged_back" ||
+      body.action === "order.charged_back";
+
+    if (isOrderEvent) {
       const mpOrder = await getMercadoPagoOrder(String(resourceId));
 
       if (!mpOrder) {
