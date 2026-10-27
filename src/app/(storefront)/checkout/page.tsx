@@ -7,20 +7,8 @@ import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { ArrowLeft, Loader2, ShoppingBag } from "lucide-react";
 import { createOrder } from "@/actions/order.actions";
-import { useEffect } from "react";
-import { initMercadoPago } from "@mercadopago/sdk-react";
 import { checkoutSchema } from "@/lib/validations/checkout.schema";
-
-function MercadoPagoInitializer() {
-  useEffect(() => {
-    const publicKey = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY;
-    if (publicKey) {
-      initMercadoPago(publicKey, { locale: "pt-BR" });
-    }
-  }, []);
-
-  return null;
-}
+import { MercadoPagoInitializer } from "@/components/storefront/MercadoPagoInitializer";
 
 // Format CPF: 000.000.000-00
 function formatCPF(value: string) {
