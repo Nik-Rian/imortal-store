@@ -5,6 +5,7 @@ import { PaymentStatus } from "@/generated/prisma/client";import {
   MercadoPagoPaymentDetails,
 } from "@/services/mercadopago.service";
 import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
+import { revalidatePath } from "next/cache";
 
 const MP_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET;
 
@@ -84,6 +85,7 @@ export async function POST(req: Request) {
 
     if (isOrderEvent) {
       const mpOrder = await getMercadoPagoOrder(String(resourceId));
+      //console.log("MP Order Payload:", JSON.stringify(mpOrder, null, 2));
 
       if (!mpOrder) {
         return NextResponse.json({ received: true });
@@ -106,7 +108,7 @@ export async function POST(req: Request) {
           | undefined;
 
         const mpStatus = mpOrder.status;
-        const mpStatusDetail = mpOrder.status_detail;
+        const mpStatusDetail = mpOrder.status_detail || payment?.statusDetail;
 
         const newPaymentStatus = mapPaymentStatus(mpStatus, mpStatusDetail);
 
@@ -156,6 +158,8 @@ export async function POST(req: Request) {
                 : {}),
             },
           });
+          revalidatePath(`/pedidos/${order.accessToken}`);
+          revalidatePath("/admin/pedidos");
         }
       }
     }

@@ -25,13 +25,16 @@ function getStatusBadge(status: string) {
           "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800",
       };
     case "PENDING":
+    case "IN_REVIEW":
       return {
         label: "Aguardando Pagamento",
         icon: Clock,
         className:
           "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800",
       };
-    case "CANCELLED":
+    case "CANCELED":
+    case "FAILED":
+    case "EXPIRED":
       return {
         label: "Cancelado",
         icon: XCircle,
@@ -39,6 +42,7 @@ function getStatusBadge(status: string) {
           "bg-red-100 text-red-800 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800",
       };
     case "REFUNDED":
+    case "PARTIALLY_REFUNDED":
       return {
         label: "Reembolsado",
         icon: RefreshCw,
@@ -63,11 +67,11 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
     include: { items: true },
   });
 
-  if (!order) {
-    notFound();
-  }
+if (!order) {
+  notFound();
+}
 
-  const badge = getStatusBadge(order.status);
+  const badge = getStatusBadge(order.paymentStatus);
   const StatusIcon = badge.icon;
 
   return (
@@ -110,7 +114,7 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
 
         {/* Interactive Pix QR code and polling section if order is PENDING */}
         <OrderPixSection
-          status={order.status}
+          status={order.paymentStatus}
           qrCode={order.pixQrCode}
           qrCodeBase64={order.pixQrCodeBase64}
         />
