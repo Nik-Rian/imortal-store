@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { PaymentStatus } from "@/generated/prisma/client";
-import { mapPaymentStatus } from "./route";
+import { mapPaymentStatus } from "@/lib/payment-status";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {},
@@ -13,7 +13,25 @@ describe("Webhook Status Transitions", () => {
     // Normal progression
     ["pending", undefined, PaymentStatus.PENDING, "pending -> PENDING"],
     ["processed", undefined, PaymentStatus.PAID, "processed -> PAID"],
-    ["expired", undefined, PaymentStatus.CANCELED, "expired -> CANCELED"],
+    ["expired", undefined, PaymentStatus.EXPIRED, "expired -> EXPIRED"],
+    [
+      "processing",
+      undefined,
+      PaymentStatus.IN_REVIEW,
+      "processing -> IN_REVIEW",
+    ],
+    [
+      "processed",
+      "partially_refunded",
+      PaymentStatus.PARTIALLY_REFUNDED,
+      "processed (partially_refunded) -> PARTIALLY_REFUNDED",
+    ],
+    [
+      "charged_back",
+      "settled",
+      PaymentStatus.CHARGEBACK_LOST,
+      "charged_back (settled) -> CHARGEBACK_LOST",
+    ],
     ["canceled", undefined, PaymentStatus.CANCELED, "canceled -> CANCELED"],
     ["failed", undefined, PaymentStatus.FAILED, "failed -> FAILED"],
 

@@ -1,5 +1,5 @@
 import { expect, test, describe, vi } from "vitest";
-import { mapPaymentStatus } from "@/app/api/webhooks/mercadopago/route";
+import { mapPaymentStatus } from "@/lib/payment-status";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {},

@@ -38,7 +38,7 @@ export const getCustomerOrders = cache(async (identifier: string) => {
           id: true,
           quantity: true,
           productName: true,
-          variantSize: true,
+          sizeLabel: true,
           unitPriceCents: true, // Fixed field name here
         },
       },

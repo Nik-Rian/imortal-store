@@ -97,7 +97,7 @@ export default async function FindMyOrdersPage({
                   <div key={item.id} className="flex justify-between text-sm">
                     <span className="font-medium text-zinc-700">
                       {item.quantity}x {item.productName}{" "}
-                      {item.variantSize ? `(${item.variantSize})` : ""}
+                      {item.sizeLabel ? `(${item.sizeLabel})` : ""}
                     </span>
                     <span className="text-zinc-500">
                       {formatPrice(item.unitPriceCents * item.quantity)}

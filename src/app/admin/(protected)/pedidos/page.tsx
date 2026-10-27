@@ -5,6 +5,47 @@ import { OrderStatusButtons } from "@/components/admin/OrderStatusButtons";
 import { PrintButton } from "@/components/admin/PrintButton";
 import { MarkAllReadyButton } from "@/components/admin/MarkAllReadyButton";
 
+import type { OrderStatus, PaymentStatus } from "@/generated/prisma/client";
+
+const PAYMENT_BADGES: Record<
+  PaymentStatus,
+  { label: string; className: string }
+> = {
+  PENDING: {
+    label: "Pagamento pendente",
+    className: "bg-amber-50 text-amber-700",
+  },
+  IN_REVIEW: { label: "Em análise", className: "bg-amber-50 text-amber-700" },
+  PAID: { label: "Pago", className: "bg-emerald-50 text-emerald-700" },
+  FAILED: { label: "Falhou", className: "bg-red-50 text-red-700" },
+  EXPIRED: { label: "Expirado", className: "bg-zinc-100 text-zinc-600" },
+  CANCELED: { label: "Cancelado", className: "bg-zinc-100 text-zinc-600" },
+  PARTIALLY_REFUNDED: {
+    label: "Reembolso parcial",
+    className: "bg-orange-50 text-orange-700",
+  },
+  REFUNDED: { label: "Reembolsado", className: "bg-orange-50 text-orange-700" },
+  CHARGEBACK_IN_REVIEW: {
+    label: "Chargeback em análise",
+    className: "bg-red-50 text-red-700",
+  },
+  CHARGEBACK_LOST: {
+    label: "Chargeback perdido",
+    className: "bg-red-100 text-red-800",
+  },
+  CHARGEBACK_WON: {
+    label: "Chargeback ganho",
+    className: "bg-emerald-50 text-emerald-700",
+  },
+};
+
+const FULFILLMENT_LABELS: Record<OrderStatus, string> = {
+  PENDING: "Aguardando preparo",
+  READY_FOR_PICKUP: "Pronto p/ retirada",
+  COMPLETED: "Retirado",
+  CANCELED: "Cancelado",
+};
+
 export default async function AdminOrdersPage({
   searchParams,
 }: {
@@ -15,7 +56,9 @@ export default async function AdminOrdersPage({
   const filter = isFilterValid ? "valid" : "all";
 
   const orders = await getAdminOrders(filter);
-  const hasPaidOrders = orders.some((o) => o.paymentStatus === "PAID");
+  const hasPaidOrders = orders.some(
+    (o) => o.paymentStatus === "PAID" && o.status === "PENDING",
+  );
 
   return (
     <div className="space-y-6 print:space-y-0">
@@ -96,7 +139,13 @@ export default async function AdminOrdersPage({
               orders.map((order) => (
                 <tr
                   key={order.id}
-                  className="hover:bg-zinc-50 transition-colors break-inside-avoid print:hover:bg-transparent"
+                  className={`hover:bg-zinc-50 transition-colors break-inside-avoid print:hover:bg-transparent ${
+                    order.paymentStatus === "PAID" &&
+                    (order.status === "PENDING" ||
+                      order.status === "READY_FOR_PICKUP")
+                      ? ""
+                      : "print:hidden"
+                  }`}
                 >
                   <td className="px-4 py-3 font-medium text-zinc-900 print:px-2 print:py-4">
                     #{order.id.slice(-6)}
@@ -129,13 +178,15 @@ export default async function AdminOrdersPage({
                   </td>
                   <td className="px-4 py-3 print:hidden space-y-1">
                     <div>
-                      <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-                        {order.paymentStatus}
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${PAYMENT_BADGES[order.paymentStatus].className}`}
+                      >
+                        {PAYMENT_BADGES[order.paymentStatus].label}
                       </span>
                     </div>
                     <div>
                       <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-800">
-                        {order.status}
+                        {FULFILLMENT_LABELS[order.status]}
                       </span>
                     </div>
                   </td>
