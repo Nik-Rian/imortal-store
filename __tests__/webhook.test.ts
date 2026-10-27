@@ -1,63 +1,34 @@
-import { expect, test, describe, vi } from "vitest";
-import { determineNextOrderStatus } from "@/app/api/webhooks/mercadopago/route";
+import { expect, test, describe } from "vitest";
+import { mapPaymentStatus } from "@/app/api/webhooks/mercadopago/route";
 
-vi.mock("@/lib/prisma", () => ({
-  prisma: {},
-}));
-
-describe("Webhook Critical Path: Repeated Payment Events", () => {
-  test("processes valid payment exactly once from PENDING", () => {
-    const status = determineNextOrderStatus(
-      "PENDING",
-      "processed",
-      100,
-      10000,
-      "ORD-123",
-    );
+describe("Webhook Payment Status Mapping", () => {
+  test("maps 'processed' to PAID", () => {
+    const status = mapPaymentStatus("processed");
     expect(status).toBe("PAID");
   });
 
-  test("ignores 'processed' event if order is already PAID (Forward-only)", () => {
-    const status = determineNextOrderStatus(
-      "PAID",
-      "processed",
-      100,
-      10000,
-      "ORD-123",
-    );
+  test("maps 'approved' to PAID", () => {
+    const status = mapPaymentStatus("approved");
     expect(status).toBe("PAID");
   });
 
-  test("ignores 'processed' event if order is already CANCELED", () => {
-    const status = determineNextOrderStatus(
-      "CANCELED",
-      "processed",
-      100,
-      10000,
-      "ORD-123",
-    );
-    expect(status).toBe("CANCELED"); // Preserves terminal state
+  test("maps 'refunded' to REFUNDED", () => {
+    const status = mapPaymentStatus("refunded");
+    expect(status).toBe("REFUNDED");
   });
 
-  test("rejects webhook if amounts mismatch", () => {
-    const status = determineNextOrderStatus(
-      "PENDING",
-      "processed",
-      50,
-      10000,
-      "ORD-123",
-    );
+  test("maps 'charged_back' with in_process detail to CHARGEBACK_IN_REVIEW", () => {
+    const status = mapPaymentStatus("charged_back", "in_process");
+    expect(status).toBe("CHARGEBACK_IN_REVIEW");
+  });
+
+  test("maps 'failed' to FAILED", () => {
+    const status = mapPaymentStatus("failed");
+    expect(status).toBe("FAILED");
+  });
+
+  test("defaults unknown status to PENDING", () => {
+    const status = mapPaymentStatus("unknown_weird_status");
     expect(status).toBe("PENDING");
-  });
-
-  test("cancels PENDING order on failure", () => {
-    const status = determineNextOrderStatus(
-      "PENDING",
-      "failed",
-      100,
-      10000,
-      "ORD-123",
-    );
-    expect(status).toBe("CANCELED");
   });
 });

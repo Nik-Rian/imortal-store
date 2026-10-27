@@ -277,7 +277,10 @@ export async function markAllPaidAsReady() {
   await requireSession();
 
   await prisma.order.updateMany({
-    where: { status: "PAID" },
+    where: {
+      paymentStatus: "PAID",
+      status: "PENDING"
+    },
     data: { status: "READY_FOR_PICKUP" },
   });
 
