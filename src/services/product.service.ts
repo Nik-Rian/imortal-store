@@ -94,12 +94,16 @@ export interface AvailabilityCheckResult {
     | "DROP_ENDED"
     | "PRODUCT_UNAVAILABLE"
     | "VARIANT_UNAVAILABLE"
+    | "SIZE_UNAVAILABLE"
+    | "OUT_OF_STOCK"
     | "NOT_FOUND";
 }
 
 export async function checkProductAvailability(
   productId: string,
   variantId?: string,
+  sizeId?: string,
+  requestedQuantity: number = 1,
 ): Promise<AvailabilityCheckResult> {
   const now = new Date();
   const product = await prisma.product.findUnique({
@@ -107,28 +111,37 @@ export async function checkProductAvailability(
     include: {
       drop: true,
       variants: true,
+      sizes: true,
+      stockItems: {
+        where: {
+          variantId: variantId || null,
+          sizeId: sizeId || null,
+        },
+      },
     },
   });
 
-  if (!product) {
-    return { available: false, reason: "NOT_FOUND" };
-  }
+if (!product) return { available: false, reason: "NOT_FOUND" };
+  if (product.drop.startsAt > now || product.drop.endsAt < now) return { available: false, reason: "DROP_ENDED" };
+  if (!product.isAvailable) return { available: false, reason: "PRODUCT_UNAVAILABLE" };
 
-  // Check Drop active window
-  if (product.drop.startsAt > now || product.drop.endsAt < now) {
-    return { available: false, reason: "DROP_ENDED" };
-  }
-
-  // Master Product Availability switch
-  if (!product.isAvailable) {
-    return { available: false, reason: "PRODUCT_UNAVAILABLE" };
-  }
-
-  // Variant-level Availability switch (if item has a variant)
-  if (variantId) {
+  if (product.hasVariants && variantId) {
     const variant = product.variants.find((v) => v.id === variantId);
-    if (!variant || !variant.isAvailable) {
-      return { available: false, reason: "VARIANT_UNAVAILABLE" };
+    if (!variant || !variant.isAvailable) return { available: false, reason: "VARIANT_UNAVAILABLE" };
+  }
+
+  if (product.hasSizes && sizeId) {
+    const size = product.sizes.find((s) => s.id === sizeId);
+    if (!size || !size.isAvailable) return { available: false, reason: "SIZE_UNAVAILABLE" };
+  }
+
+  if (product.controlStock) {
+    const stockItem = product.stockItems[0];
+    if (!stockItem) return { available: false, reason: "OUT_OF_STOCK" };
+
+    const availableStock = stockItem.onHand - stockItem.reserved;
+    if (availableStock < requestedQuantity) {
+      return { available: false, reason: "OUT_OF_STOCK" };
     }
   }
 

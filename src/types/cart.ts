@@ -2,8 +2,10 @@ export interface CartItem {
   id: string;
   productId: string;
   variantId?: string;
-  size?: string;
+  sizeId?: string;
   name: string;
+  variantName?: string;
+  sizeLabel?: string;
   slug: string;
   priceCents: number;
   image: string;
