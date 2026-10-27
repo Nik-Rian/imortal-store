@@ -1,6 +1,10 @@
-import { describe, expect, test } from "vitest";
+import { expect, test, describe, vi } from "vitest";
 import { PaymentStatus } from "@/generated/prisma/client";
 import { mapPaymentStatus } from "./route";
+
+vi.mock("@/lib/prisma", () => ({
+  prisma: {},
+}));
 
 describe("Webhook Status Transitions", () => {
   test.each([
