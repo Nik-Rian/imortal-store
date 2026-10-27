@@ -1,121 +1,52 @@
-import { describe, expect, test, vi } from "vitest";
-import { OrderStatus } from "@/generated/prisma/client";
-import { determineNextOrderStatus } from "./route";
-
-// Mock Prisma to prevent "DATABASE_URL is not defined" error during unit tests
-vi.mock("@/lib/prisma", () => ({
-  prisma: {},
-}));
+import { describe, expect, test } from "vitest";
+import { PaymentStatus } from "@/generated/prisma/client";
+import { mapPaymentStatus } from "./route";
 
 describe("Webhook Status Transitions", () => {
-  const ORDER_ID = "ord_test_123";
-  const LOCAL_TOTAL_CENTS = 15000; // $150.00
-  const VALID_PROVIDER_AMOUNT = 150.0;
-  const INVALID_PROVIDER_AMOUNT = 100.0;
-
   test.each([
-    // [Local Status, Provider Status, Provider Amount, Expected Status, Description]
+    // [Provider Status, Provider Detail, Expected PaymentStatus, Description]
 
     // Normal progression
-    [
-      OrderStatus.PENDING,
-      "processed",
-      VALID_PROVIDER_AMOUNT,
-      OrderStatus.PAID,
-      "PENDING -> PAID on valid processed",
-    ],
-    [
-      OrderStatus.PENDING,
-      "expired",
-      VALID_PROVIDER_AMOUNT,
-      OrderStatus.CANCELED,
-      "PENDING -> CANCELED on expired",
-    ],
-    [
-      OrderStatus.PENDING,
-      "canceled",
-      VALID_PROVIDER_AMOUNT,
-      OrderStatus.CANCELED,
-      "PENDING -> CANCELED on canceled",
-    ],
-    [
-      OrderStatus.PENDING,
-      "failed",
-      VALID_PROVIDER_AMOUNT,
-      OrderStatus.CANCELED,
-      "PENDING -> CANCELED on failed",
-    ],
+    ["pending", undefined, PaymentStatus.PENDING, "pending -> PENDING"],
+    ["processed", undefined, PaymentStatus.PAID, "processed -> PAID"],
+    ["expired", undefined, PaymentStatus.CANCELED, "expired -> CANCELED"],
+    ["canceled", undefined, PaymentStatus.CANCELED, "canceled -> CANCELED"],
+    ["failed", undefined, PaymentStatus.FAILED, "failed -> FAILED"],
 
-    // Forward-only protections (No regression)
+    // Refunds and chargebacks
+    ["refunded", undefined, PaymentStatus.REFUNDED, "refunded -> REFUNDED"],
     [
-      OrderStatus.PAID,
-      "processed",
-      VALID_PROVIDER_AMOUNT,
-      OrderStatus.PAID,
-      "PAID ignores duplicate processed",
+      "partially_refunded",
+      undefined,
+      PaymentStatus.PARTIALLY_REFUNDED,
+      "partially_refunded -> PARTIALLY_REFUNDED",
     ],
     [
-      OrderStatus.READY_FOR_PICKUP,
-      "processed",
-      VALID_PROVIDER_AMOUNT,
-      OrderStatus.READY_FOR_PICKUP,
-      "READY_FOR_PICKUP ignores late processed",
+      "charged_back",
+      "in_process",
+      PaymentStatus.CHARGEBACK_IN_REVIEW,
+      "charged_back (in_process) -> CHARGEBACK_IN_REVIEW",
     ],
     [
-      OrderStatus.COMPLETED,
-      "processed",
-      VALID_PROVIDER_AMOUNT,
-      OrderStatus.COMPLETED,
-      "COMPLETED ignores late processed",
-    ],
-
-    // Amount mismatches
-    [
-      OrderStatus.PENDING,
-      "processed",
-      INVALID_PROVIDER_AMOUNT,
-      OrderStatus.PENDING,
-      "PENDING remains PENDING if amount mismatches",
-    ],
-
-    // Anomalies
-    [
-      OrderStatus.CANCELED,
-      "processed",
-      VALID_PROVIDER_AMOUNT,
-      OrderStatus.CANCELED,
-      "CANCELED remains CANCELED on late processed (logs warning)",
+      "charged_back",
+      "reimbursed",
+      PaymentStatus.CHARGEBACK_WON,
+      "charged_back (reimbursed) -> CHARGEBACK_WON",
     ],
     [
-      OrderStatus.PAID,
-      "canceled",
-      VALID_PROVIDER_AMOUNT,
-      OrderStatus.PAID,
-      "PAID ignores late canceled (refunds handled separately)",
+      "charged_back",
+      "anything_else",
+      PaymentStatus.CHARGEBACK_LOST,
+      "charged_back (default) -> CHARGEBACK_LOST",
     ],
-])(
-    "given %s and provider %s with amount %f, returns %s (%s)",
-    (localStatus, mpStatus, mpAmount, expectedStatus, _description) => {
+  ])(
+    "given provider %s (detail: %s), returns %s (%s)",
+    (mpStatus, mpStatusDetail, expectedStatus, _description) => {
       void _description; // Clears the unused variable warning
-      const consoleWarnSpy = vi
-        .spyOn(console, "warn")
-        .mockImplementation(() => {});
-      const consoleErrorSpy = vi
-        .spyOn(console, "error")
-        .mockImplementation(() => {});
 
-      const result = determineNextOrderStatus(
-        localStatus,
-        mpStatus,
-        mpAmount,
-        LOCAL_TOTAL_CENTS,
-        ORDER_ID,
-      );
+      const result = mapPaymentStatus(mpStatus, mpStatusDetail);
 
       expect(result).toBe(expectedStatus);
-
-      consoleWarnSpy.mockRestore();
-      consoleErrorSpy.mockRestore();
     },
   );
 });

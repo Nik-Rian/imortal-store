@@ -37,6 +37,7 @@ export interface MercadoPagoPaymentDetails {
 export interface MercadoPagoOrderDetails {
   orderId: string;
   status: string;
+  status_detail?: string;
   totalAmount: number;
   externalReference?: string;
   payments: Array<{

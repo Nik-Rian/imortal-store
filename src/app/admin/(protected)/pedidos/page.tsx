@@ -15,7 +15,7 @@ export default async function AdminOrdersPage({
   const filter = isFilterValid ? "valid" : "all";
 
   const orders = await getAdminOrders(filter);
-  const hasPaidOrders = orders.some((o) => o.status === "PAID");
+  const hasPaidOrders = orders.some((o) => o.paymentStatus === "PAID");
 
   return (
     <div className="space-y-6 print:space-y-0">
@@ -127,10 +127,17 @@ export default async function AdminOrdersPage({
                       ))}
                     </ul>
                   </td>
-                  <td className="px-4 py-3 print:hidden">
-                    <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-800">
-                      {order.status}
-                    </span>
+                  <td className="px-4 py-3 print:hidden space-y-1">
+                    <div>
+                      <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                        {order.paymentStatus}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-800">
+                        {order.status}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-4 py-3 print:hidden">
                     {formatPrice(order.totalPriceCents)}
@@ -139,6 +146,7 @@ export default async function AdminOrdersPage({
                     <OrderStatusButtons
                       orderId={order.id}
                       currentStatus={order.status}
+                      paymentStatus={order.paymentStatus}
                     />
                   </td>
                   {/* Print-only empty cell for paper signature */}

@@ -61,9 +61,22 @@ model ProductVariant {
   @@unique([productId, size])
 }
 
+enum PaymentStatus {
+  PENDING
+  IN_REVIEW
+  PAID
+  FAILED
+  EXPIRED
+  CANCELED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  CHARGEBACK_IN_REVIEW
+  CHARGEBACK_LOST
+  CHARGEBACK_WON
+}
+
 enum OrderStatus {
   PENDING
-  PAID
   READY_FOR_PICKUP
   COMPLETED
   CANCELED
@@ -76,6 +89,11 @@ model Order {
   customerPhone   String?
   customerEmail   String?
   status          OrderStatus @default(PENDING)
+  paymentStatus        PaymentStatus @default(PENDING)
+  providerStatus       String?
+  providerStatusDetail String?
+  paidAmount           Int?
+  lastPaymentSync      DateTime?
   totalPriceCents Int
   cancelableUntil DateTime
   mpPaymentId     String?
