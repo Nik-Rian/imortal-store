@@ -9,15 +9,7 @@ import {
   AllowedSize,
 } from "@/lib/validations/product.schema";
 import { uploadProductImage, deleteBlobImages } from "@/actions/blob.actions";
-import {
-  ArrowDown,
-  ArrowUp,
-  ImagePlus,
-  Loader2,
-  Plus,
-  Trash2,
-  X,
-} from "lucide-react";
+import { ImagePlus, Loader2, Trash2, X } from "lucide-react";
 
 type DropOption = {
   id: string;
@@ -92,7 +84,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   >(
     initialData?.variants?.map((v, idx) => ({
       ...v,
-      image: v.image ?? undefined, // <-- Add this to fix the string | null error
+      image: v.image ?? undefined,
       sortOrder: v.sortOrder ?? idx,
       isAvailable: v.isAvailable ?? true,
     })) ?? [],
@@ -106,45 +98,29 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
 
   // --- Handlers for Sizes ---
   const handleAddStandardShirtSizes = () => {
-    const defaultSizes: AllowedSize[] = ["P", "M", "G"];
+    const defaultSizes: AllowedSize[] = ["P", "M", "G", "GG", "XGG"];
     setSizes(
-      defaultSizes.map((size, index) => ({
+      defaultSizes.map((size) => ({
         size,
-        sortOrder: index,
+        sortOrder: ALLOWED_SIZES.indexOf(size),
         isAvailable: true,
       })),
     );
     setHasSizes(true);
   };
 
-  const handleAddSize = (sizeToAdd: AllowedSize) => {
-    if (sizes.some((s) => s.size === sizeToAdd)) return;
-    setSizes((prev) => [
-      ...prev,
-      { size: sizeToAdd, sortOrder: prev.length, isAvailable: true },
-    ]);
-    setHasSizes(true);
-  };
-
-  const handleRemoveSize = (index: number) => {
+  const handleToggleSize = (size: AllowedSize, index: number) => {
     setSizes((prev) => {
-      const updated = prev
-        .filter((_, idx) => idx !== index)
-        .map((item, idx) => ({ ...item, sortOrder: idx }));
-      if (updated.length === 0) setHasSizes(false);
-      return updated;
+      const exists = prev.some((s) => s.size === size);
+      if (exists) {
+        const updated = prev.filter((s) => s.size !== size);
+        if (updated.length === 0) setHasSizes(false);
+        return updated;
+      } else {
+        setHasSizes(true);
+        return [...prev, { size, sortOrder: index, isAvailable: true }];
+      }
     });
-  };
-
-  const handleMoveSize = (index: number, direction: "up" | "down") => {
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= sizes.length) return;
-
-    const updated = [...sizes];
-    const [movedItem] = updated.splice(index, 1);
-    updated.splice(targetIndex, 0, movedItem);
-
-    setSizes(updated.map((item, idx) => ({ ...item, sortOrder: idx })));
   };
 
   // --- Handlers for Variants ---
@@ -230,6 +206,9 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
       ? NaN
       : Math.round(parsedDisplayPrice * 100);
 
+    // Ensure sizes are sorted properly by their explicit ALLOWED_SIZES order before saving
+    const sortedSizes = [...sizes].sort((a, b) => a.sortOrder - b.sortOrder);
+
     const validationResult = productSchema.safeParse({
       name,
       slug: currentSlug,
@@ -241,7 +220,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
       hasSizes,
       hasVariants,
       showVariantsInStore,
-      sizes,
+      sizes: sortedSizes,
       variants,
     });
 
@@ -283,7 +262,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     } finally {
       setIsPending(false);
     }
-  };
+  };;
 
   return (
     <form
@@ -334,6 +313,26 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
             className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
           />
         </div>
+
+        {/* Has Sizes */}
+        <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
+          <div className="space-y-0.5">
+            <label className="text-sm font-medium text-zinc-900 cursor-pointer">
+              Possui Tamanhos
+            </label>
+            <p className="text-xs text-zinc-500">
+              Habilita a seleção de tamanhos.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={hasSizes}
+            onChange={(e) => setHasSizes(e.target.checked)}
+            disabled={isPending}
+            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+          />
+        </div>
+
         {/* Has Variants */}
         <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
           <div className="space-y-0.5">
@@ -369,24 +368,6 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
             className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
           />
         </div>
-      </div>
-
-      {/* Show Variants in Store */}
-      <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
-        <div className="space-y-0.5">
-          <label className="text-sm font-medium text-zinc-900 cursor-pointer">
-            Exibir Variantes
-          </label>
-          <p className="text-xs text-zinc-500">Mostra variantes na vitrine.</p>
-        </div>
-
-        <input
-          type="checkbox"
-          checked={showVariantsInStore}
-          onChange={(e) => setShowVariantsInStore(e.target.checked)}
-          disabled={isPending}
-          className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
-        />
       </div>
 
       {/* Drop Selection */}
@@ -548,7 +529,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
               Tamanhos
             </label>
             <p className="text-xs text-zinc-500">
-              Adicione os tamanhos disponíveis (Ative &quot;Possui
+              Selecione os tamanhos disponíveis (Ative &quot;Possui
               Tamanhos&quot; acima para editar).
             </p>
           </div>
@@ -558,77 +539,31 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
             disabled={isPending}
             className="text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1.5 rounded transition-colors"
           >
-            Grade Padrão (P, M, G)
+            Selecionar Todos (P ao XGG)
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">Adicionar:</span>
-          {ALLOWED_SIZES.map((size) => {
+        <div className="flex flex-wrap gap-2 pt-2">
+          {ALLOWED_SIZES.map((size, index) => {
             const isSelected = sizes.some((s) => s.size === size);
+
             return (
               <button
                 key={size}
                 type="button"
-                onClick={() => handleAddSize(size)}
-                disabled={isPending || isSelected}
-                className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded border transition-colors ${
+                onClick={() => handleToggleSize(size, index)}
+                disabled={isPending}
+                className={`flex items-center justify-center w-12 h-12 text-sm font-bold rounded-md border transition-all ${
                   isSelected
-                    ? "bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed"
-                    : "bg-white text-zinc-800 border-zinc-300 hover:bg-zinc-50 cursor-pointer"
+                    ? "bg-zinc-900 text-white border-zinc-900 shadow-sm"
+                    : "bg-zinc-50 text-zinc-400 border-zinc-200 hover:bg-zinc-100 hover:text-zinc-600"
                 }`}
               >
-                <Plus className="w-3 h-3" /> {size}
+                {size}
               </button>
             );
           })}
         </div>
-
-        {sizes.length > 0 && (
-          <div className="space-y-2 mt-2">
-            {sizes.map((sizeObj, index) => (
-              <div
-                key={sizeObj.size}
-                className="flex items-center justify-between bg-zinc-50 border border-zinc-200 px-3 py-2 rounded-md"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs font-bold bg-zinc-900 text-white w-6 h-6 rounded flex items-center justify-center">
-                    {sizeObj.size}
-                  </span>
-                  <span className="text-xs text-zinc-500">
-                    Ordem: {sizeObj.sortOrder}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleMoveSize(index, "up")}
-                    disabled={isPending || index === 0}
-                    className="p-1 text-zinc-500 hover:text-zinc-900 disabled:opacity-30"
-                  >
-                    <ArrowUp className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMoveSize(index, "down")}
-                    disabled={isPending || index === sizes.length - 1}
-                    className="p-1 text-zinc-500 hover:text-zinc-900 disabled:opacity-30"
-                  >
-                    <ArrowDown className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveSize(index)}
-                    disabled={isPending}
-                    className="p-1 text-red-600 hover:text-red-800 disabled:opacity-30"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Variants Selection */}
