@@ -273,8 +273,8 @@ const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
                       {item.name}
                     </p>
                     <p className="text-xs text-zinc-500">
-                      {item.size ? `Tamanho: ${item.size} | ` : ""}Qtd:{" "}
-                      {item.quantity}
+                      {item.sizeLabel ? `Tamanho: ${item.sizeLabel} | ` : ""}
+                      Qtd: {item.quantity}
                     </p>
                   </div>
                   <div className="text-right shrink-0">

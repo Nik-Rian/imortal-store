@@ -32,6 +32,8 @@ export const orderItemSchema = z
   .object({
     variantId: z.string().optional(),
     productId: z.string().optional(),
+    sizeId: z.string().optional(),
+    sizeLabel: z.string().optional(),
     quantity: z
       .number({ message: "A quantidade é obrigatória" })
       .int("A quantidade deve ser um valor inteiro")

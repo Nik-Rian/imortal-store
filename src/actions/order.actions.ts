@@ -14,10 +14,10 @@ import {
 
 interface OrderItemData {
   productId: string;
-  variantId?: string | null;
   productName: string;
   dropName: string;
-  variantSize?: string | null;
+  variantName: string | null;
+  sizeLabel: string | null;
   unitPriceCents: number;
   quantity: number;
 }
@@ -101,61 +101,51 @@ export async function createOrder(payload: CreateOrderInput) {
       const now = new Date();
 
       for (const item of items) {
-        if (item.variantId) {
-          const variant = variants.find((v) => v.id === item.variantId);
-          if (!variant)
-            return { success: false, error: "Variante do produto inválida." };
+        const variant = item.variantId
+          ? variants.find((v) => v.id === item.variantId)
+          : null;
 
-          const availability = await checkProductAvailability(
-            variant.productId,
-            variant.id,
-          );
-          if (!availability.available) {
-            return {
-              success: false,
-              error:
-                availability.reason === "DROP_ENDED"
-                  ? `O drop do produto "${variant.product.name}" não está ativo no momento.`
-                  : `O produto "${variant.product.name}" (${variant.size}) não está disponível.`,
-            };
-          }
-
-          totalPriceCents += variant.product.priceCents * item.quantity;
-          orderItemsData.push({
-            productId: variant.productId,
-            variantId: variant.id,
-            productName: variant.product.name,
-            dropName: variant.product.drop?.name ?? "",
-            variantSize: variant.size ?? null,
-            unitPriceCents: variant.product.priceCents,
-            quantity: item.quantity,
-          });
-        } else if (item.productId) {
-          const product = products.find((p) => p.id === item.productId);
-          if (!product) return { success: false, error: "Produto inválido." };
-
-          const availability = await checkProductAvailability(product.id);
-          if (!availability.available) {
-            return {
-              success: false,
-              error:
-                availability.reason === "DROP_ENDED"
-                  ? `O drop do produto "${product.name}" não está ativo no momento.`
-                  : `O produto "${product.name}" não está disponível.`,
-            };
-          }
-
-          totalPriceCents += product.priceCents * item.quantity;
-          orderItemsData.push({
-            productId: product.id,
-            variantId: null,
-            productName: product.name,
-            dropName: product.drop?.name ?? "",
-            variantSize: null,
-            unitPriceCents: product.priceCents,
-            quantity: item.quantity,
-          });
+        const productId = variant ? variant.productId : item.productId;
+        if (!productId) {
+          return { success: false, error: "Produto do item não especificado." };
         }
+
+        const product = variant
+          ? variant.product
+          : products.find((p) => p.id === productId);
+
+        if (!product) {
+          return { success: false, error: "Produto inválido." };
+        }
+
+        const availability = await checkProductAvailability(
+          productId,
+          item.variantId ?? undefined,
+          item.sizeId ?? undefined,
+          item.quantity,
+        );
+
+        if (!availability.available) {
+          const detail = variant ? ` (${variant.name})` : "";
+          return {
+            success: false,
+            error:
+              availability.reason === "DROP_ENDED"
+                ? `O drop do produto "${product.name}" não está ativo no momento.`
+                : `O produto "${product.name}"${detail} não está disponível ou possui estoque insuficiente.`,
+          };
+        }
+
+        totalPriceCents += product.priceCents * item.quantity;
+        orderItemsData.push({
+          productId: product.id,
+          productName: product.name,
+          dropName: product.drop?.name ?? "",
+          variantName: variant ? variant.name : null,
+          sizeLabel: item.sizeLabel ?? null,
+          unitPriceCents: product.priceCents,
+          quantity: item.quantity,
+        });
       }
 
       const cancelableUntil = new Date(now.getTime() + 2 * 60 * 60 * 1000);

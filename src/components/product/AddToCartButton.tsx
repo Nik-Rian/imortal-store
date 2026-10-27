@@ -5,12 +5,19 @@ import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
 import { Minus, Plus, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
+import Image from "next/image";
 
-interface Variant {
+interface Size {
   id: string;
   size: string;
   isAvailable?: boolean;
-  sortOrder?: number;
+}
+
+interface Variant {
+  id: string;
+  name: string;
+  image?: string | null;
+  isAvailable?: boolean;
 }
 
 interface AddToCartButtonProps {
@@ -21,6 +28,9 @@ interface AddToCartButtonProps {
     priceCents: number;
     images: string[];
     isAvailable?: boolean;
+    hasSizes?: boolean;
+    hasVariants?: boolean;
+    sizes?: Size[];
     variants?: Variant[];
     drop?: {
       startsAt: Date | string;
@@ -41,11 +51,30 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
     : true;
 
   // Check overall stock/availability
-  const hasVariants = Boolean(product.variants && product.variants.length > 0);
+  const hasSizes = Boolean(
+    product.hasSizes && product.sizes && product.sizes.length > 0,
+  );
+  const hasVariants = Boolean(
+    product.hasVariants && product.variants && product.variants.length > 0,
+  );
+
+  const hasAvailableSizes = hasSizes
+    ? product.sizes?.some((s) => s.isAvailable !== false)
+    : true;
   const hasAvailableVariants = hasVariants
     ? product.variants?.some((v) => v.isAvailable !== false)
     : true;
-  const isSoldOut = product.isAvailable === false || !hasAvailableVariants;
+
+  const isSoldOut =
+    product.isAvailable === false ||
+    (hasSizes && !hasAvailableSizes) ||
+    (hasVariants && !hasAvailableVariants);
+
+  const [selectedSizeId, setSelectedSizeId] = useState<string | null>(
+    hasSizes
+      ? (product.sizes?.find((s) => s.isAvailable !== false)?.id ?? null)
+      : null,
+  );
 
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
     hasVariants
@@ -53,7 +82,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
       : null,
   );
 
-  // 1. Drop Closed State UI
+  // Drop Closed State UI
   if (!isDropActive) {
     return (
       <Button
@@ -65,7 +94,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
     );
   }
 
-  // 2. Sold Out State UI
+  // Sold Out State UI
   if (isSoldOut) {
     return (
       <Button
@@ -79,45 +108,56 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
   }
 
   const handleAddToCart = () => {
-    const selectedVariant = product.variants?.find(
-      (v) => v.id === selectedVariantId,
-    );
+    const selectedSize = hasSizes
+      ? product.sizes?.find((s) => s.id === selectedSizeId)
+      : null;
+    const selectedVariant = hasVariants
+      ? product.variants?.find((v) => v.id === selectedVariantId)
+      : null;
 
-    if (hasVariants && !selectedVariant) {
+    if (hasSizes && !selectedSize) {
       toast.error("Por favor, selecione um tamanho.");
       return;
     }
 
-    const itemKey = selectedVariant
-      ? `${product.id}:${selectedVariant.id}`
-      : product.id;
+    if (hasVariants && !selectedVariant) {
+      toast.error("Por favor, selecione uma variação.");
+      return;
+    }
 
     addItem(
       {
-        id: itemKey,
+        id: `${product.id}-${selectedSizeId ?? ""}-${selectedVariantId ?? ""}`,
         productId: product.id,
         variantId: selectedVariant?.id,
-        size: selectedVariant?.size,
+        sizeId: selectedSize?.id,
         name: product.name,
+        variantName: selectedVariant?.name,
+        sizeLabel: selectedSize?.size,
         slug: product.slug,
         priceCents: product.priceCents,
-        image: product.images[0] || "/placeholder.png",
+        image:
+          selectedVariant?.image || product.images[0] || "/placeholder.png",
       },
       quantity,
     );
 
     setQuantity(1);
-    const variantMessage = selectedVariant ? ` (${selectedVariant.size})` : "";
-    toast.success(`${product.name}${variantMessage} adicionado ao carrinho!`);
+
+    const sizeMessage = selectedSize ? ` (${selectedSize.size})` : "";
+    const variantMessage = selectedVariant ? ` - ${selectedVariant.name}` : "";
+    toast.success(
+      `${product.name}${sizeMessage}${variantMessage} adicionado ao carrinho!`,
+    );
   };
 
   return (
     <div className="flex flex-col gap-6 w-full">
-      {/* Size Selector */}
+      {/* Variants Selector */}
       {hasVariants && product.variants && (
         <div className="space-y-2">
           <label className="text-sm font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
-            Tamanho
+            Modelo / Cor
           </label>
           <div className="flex flex-wrap gap-2">
             {product.variants.map((variant) => {
@@ -131,6 +171,52 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
                   disabled={!isAvailable}
                   onClick={() => setSelectedVariantId(variant.id)}
                   className={`
+                    relative h-11 px-4 text-sm font-extrabold uppercase rounded-md border-2 transition-all cursor-pointer flex items-center gap-2
+                    ${
+                      !isAvailable
+                        ? "border-zinc-200 bg-zinc-100 text-zinc-400 line-through cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900"
+                        : isSelected
+                          ? "border-orange-500 bg-orange-500/10 text-orange-600 dark:text-orange-500 shadow-sm"
+                          : "border-zinc-300 dark:border-zinc-700 bg-background text-foreground hover:border-zinc-400 dark:hover:border-zinc-500"
+                    }
+                  `}
+                >
+                  {variant.image && (
+                    <div className="relative w-6 h-6 rounded-sm overflow-hidden shrink-0">
+                      <Image
+                        src={variant.image}
+                        alt={variant.name}
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                  )}
+                  {variant.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Size Selector */}
+      {hasSizes && product.sizes && (
+        <div className="space-y-2">
+          <label className="text-sm font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+            Tamanho
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {product.sizes.map((size) => {
+              const isSelected = size.id === selectedSizeId;
+              const isAvailable = size.isAvailable !== false;
+
+              return (
+                <button
+                  key={size.id}
+                  type="button"
+                  disabled={!isAvailable}
+                  onClick={() => setSelectedSizeId(size.id)}
+                  className={`
                     relative h-11 min-w-11 px-4 text-sm font-extrabold uppercase rounded-md border-2 transition-all cursor-pointer
                     ${
                       !isAvailable
@@ -141,7 +227,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
                     }
                   `}
                 >
-                  {variant.size}
+                  {size.size}
                 </button>
               );
             })}

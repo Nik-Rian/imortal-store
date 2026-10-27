@@ -8,36 +8,56 @@ import { deleteBlobImages } from "@/actions/blob.actions";
 import { requireSession } from "@/lib/auth-guard";
 
 export async function createProduct(formData: FormData) {
-  await requireSession();
+ await requireSession();
 
-  const rawPrice = (formData.get("priceCents") ??
-    formData.get("price")) as string;
+ const rawPrice = (formData.get("priceCents") ??
+   formData.get("price")) as string;
 
-  const rawVariants = formData.get("variants") as string;
-  let variantsInput: unknown = [];
-  if (rawVariants) {
-    try {
-      variantsInput = JSON.parse(rawVariants);
-    } catch {
-      variantsInput = [];
-    }
-  }
+ const rawSizes = formData.get("sizes") as string;
+ let sizesInput: unknown = [];
+ try {
+   if (rawSizes) sizesInput = JSON.parse(rawSizes);
+ } catch {}
 
-  const rawIsAvailable = formData.get("isAvailable");
-  const isAvailable =
-    rawIsAvailable === "true" ||
-    rawIsAvailable === "on" ||
-    rawIsAvailable === null;
+ const rawVariants = formData.get("variants") as string;
+ let variantsInput: unknown = [];
+ try {
+   if (rawVariants) variantsInput = JSON.parse(rawVariants);
+ } catch {}
 
-  const validationResult = productSchema.safeParse({
-    name: formData.get("name"),
-    slug: formData.get("slug"),
-    description: formData.get("description"),
-    dropId: formData.get("dropId"),
-    priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
-    isAvailable,
-    variants: variantsInput,
-  });
+ const rawIsAvailable = formData.get("isAvailable");
+ const isAvailable =
+   rawIsAvailable === "true" ||
+   rawIsAvailable === "on" ||
+   rawIsAvailable === null;
+
+ const controlStock =
+   formData.get("controlStock") === "true" ||
+   formData.get("controlStock") === "on";
+ const hasSizes =
+   formData.get("hasSizes") === "true" || formData.get("hasSizes") === "on";
+ const hasVariants =
+   formData.get("hasVariants") === "true" ||
+   formData.get("hasVariants") === "on";
+ const showVariantsInStore =
+   formData.get("showVariantsInStore") === "true" ||
+   formData.get("showVariantsInStore") === "on" ||
+   formData.get("showVariantsInStore") === null;
+
+ const validationResult = productSchema.safeParse({
+   name: formData.get("name"),
+   slug: formData.get("slug"),
+   description: formData.get("description"),
+   dropId: formData.get("dropId"),
+   priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
+   isAvailable,
+   controlStock,
+   hasSizes,
+   hasVariants,
+   showVariantsInStore,
+   sizes: sizesInput,
+   variants: variantsInput,
+ });
 
   if (!validationResult.success) {
     const firstErrorMessage =
@@ -46,7 +66,7 @@ export async function createProduct(formData: FormData) {
     throw new Error(firstErrorMessage);
   }
 
-  const { name, slug, description, dropId, priceCents, variants } =
+  const { name, slug, description, dropId, priceCents, sizes, variants } =
     validationResult.data;
 
   const images = formData.getAll("images") as string[];
@@ -59,11 +79,23 @@ export async function createProduct(formData: FormData) {
         description,
         priceCents,
         dropId,
-        isAvailable: validationResult.data.isAvailable,
         images,
+        isAvailable: validationResult.data.isAvailable,
+        controlStock: validationResult.data.controlStock,
+        hasSizes: validationResult.data.hasSizes,
+        hasVariants: validationResult.data.hasVariants,
+        showVariantsInStore: validationResult.data.showVariantsInStore,
+        sizes: {
+          create: sizes.map((s) => ({
+            size: s.size,
+            isAvailable: s.isAvailable,
+            sortOrder: s.sortOrder,
+          })),
+        },
         variants: {
           create: variants.map((v) => ({
-            size: v.size,
+            name: v.name,
+            image: v.image,
             isAvailable: v.isAvailable,
             sortOrder: v.sortOrder,
           })),
@@ -83,10 +115,20 @@ export async function createProduct(formData: FormData) {
 }
 
 export async function updateProduct(id: string, formData: FormData) {
-await requireSession();
+  await requireSession();
 
   const rawPrice = (formData.get("priceCents") ??
     formData.get("price")) as string;
+
+  const rawSizes = formData.get("sizes") as string;
+  let sizesInput: unknown = [];
+  if (rawSizes) {
+    try {
+      sizesInput = JSON.parse(rawSizes);
+    } catch {
+      sizesInput = [];
+    }
+  }
 
   const rawVariants = formData.get("variants") as string;
   let variantsInput: unknown = [];
@@ -101,6 +143,19 @@ await requireSession();
   const rawIsAvailable = formData.get("isAvailable");
   const isAvailable = rawIsAvailable === "true" || rawIsAvailable === "on";
 
+  const controlStock =
+    formData.get("controlStock") === "true" ||
+    formData.get("controlStock") === "on";
+  const hasSizes =
+    formData.get("hasSizes") === "true" || formData.get("hasSizes") === "on";
+  const hasVariants =
+    formData.get("hasVariants") === "true" ||
+    formData.get("hasVariants") === "on";
+  const showVariantsInStore =
+    formData.get("showVariantsInStore") === "true" ||
+    formData.get("showVariantsInStore") === "on" ||
+    formData.get("showVariantsInStore") === null;
+
   const validationResult = productSchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
@@ -108,6 +163,11 @@ await requireSession();
     dropId: formData.get("dropId"),
     priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
     isAvailable,
+    controlStock,
+    hasSizes,
+    hasVariants,
+    showVariantsInStore,
+    sizes: sizesInput,
     variants: variantsInput,
   });
 
@@ -118,13 +178,13 @@ await requireSession();
     throw new Error(firstErrorMessage);
   }
 
-  const { name, slug, description, dropId, priceCents, variants } =
+  const { name, slug, description, dropId, priceCents, sizes, variants } =
     validationResult.data;
   const newImages = formData.getAll("images") as string[];
 
   const currentProduct = await prisma.product.findUnique({
     where: { id },
-    include: { variants: true },
+    include: { variants: true, sizes: true },
   });
 
   if (!currentProduct) {
@@ -135,38 +195,76 @@ await requireSession();
     (img) => !newImages.includes(img),
   );
 
-  const toCreate = variants.filter((v) => !v.id);
-  const toUpdate = variants.filter((v) => !!v.id);
-  const incomingIds = toUpdate.map((v) => v.id!);
-  const toDelete = currentProduct.variants.filter(
-    (v) => !incomingIds.includes(v.id),
+  const sizesToCreate = sizes.filter((s) => !s.id);
+  const sizesToUpdate = sizes.filter((s) => !!s.id);
+  const incomingSizeIds = sizesToUpdate.map((s) => s.id!);
+  const sizesToDelete = currentProduct.sizes.filter(
+    (s) => !incomingSizeIds.includes(s.id),
+  );
+
+  const variantsToCreate = variants.filter((v) => !v.id);
+  const variantsToUpdate = variants.filter((v) => !!v.id);
+  const incomingVariantIds = variantsToUpdate.map((v) => v.id!);
+  const variantsToDelete = currentProduct.variants.filter(
+    (v) => !incomingVariantIds.includes(v.id),
   );
 
   try {
     await prisma.$transaction([
-      ...(toDelete.length > 0
+      ...(sizesToDelete.length > 0
         ? [
-            prisma.productVariant.deleteMany({
-              where: { id: { in: toDelete.map((v) => v.id) } },
+            prisma.productSize.deleteMany({
+              where: { id: { in: sizesToDelete.map((s) => s.id) } },
             }),
           ]
         : []),
-      ...toUpdate.map((v) =>
+      ...sizesToUpdate.map((s) =>
+        prisma.productSize.update({
+          where: { id: s.id! },
+          data: {
+            size: s.size,
+            isAvailable: s.isAvailable,
+            sortOrder: s.sortOrder,
+          },
+        }),
+      ),
+      ...(sizesToCreate.length > 0
+        ? [
+            prisma.productSize.createMany({
+              data: sizesToCreate.map((s) => ({
+                productId: id,
+                size: s.size,
+                isAvailable: s.isAvailable,
+                sortOrder: s.sortOrder,
+              })),
+            }),
+          ]
+        : []),
+      ...(variantsToDelete.length > 0
+        ? [
+            prisma.productVariant.deleteMany({
+              where: { id: { in: variantsToDelete.map((v) => v.id) } },
+            }),
+          ]
+        : []),
+      ...variantsToUpdate.map((v) =>
         prisma.productVariant.update({
           where: { id: v.id! },
           data: {
-            size: v.size,
+            name: v.name,
+            image: v.image,
             isAvailable: v.isAvailable,
             sortOrder: v.sortOrder,
           },
         }),
       ),
-      ...(toCreate.length > 0
+      ...(variantsToCreate.length > 0
         ? [
             prisma.productVariant.createMany({
-              data: toCreate.map((v) => ({
+              data: variantsToCreate.map((v) => ({
                 productId: id,
-                size: v.size,
+                name: v.name,
+                image: v.image,
                 isAvailable: v.isAvailable,
                 sortOrder: v.sortOrder,
               })),
@@ -182,6 +280,10 @@ await requireSession();
           priceCents,
           dropId,
           isAvailable: validationResult.data.isAvailable,
+          controlStock: validationResult.data.controlStock,
+          hasSizes: validationResult.data.hasSizes,
+          hasVariants: validationResult.data.hasVariants,
+          showVariantsInStore: validationResult.data.showVariantsInStore,
           images: newImages,
         },
       }),
