@@ -65,31 +65,41 @@ export async function createOrder(payload: CreateOrderInput) {
     }
 
     if (!order) {
-      const variantIds = items
-        .map((item) => item.variantId)
-        .filter((id): id is string => Boolean(id));
-
-      const productIds = items
-        .filter((item) => !item.variantId)
-        .map((item) => item.productId)
-        .filter((id): id is string => Boolean(id));
-
+      const variantIds = [
+        ...new Set(
+          items
+            .map((item) => item.variantId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      const productIds = [
+        ...new Set(
+          items
+            .filter((item) => !item.variantId)
+            .map((item) => item.productId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
       const [variants, products] = await Promise.all([
         variantIds.length > 0
           ? prisma.productVariant.findMany({
               where: { id: { in: variantIds } },
-              include: { product: { include: { drop: true } } },
+              include: { product: { include: { drop: true, sizes: true } } },
             })
           : [],
         productIds.length > 0
           ? prisma.product.findMany({
               where: { id: { in: productIds } },
-              include: { drop: true },
+              include: { drop: true, sizes: true },
             })
           : [],
       ]);
-
-      if (variants.length + products.length !== items.length) {
+      // Compare against distinct ids: the same product/variant can appear on
+      // several cart lines (e.g. two sizes).
+      if (
+        variants.length !== variantIds.length ||
+        products.length !== productIds.length
+      ) {
         return {
           success: false,
           error: "Um ou mais produtos selecionados não foram encontrados.",
@@ -118,6 +128,10 @@ export async function createOrder(payload: CreateOrderInput) {
           return { success: false, error: "Produto inválido." };
         }
 
+        const sizeLabel = item.sizeId
+          ? (product.sizes.find((s) => s.id === item.sizeId)?.size ?? null)
+          : null;
+
         const availability = await checkProductAvailability(
           productId,
           item.variantId ?? undefined,
@@ -142,7 +156,7 @@ export async function createOrder(payload: CreateOrderInput) {
           productName: product.name,
           dropName: product.drop?.name ?? "",
           variantName: variant ? variant.name : null,
-          sizeLabel: item.sizeLabel ?? null,
+          sizeLabel,
           unitPriceCents: product.priceCents,
           quantity: item.quantity,
         });

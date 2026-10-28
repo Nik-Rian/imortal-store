@@ -47,6 +47,7 @@ async function main() {
   console.log("Cleaning up database...");
 
   // Clean up dependent tables first to avoid foreign key errors
+  await prisma.stockReservation.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.productVariant.deleteMany();
