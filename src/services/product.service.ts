@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { cache } from "react";
+import { buildStockKey } from "@/lib/stock-key";
 
 export interface GetProductsOptions {
   activeOnly?: boolean;
@@ -118,38 +119,46 @@ export async function checkProductAvailability(
       drop: true,
       variants: true,
       sizes: true,
-      stockItems: {
-        where: {
-          variantId: variantId || null,
-          sizeId: sizeId || null,
-        },
-      },
+      stockItems: true,
     },
   });
+  if (!product) return { available: false, reason: "NOT_FOUND" };
+  if (product.drop.startsAt > now || product.drop.endsAt < now) {
+    return { available: false, reason: "DROP_ENDED" };
+  }
+  if (!product.isAvailable) {
+    return { available: false, reason: "PRODUCT_UNAVAILABLE" };
+  }
 
-if (!product) return { available: false, reason: "NOT_FOUND" };
-  if (product.drop.startsAt > now || product.drop.endsAt < now) return { available: false, reason: "DROP_ENDED" };
-  if (!product.isAvailable) return { available: false, reason: "PRODUCT_UNAVAILABLE" };
+  // Same rule as the storefront: a dimension is active only when the flag is
+  // on and rows exist. When active, a valid selection is required.
+  const usesVariants = product.hasVariants && product.variants.length > 0;
+  const usesSizes = product.hasSizes && product.sizes.length > 0;
 
-  if (product.hasVariants && variantId) {
+  if (usesVariants) {
     const variant = product.variants.find((v) => v.id === variantId);
-    if (!variant || !variant.isAvailable) return { available: false, reason: "VARIANT_UNAVAILABLE" };
+    if (!variant || !variant.isAvailable) {
+      return { available: false, reason: "VARIANT_UNAVAILABLE" };
+    }
   }
-
-  if (product.hasSizes && sizeId) {
+  if (usesSizes) {
     const size = product.sizes.find((s) => s.id === sizeId);
-    if (!size || !size.isAvailable) return { available: false, reason: "SIZE_UNAVAILABLE" };
-  }
-
-  if (product.controlStock) {
-    const stockItem = product.stockItems[0];
-    if (!stockItem) return { available: false, reason: "OUT_OF_STOCK" };
-
-    const availableStock = stockItem.onHand - stockItem.reserved;
-    if (availableStock < requestedQuantity) {
-      return { available: false, reason: "OUT_OF_STOCK" };
+    if (!size || !size.isAvailable) {
+      return { available: false, reason: "SIZE_UNAVAILABLE" };
     }
   }
 
+  if (product.controlStock) {
+    const key = buildStockKey(
+      productId,
+      usesVariants ? variantId : null,
+      usesSizes ? sizeId : null,
+    );
+    const stockItem = product.stockItems.find((s) => s.stockKey === key);
+    if (!stockItem) return { available: false, reason: "OUT_OF_STOCK" };
+    if (stockItem.onHand - stockItem.reserved < requestedQuantity) {
+      return { available: false, reason: "OUT_OF_STOCK" };
+    }
+  }
   return { available: true };
 }
