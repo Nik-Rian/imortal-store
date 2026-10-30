@@ -5,7 +5,11 @@ import { OrderStatusButtons } from "@/components/admin/OrderStatusButtons";
 import { PrintButton } from "@/components/admin/PrintButton";
 import { MarkAllReadyButton } from "@/components/admin/MarkAllReadyButton";
 
-import type { OrderStatus, PaymentStatus } from "@/generated/prisma/client";
+import type {
+  OrderStatus,
+  PaymentReviewReason,
+  PaymentStatus,
+} from "@/generated/prisma/client";
 
 const PAYMENT_BADGES: Record<
   PaymentStatus,
@@ -44,6 +48,12 @@ const FULFILLMENT_LABELS: Record<OrderStatus, string> = {
   READY_FOR_PICKUP: "Pronto p/ retirada",
   COMPLETED: "Retirado",
   CANCELED: "Cancelado",
+};
+
+const REVIEW_LABELS: Record<PaymentReviewReason, string> = {
+  AMOUNT_MISMATCH: "Revisar: valor divergente",
+  OVERPAID: "Revisar: pago a mais",
+  LATE_PAYMENT: "Revisar: pagamento tardio",
 };
 
 export default async function AdminOrdersPage({
@@ -189,6 +199,13 @@ export default async function AdminOrdersPage({
                         {FULFILLMENT_LABELS[order.status]}
                       </span>
                     </div>
+                    {order.paymentReviewReason && (
+                      <div>
+                        <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
+                          {REVIEW_LABELS[order.paymentReviewReason]}
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 print:hidden">
                     {formatPrice(order.totalPriceCents)}
