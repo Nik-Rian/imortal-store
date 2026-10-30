@@ -141,6 +141,14 @@ export async function createOrder(payload: CreateOrderInput) {
 
         if (!availability.available) {
           const detail = variant ? ` (${variant.name})` : "";
+
+          console.warn("[createOrder] Item unavailable", {
+            productId,
+            variantId: item.variantId,
+            sizeId: item.sizeId,
+            reason: availability.reason,
+          });
+
           return {
             success: false,
             error:

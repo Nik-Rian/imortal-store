@@ -152,6 +152,12 @@ enum OrderStatus {
   CANCELED
 }
 
+enum PaymentReviewReason {
+  AMOUNT_MISMATCH
+  OVERPAID
+  LATE_PAYMENT
+}
+
 model Order {
   id              String      @id @default(cuid())
   accessToken     String      @unique
@@ -164,6 +170,7 @@ model Order {
   providerStatusDetail String?
   paidAmount           Int?
   lastPaymentSync      DateTime?
+  paymentReviewReason  PaymentReviewReason?
   totalPriceCents Int
   cancelableUntil DateTime
   mpPaymentId     String?

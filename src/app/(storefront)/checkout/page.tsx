@@ -103,6 +103,7 @@ const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     const formattedItems = items.map((item) => ({
       productId: item.variantId ? undefined : item.productId || item.id,
       variantId: item.variantId || undefined,
+      sizeId: item.sizeId || undefined,
       quantity: item.quantity,
     }));
 
