@@ -2,7 +2,8 @@
 
 import { useTransition } from "react";
 import { updateOrderStatus } from "@/actions/order.actions";
-import type { OrderStatus } from "@/generated/prisma/client";
+import { nextAdminStatus } from "@/lib/order-status";
+import type { OrderStatus, PaymentStatus } from "@/generated/prisma/client";
 
 export function OrderStatusButtons({
   orderId,
@@ -10,8 +11,8 @@ export function OrderStatusButtons({
   paymentStatus,
 }: {
   orderId: string;
-  currentStatus: OrderStatus | string;
-  paymentStatus: string;
+  currentStatus: OrderStatus;
+  paymentStatus: PaymentStatus;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -21,7 +22,10 @@ export function OrderStatusButtons({
     });
   };
 
-  if (paymentStatus === "PAID" && currentStatus === "PENDING") {
+  // Same table the server enforces, so the UI never offers a step it rejects.
+  const next = nextAdminStatus(currentStatus, paymentStatus);
+
+  if (next === "READY_FOR_PICKUP") {
     return (
       <button
         onClick={() => handleUpdate("READY_FOR_PICKUP" as OrderStatus)}
@@ -33,7 +37,7 @@ export function OrderStatusButtons({
     );
   }
 
-  if (currentStatus === "READY_FOR_PICKUP") {
+  if (next === "COMPLETED") {
     return (
       <button
         onClick={() => handleUpdate("COMPLETED" as OrderStatus)}

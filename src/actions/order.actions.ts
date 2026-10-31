@@ -8,6 +8,7 @@ import {
 } from "@/services/product.service";
 import { createPixOrder } from "@/services/mercadopago.service";
 import { requireSession } from "@/lib/auth-guard";
+import { getAdminTransitionRule } from "@/lib/order-status";
 import { revalidatePath } from "next/cache";
 import { OrderStatus } from "@/generated/prisma/client";
 import {
@@ -315,28 +316,23 @@ export async function updateOrderStatus(
 ) {
   await requireSession();
 
-  // target status -> status the order must currently have
-  const requiredCurrentStatus: Partial<Record<OrderStatus, OrderStatus>> = {
-    READY_FOR_PICKUP: "PENDING",
-    COMPLETED: "READY_FOR_PICKUP",
-  };
-  const from = requiredCurrentStatus[newStatus];
-  if (!from) {
+  // newStatus comes from the client, so the enum type is not a guarantee.
+  // Anything that is not an offered step is rejected here.
+  const rule = getAdminTransitionRule(newStatus);
+  if (!rule) {
     return {
       success: false as const,
       error: "Transição de status não permitida.",
     };
   }
 
-  // The paid check is part of the UPDATE itself, so it cannot race with a
-  // webhook that reverts the payment between a read and a write.
+  // The state checks are part of the UPDATE itself, so they cannot race with a
+  // webhook that changes the payment between a read and a write.
   const result = await prisma.order.updateMany({
     where: {
       id: orderId,
-      status: from,
-      ...(newStatus === "READY_FOR_PICKUP"
-        ? { paymentStatus: "PAID" as const }
-        : {}),
+      status: rule.from,
+      ...(rule.requiredPayment ? { paymentStatus: rule.requiredPayment } : {}),
     },
     data: { status: newStatus },
   });
@@ -349,6 +345,7 @@ export async function updateOrderStatus(
       error: "Pedido não está elegível para esta transição.",
     };
   }
+
   return { success: true as const };
 }
 
