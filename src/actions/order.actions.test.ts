@@ -1,12 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createOrder } from "./order.actions";
 import { prisma } from "@/lib/prisma";
+import { createPixOrder } from "@/services/mercadopago.service";
+import { checkProductAvailability } from "@/services/product.service";
 
 // Mock das dependências
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     order: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
@@ -99,5 +102,235 @@ describe("createOrder Validation", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/CPF válido/);
+  });
+});
+
+describe("createOrder retry and duplicate protection", () => {
+  const payload = {
+    customerName: "Maria Silva",
+    customerPhone: "11999999999",
+    customerEmail: "maria@example.com",
+    customerCpf: "52998224725",
+    items: [{ productId: "prod-1", quantity: 1 }],
+  };
+  const retryPayload = {
+    ...payload,
+    orderId: "order-1",
+    accessToken: "token-1",
+  };
+  const storedOrder = (overrides: Record<string, unknown> = {}) => ({
+    id: "order-1",
+    accessToken: "token-1",
+    idempotencyKey: "key-1",
+    status: "PENDING",
+    paymentStatus: "PENDING",
+    customerName: "Maria Silva",
+    customerPhone: "11999999999",
+    customerEmail: "maria@example.com",
+    totalPriceCents: 5000,
+    pixQrCode: null,
+    mpPaymentId: null,
+    ...overrides,
+  });
+  const pixResult = {
+    paymentId: "pay-1",
+    orderId: "ORD1",
+    qrCode: "qr",
+    qrCodeBase64: "b64",
+    status: "action_required",
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(createPixOrder).mockResolvedValue(pixResult);
+    vi.mocked(prisma.order.update).mockResolvedValue({} as never);
+    vi.mocked(checkProductAvailability).mockResolvedValue({
+      available: true,
+    } as never);
+    vi.mocked(prisma.product.findMany).mockResolvedValue([
+      {
+        id: "prod-1",
+        name: "Camisa",
+        priceCents: 5000,
+        drop: { name: "Drop 1" },
+        sizes: [],
+      },
+    ] as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["canceled", { status: "CANCELED" }],
+    ["ready for pickup", { status: "READY_FOR_PICKUP" }],
+    ["completed", { status: "COMPLETED" }],
+    ["paid", { paymentStatus: "PAID" }],
+    ["in review", { paymentStatus: "IN_REVIEW" }],
+  ])(
+    "never calls the provider for an order that is %s",
+    async (_label, overrides) => {
+      vi.mocked(prisma.order.findUnique).mockResolvedValue(
+        storedOrder(overrides) as never,
+      );
+      const result = await createOrder(retryPayload);
+      expect(result).toMatchObject({ success: true, orderId: "order-1" });
+      expect(createPixOrder).not.toHaveBeenCalled();
+      expect(prisma.order.update).not.toHaveBeenCalled();
+      expect(prisma.order.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not call the provider again once the Pix charge exists", async () => {
+    vi.mocked(prisma.order.findUnique).mockResolvedValue(
+      storedOrder({ pixQrCode: "qr", mpPaymentId: "pay-1" }) as never,
+    );
+    const result = await createOrder(retryPayload);
+    expect(result).toMatchObject({ success: true, orderId: "order-1" });
+    expect(createPixOrder).not.toHaveBeenCalled();
+  });
+
+  it("does not return an access token for an order the caller does not own", async () => {
+    vi.mocked(prisma.order.findUnique).mockResolvedValue(
+      storedOrder() as never,
+    );
+    const result = await createOrder({
+      ...retryPayload,
+      accessToken: "someone-elses-token",
+    });
+    expect(result.success).toBe(false);
+    expect(result.accessToken).toBeUndefined();
+    expect(result.orderId).toBeUndefined();
+    expect(result).not.toHaveProperty("orderId");
+    expect(createPixOrder).not.toHaveBeenCalled();
+    expect(prisma.order.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a retry that supplies only the order id", async () => {
+    const result = await createOrder({ ...payload, orderId: "order-1" });
+    expect(result.success).toBe(false);
+    expect(result).not.toHaveProperty("accessToken");
+    expect(prisma.order.findUnique).not.toHaveBeenCalled();
+    expect(createPixOrder).not.toHaveBeenCalled();
+  });
+
+  it("returns the existing order for a repeated attempt key", async () => {
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(
+      storedOrder({ pixQrCode: "qr", mpPaymentId: "pay-1" }) as never,
+    );
+    const result = await createOrder({ ...payload, attemptKey: "key-1" });
+    expect(result).toMatchObject({
+      success: true,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(prisma.order.findFirst).toHaveBeenCalledWith({
+      where: { idempotencyKey: "key-1" },
+    });
+    expect(prisma.order.create).not.toHaveBeenCalled();
+    expect(createPixOrder).not.toHaveBeenCalled();
+  });
+
+  it("resumes the winning order when two submissions with one attempt key race", async () => {
+    vi.mocked(prisma.order.findFirst)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(storedOrder() as never);
+    vi.mocked(prisma.order.create).mockRejectedValue(
+      new Error("Unique constraint failed on idempotencyKey"),
+    );
+    const result = await createOrder({ ...payload, attemptKey: "key-1" });
+    expect(result).toMatchObject({
+      success: true,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
+    expect(createPixOrder).toHaveBeenCalledTimes(1);
+    expect(createPixOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: "order-1", idempotencyKey: "key-1" }),
+    );
+  });
+
+  it("surfaces a create failure when no order exists for the key", async () => {
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.order.create).mockRejectedValue(new Error("db down"));
+    const result = await createOrder({ ...payload, attemptKey: "key-1" });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("db down");
+    expect(result.accessToken).toBeUndefined();
+    expect(result.orderId).toBeUndefined();
+    expect(createPixOrder).not.toHaveBeenCalled();
+  });
+
+  it("lets the customer retry the same order after a provider failure", async () => {
+    vi.mocked(prisma.order.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(prisma.order.create).mockResolvedValue(storedOrder() as never);
+    vi.mocked(createPixOrder).mockRejectedValueOnce(
+      new Error("Mercado Pago API Error: boom"),
+    );
+
+    const first = await createOrder({ ...payload, attemptKey: "key-1" });
+    expect(first).toMatchObject({
+      success: false,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+
+    vi.mocked(prisma.order.findUnique).mockResolvedValue(
+      storedOrder() as never,
+    );
+    const second = await createOrder({
+      ...payload,
+      attemptKey: "key-1",
+      orderId: first.orderId,
+      accessToken: first.accessToken,
+    });
+    expect(second).toMatchObject({
+      success: true,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
+    expect(createPixOrder).toHaveBeenCalledTimes(2);
+    expect(createPixOrder).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        orderId: "order-1",
+        idempotencyKey: "key-1",
+        cpf: "52998224725",
+      }),
+    );
+    expect(prisma.order.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "order-1" },
+        data: expect.objectContaining({ mpPaymentId: "pay-1" }),
+      }),
+    );
+  });
+
+  it("builds the payer from the stored order, not from the retry payload", async () => {
+    vi.mocked(prisma.order.findUnique).mockResolvedValue(
+      storedOrder() as never,
+    );
+    await createOrder({
+      ...retryPayload,
+      customerName: "Joao Impostor",
+      customerEmail: "other@example.com",
+      customerPhone: "21988888888",
+      items: [{ productId: "other-prod", quantity: 9 }],
+    });
+    expect(createPixOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        firstName: "Maria",
+        lastName: "Silva",
+        email: "maria@example.com",
+        phone: "11999999999",
+        amount: 50,
+      }),
+    );
+    expect(prisma.order.create).not.toHaveBeenCalled();
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
   });
 });

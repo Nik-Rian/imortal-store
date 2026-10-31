@@ -61,7 +61,9 @@ export async function createOrder(payload: CreateOrderInput) {
     }
 
     if (!order && attemptKey) {
-      order = await prisma.order.findFirst({ where: { idempotencyKey: attemptKey } });
+      order = await prisma.order.findFirst({
+        where: { idempotencyKey: attemptKey },
+      });
     }
 
     if (!order) {
@@ -174,29 +176,39 @@ export async function createOrder(payload: CreateOrderInput) {
       const newAccessToken = randomUUID();
       const newIdempotencyKey = attemptKey || randomUUID();
 
-      order = await prisma.order.create({
-        data: {
-          accessToken: newAccessToken,
-          customerName,
-          customerPhone: customerPhone ?? null,
-          customerEmail: customerEmail ?? null,
-          status: "PENDING",
-          totalPriceCents,
-          cancelableUntil,
-          idempotencyKey: newIdempotencyKey,
-          items: {
-            createMany: {
-              data: orderItemsData,
+      try {
+        order = await prisma.order.create({
+          data: {
+            accessToken: newAccessToken,
+            customerName,
+            customerPhone: customerPhone ?? null,
+            customerEmail: customerEmail ?? null,
+            status: "PENDING",
+            totalPriceCents,
+            cancelableUntil,
+            idempotencyKey: newIdempotencyKey,
+            items: {
+              createMany: {
+                data: orderItemsData,
+              },
             },
           },
-        },
-      });
+        });
+      } catch (createError) {
+        const existing = attemptKey
+          ? await prisma.order.findFirst({
+              where: { idempotencyKey: attemptKey },
+            })
+          : null;
+        if (!existing) throw createError;
+        order = existing;
+      }
     }
 
     orderIdForRetry = order.id;
     accessTokenForRetry = order.accessToken;
 
-    if (order.status !== "PENDING") {
+    if (order.status !== "PENDING" || order.paymentStatus !== "PENDING") {
       return {
         success: true,
         orderId: order.id,
