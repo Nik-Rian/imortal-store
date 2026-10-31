@@ -1,13 +1,45 @@
 import Link from "next/link";
 import { getProducts } from "@/services/product.service";
+import { getStorefrontDrop } from "@/services/drop.service";
 import { formatPrice } from "@/lib/utils";
 
 // Time-based ISR fallback: revalidate static shell every 1 hour (3600 seconds)
 export const revalidate = 3600;
 
 export default async function LojaPage() {
-  // fetch data
-  const products = await getProducts();
+  const [dropResult, products] = await Promise.all([
+    getStorefrontDrop()
+      .then((drop) => ({ drop, available: true }))
+      .catch((error: unknown) => {
+        console.error("[LojaPage] Failed to load storefront drop.", error);
+
+        return { drop: null, available: false };
+      }),
+    getProducts(),
+  ]);
+
+  const { drop, available } = dropResult;
+
+  if (available && !drop) {
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center bg-zinc-50 px-6 text-zinc-900">
+        <div className="w-full max-w-xl border-4 border-black bg-white p-8 text-center shadow-[10px_10px_0px_#f97316]">
+          <p className="text-sm font-black uppercase tracking-[0.25em] text-orange-500">
+            IMORTAL STORE
+          </p>
+          <h1 className="mt-4 text-4xl font-black uppercase leading-tight tracking-tight">
+            Aguarde o próximo semestre
+          </h1>
+          <p className="mt-4 font-medium text-zinc-600">
+            No momento não há nenhum drop disponível. Volte em breve para
+            conferir as novidades da Atlética IMORTAL.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const isSalesClosed = drop ? drop.endsAt < new Date() : false;
 
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-900">
@@ -29,6 +61,12 @@ export default async function LojaPage() {
             Vista as cores da Atlética IMORTAL. Peças oficiais e edições
             limitadas.
           </p>
+
+          {isSalesClosed && (
+            <p className="mt-6 inline-block border-2 border-black bg-zinc-900 px-4 py-2 text-sm font-black uppercase tracking-widest text-white">
+              Vendas encerradas
+            </p>
+          )}
         </section>
 
         {/* PRODUCTS */}

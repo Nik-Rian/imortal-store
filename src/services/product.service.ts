@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { cache } from "react";
 import { buildStockKey } from "@/lib/stock-key";
+import { getStorefrontDrop } from "@/services/drop.service";
 
 export interface GetProductsOptions {
   activeOnly?: boolean;
@@ -8,18 +9,15 @@ export interface GetProductsOptions {
 
 export const getProducts = cache(async (options: GetProductsOptions = {}) => {
   const { activeOnly = true } = options;
-  const now = new Date();
 
   try {
+    // activeOnly is the storefront view (BD-01): only the products of the drop
+    // the storefront presents, whether its sales window is open or closed.
+    const storefrontDrop = activeOnly ? await getStorefrontDrop() : null;
+    if (activeOnly && !storefrontDrop) return [];
+
     return await prisma.product.findMany({
-      where: activeOnly
-        ? {
-            drop: {
-              startsAt: { lte: now },
-              endsAt: { gte: now },
-            },
-          }
-        : undefined,
+      where: storefrontDrop ? { dropId: storefrontDrop.id } : undefined,
       include: {
         drop: true,
       },
@@ -37,20 +35,15 @@ export const getProducts = cache(async (options: GetProductsOptions = {}) => {
 export const getProductBySlug = cache(
   async (slug: string, options: GetProductsOptions = {}) => {
     const { activeOnly = true } = options;
-    const now = new Date();
 
     try {
+      const storefrontDrop = activeOnly ? await getStorefrontDrop() : null;
+      if (activeOnly && !storefrontDrop) return null;
+
       return await prisma.product.findFirst({
         where: {
           slug,
-          ...(activeOnly
-            ? {
-                drop: {
-                  startsAt: { lte: now },
-                  endsAt: { gte: now },
-                },
-              }
-            : {}),
+          ...(storefrontDrop ? { dropId: storefrontDrop.id } : {}),
         },
         include: {
           drop: true,
