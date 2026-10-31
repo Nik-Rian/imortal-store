@@ -1,6 +1,5 @@
 import "dotenv/config";
 import { auth } from "../src/lib/auth";
-import { prisma } from "../src/lib/prisma";
 
 async function main() {
   const [email, password, name] = process.argv.slice(2);
@@ -12,20 +11,13 @@ async function main() {
     process.exit(1);
   }
 
-  const result = await auth.api.signUpEmail({
-    body: { email, password, name: name ?? email },
+  // No headers: trusted server-side call, so no admin session is needed to
+  // create the first admin. The role is set in the same write.
+  const { user } = await auth.api.createUser({
+    body: { email, password, name: name ?? email, role: "admin" },
   });
 
-  if (!result?.user?.id) {
-    throw new Error("Falha ao criar o usuário administrador.");
-  }
-
-  await prisma.user.update({
-    where: { id: result.user.id },
-    data: { role: "admin" },
-  });
-
-  console.log("Admin criado:", result.user.email);
+  console.log("Admin criado:", user.email);
 }
 
 main().catch((err) => {

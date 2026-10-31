@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth-guard";
+import { headers } from "next/headers";
 
 export async function createAdminUser(formData: FormData) {
   await requireSession();
@@ -17,17 +18,9 @@ export async function createAdminUser(formData: FormData) {
     throw new Error("Missing required fields");
   }
 
-  const result = await auth.api.signUpEmail({
-    body: { email, password, name },
-  });
-
-  if (!result?.user?.id) {
-    throw new Error("Falha ao criar usuário.");
-  }
-
-  await prisma.user.update({
-    where: { id: result.user.id },
-    data: { role: "admin" },
+  await auth.api.createUser({
+    body: { email, password, name, role: "admin" },
+    headers: await headers(),
   });
 
   revalidatePath("/admin/usuarios");
@@ -41,8 +34,8 @@ export async function deleteAdminUser(userId: string) {
     throw new Error("Você não pode remover seu próprio acesso.");
   }
 
-  const userCount = await prisma.user.count();
-  if (userCount <= 1) {
+  const adminCount = await prisma.user.count({ where: { role: "admin" } });
+  if (adminCount <= 1) {
     throw new Error("Não é possível remover o último usuário administrador.");
   }
 
