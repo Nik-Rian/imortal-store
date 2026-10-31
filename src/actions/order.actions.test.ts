@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createOrder } from "./order.actions";
+import { createOrder, updateOrderStatus } from "./order.actions";
 import { prisma } from "@/lib/prisma";
 import { createPixOrder } from "@/services/mercadopago.service";
 import { checkProductAvailability } from "@/services/product.service";
@@ -17,6 +17,10 @@ vi.mock("@/lib/prisma", () => ({
     productVariant: { findMany: vi.fn() },
     product: { findMany: vi.fn() },
   },
+}));
+
+vi.mock("@/lib/auth-guard", () => ({
+  requireSession: vi.fn(),
 }));
 
 vi.mock("@/services/product.service", () => ({
@@ -443,5 +447,63 @@ describe("createOrder variant and size selection", () => {
     expect(result.error).toMatch(/não pertence/);
     expect(checkProductAvailability).not.toHaveBeenCalled();
     expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateOrderStatus", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 1 });
+  });
+
+  it.each(["SHIPPED", "constructor", "__proto__", "", "pending"])(
+    "rejects the non-enum status %j without touching the database",
+    async (status) => {
+      const result = await updateOrderStatus("order-1", status as never);
+
+      expect(result.success).toBe(false);
+      expect(prisma.order.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["PENDING", "CANCELED"] as const)(
+    "rejects moving an order to %s",
+    async (status) => {
+      const result = await updateOrderStatus("order-1", status);
+
+      expect(result).toMatchObject({ success: false });
+      expect(prisma.order.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it("requires PENDING and PAID in the UPDATE itself to mark ready", async () => {
+    const result = await updateOrderStatus("order-1", "READY_FOR_PICKUP");
+
+    expect(result).toEqual({ success: true });
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: "order-1", status: "PENDING", paymentStatus: "PAID" },
+      data: { status: "READY_FOR_PICKUP" },
+    });
+  });
+
+  it("completes only a READY_FOR_PICKUP order, whatever the payment status", async () => {
+    const result = await updateOrderStatus("order-1", "COMPLETED");
+
+    expect(result).toEqual({ success: true });
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: "order-1", status: "READY_FOR_PICKUP" },
+      data: { status: "COMPLETED" },
+    });
+  });
+
+  it("reports an order that is not in the required state, such as an unpaid one", async () => {
+    vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 0 });
+
+    const result = await updateOrderStatus("order-1", "READY_FOR_PICKUP");
+
+    expect(result).toEqual({
+      success: false,
+      error: "Pedido não está elegível para esta transição.",
+    });
   });
 });
