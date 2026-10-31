@@ -7,13 +7,20 @@ import { formatPrice } from "@/lib/utils";
 export const revalidate = 3600;
 
 export default async function LojaPage() {
-  // fetch data
-  const [drop, products] = await Promise.all([
-    getStorefrontDrop(),
+  const [dropResult, products] = await Promise.all([
+    getStorefrontDrop()
+      .then((drop) => ({ drop, available: true }))
+      .catch((error: unknown) => {
+        console.error("[LojaPage] Failed to load storefront drop.", error);
+
+        return { drop: null, available: false };
+      }),
     getProducts(),
   ]);
 
-  if (!drop) {
+  const { drop, available } = dropResult;
+
+  if (available && !drop) {
     return (
       <div className="flex min-h-[70vh] items-center justify-center bg-zinc-50 px-6 text-zinc-900">
         <div className="w-full max-w-xl border-4 border-black bg-white p-8 text-center shadow-[10px_10px_0px_#f97316]">
@@ -32,7 +39,7 @@ export default async function LojaPage() {
     );
   }
 
-  const isSalesClosed = drop.endsAt < new Date();
+  const isSalesClosed = drop ? drop.endsAt < new Date() : false;
 
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-900">
