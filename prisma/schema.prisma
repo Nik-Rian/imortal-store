@@ -158,6 +158,11 @@ enum PaymentReviewReason {
   LATE_PAYMENT
 }
 
+enum PaymentMethod {
+  PIX
+  CARD
+}
+
 model Order {
   id              String      @id @default(cuid())
   accessToken     String      @unique
@@ -171,6 +176,8 @@ model Order {
   paidAmount           Int?
   lastPaymentSync      DateTime?
   paymentReviewReason  PaymentReviewReason?
+  paymentMethod        PaymentMethod @default(PIX)
+  installments         Int?
   totalPriceCents Int
   cancelableUntil DateTime
   mpPaymentId     String?
