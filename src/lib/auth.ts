@@ -14,9 +14,10 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
-    // No public sign-up route exists anywhere in the app — accounts are only
-    // created via scripts/create-admin.ts or the in-app Usuários page.
-    autoSignIn: false, // creating a user shouldn't log the creator out of their own session
+    // Public sign-up is closed. Admins are created with the admin plugin's
+    // createUser (Usuários page, scripts/create-admin.ts), never via sign-up.
+    disableSignUp: true,
+    autoSignIn: false,
   },
   plugins: [
     admin({
