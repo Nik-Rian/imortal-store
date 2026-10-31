@@ -2,7 +2,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
-import { checkProductAvailability } from "@/services/product.service";
+import {
+  checkProductAvailability,
+  type AvailabilityCheckResult,
+} from "@/services/product.service";
 import { createPixOrder } from "@/services/mercadopago.service";
 import { requireSession } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
@@ -20,6 +23,25 @@ interface OrderItemData {
   sizeLabel: string | null;
   unitPriceCents: number;
   quantity: number;
+}
+
+function availabilityErrorMessage(
+  reason: AvailabilityCheckResult["reason"],
+  productName: string,
+  variantName?: string | null,
+): string {
+  switch (reason) {
+    case "DROP_ENDED":
+      return `O drop do produto "${productName}" não está ativo no momento.`;
+    case "VARIANT_UNAVAILABLE":
+      return `Selecione uma variação válida e disponível para "${productName}".`;
+    case "SIZE_UNAVAILABLE":
+      return `Selecione um tamanho válido e disponível para "${productName}".`;
+    default: {
+      const detail = variantName ? ` (${variantName})` : "";
+      return `O produto "${productName}"${detail} não está disponível ou possui estoque insuficiente.`;
+    }
+  }
 }
 
 export async function createOrder(payload: CreateOrderInput) {
@@ -117,6 +139,13 @@ export async function createOrder(payload: CreateOrderInput) {
           ? variants.find((v) => v.id === item.variantId)
           : null;
 
+        if (variant && item.productId && item.productId !== variant.productId) {
+          return {
+            success: false,
+            error: "A variação selecionada não pertence ao produto informado.",
+          };
+        }
+
         const productId = variant ? variant.productId : item.productId;
         if (!productId) {
           return { success: false, error: "Produto do item não especificado." };
@@ -142,21 +171,19 @@ export async function createOrder(payload: CreateOrderInput) {
         );
 
         if (!availability.available) {
-          const detail = variant ? ` (${variant.name})` : "";
-
           console.warn("[createOrder] Item unavailable", {
             productId,
             variantId: item.variantId,
             sizeId: item.sizeId,
             reason: availability.reason,
           });
-
           return {
             success: false,
-            error:
-              availability.reason === "DROP_ENDED"
-                ? `O drop do produto "${product.name}" não está ativo no momento.`
-                : `O produto "${product.name}"${detail} não está disponível ou possui estoque insuficiente.`,
+            error: availabilityErrorMessage(
+              availability.reason,
+              product.name,
+              variant?.name,
+            ),
           };
         }
 
