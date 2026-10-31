@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getProductImage } from "@/lib/media";
 
 type ProductGalleryProps = {
   images: string[];
@@ -9,7 +10,7 @@ type ProductGalleryProps = {
 
 export function ProductGallery({ images, productName }: ProductGalleryProps) {
   // State to track which image is currently selected. Defaults to the first image.
-  const [mainImage, setMainImage] = useState(images[0]);
+  const [mainImage, setMainImage] = useState(getProductImage(images));
 
   return (
     <div className="flex flex-col gap-4">

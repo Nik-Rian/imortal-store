@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Minus, Plus, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
+import { getProductImage } from "@/lib/media";
 
 interface Size {
   id: string;
@@ -136,8 +137,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
         sizeLabel: selectedSize?.size,
         slug: product.slug,
         priceCents: product.priceCents,
-        image:
-          selectedVariant?.image || product.images[0] || "/placeholder.png",
+        image: selectedVariant?.image || getProductImage(product.images),
       },
       quantity,
     );
