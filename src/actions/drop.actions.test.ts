@@ -112,9 +112,13 @@ describe("purgeDrop", () => {
   it("purges an expired drop and removes its blob images", async () => {
     const tx = {
       product: {
-        findMany: vi
-          .fn()
-          .mockResolvedValue([{ id: "p1", images: ["https://blob/x.png"] }]),
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "p1",
+            images: ["https://blob/x.png"],
+            variants: [{ image: "https://blob/v.png" }, { image: null }],
+          },
+        ]),
         deleteMany: vi.fn(),
       },
       orderItem: {
@@ -134,6 +138,9 @@ describe("purgeDrop", () => {
     expect(tx.drop.delete).toHaveBeenCalledWith({
       where: { id: "expired-drop" },
     });
-    expect(deleteBlobImages).toHaveBeenCalledWith(["https://blob/x.png"]);
+    expect(deleteBlobImages).toHaveBeenCalledWith([
+      "https://blob/x.png",
+      "https://blob/v.png",
+    ]);
   });
 });

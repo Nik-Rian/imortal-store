@@ -9,6 +9,12 @@ import {
   AllowedSize,
 } from "@/lib/validations/product.schema";
 import { uploadProductImage, deleteBlobImages } from "@/actions/blob.actions";
+import {
+  MAX_IMAGE_BYTES,
+  IMAGE_SIZE_ERROR,
+  IMAGE_TYPE_ERROR,
+  isAllowedImageType,
+} from "@/lib/media";
 import { ImagePlus, Loader2, Trash2, X } from "lucide-react";
 
 type DropOption = {
@@ -77,14 +83,14 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     {
       id?: string;
       name: string;
-      image?: string;
+      image: string | null;
       sortOrder: number;
       isAvailable: boolean;
     }[]
   >(
     initialData?.variants?.map((v, idx) => ({
       ...v,
-      image: v.image ?? undefined,
+      image: v.image ?? null,
       sortOrder: v.sortOrder ?? idx,
       isAvailable: v.isAvailable ?? true,
     })) ?? [],
@@ -127,7 +133,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
   const handleAddVariant = () => {
     setVariants((prev) => [
       ...prev,
-      { name: "", sortOrder: prev.length, isAvailable: true },
+      { name: "", image: null, sortOrder: prev.length, isAvailable: true },
     ]);
     setHasVariants(true);
   };
@@ -153,31 +159,68 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     setName(e.target.value);
   };
 
-  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const uploadImageFile = async (file: File): Promise<string> => {
+      // Pre-check so oversized/wrong files never hit the Server Action body limit.
+      if (!isAllowedImageType(file.type)) throw new Error(IMAGE_TYPE_ERROR);
+      if (file.size > MAX_IMAGE_BYTES) throw new Error(IMAGE_SIZE_ERROR);
+      const uploadFormData = new FormData();
+      uploadFormData.append("file", file);
+      const result = await uploadProductImage(uploadFormData);
+      if (!result.success) throw new Error(result.error);
+      return result.url;
+    };
 
-    setIsUploading(true);
-    setError(null);
-
-    try {
-      for (const file of Array.from(files)) {
-        const uploadFormData = new FormData();
-        uploadFormData.append("file", file);
-
-        const uploadedUrl = await uploadProductImage(uploadFormData);
-        setImages((prev) => [...prev, uploadedUrl]);
+    const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      setIsUploading(true);
+      setError(null);
+      try {
+        for (const file of Array.from(files)) {
+          const uploadedUrl = await uploadImageFile(file);
+          setImages((prev) => [...prev, uploadedUrl]);
+        }
+      } catch (err) {
+        console.error("Erro ao enviar imagem:", err);
+        setError(
+          err instanceof Error ? err.message : "Falha ao enviar a imagem.",
+        );
+      } finally {
+        setIsUploading(false);
+        e.target.value = "";
       }
-    } catch (err) {
-      console.error("Erro ao enviar imagem:", err);
-      setError(
-        err instanceof Error ? err.message : "Falha ao enviar a imagem.",
-      );
-    } finally {
-      setIsUploading(false);
+    };
+
+    const handleVariantImageChange = async (
+      index: number,
+      e: ChangeEvent<HTMLInputElement>,
+    ) => {
+      const file = e.target.files?.[0];
       e.target.value = "";
-    }
-  };
+      if (!file) return;
+      setIsUploading(true);
+      setError(null);
+      try {
+        const url = await uploadImageFile(file);
+        setVariants((prev) =>
+          prev.map((v, idx) => (idx === index ? { ...v, image: url } : v)),
+        );
+      } catch (err) {
+        console.error("Erro ao enviar imagem da variante:", err);
+        setError(
+          err instanceof Error ? err.message : "Falha ao enviar a imagem.",
+        );
+      } finally {
+        setIsUploading(false);
+      }
+    };
+
+    // The old blob is deleted server-side when the product is saved.
+    const handleRemoveVariantImage = (index: number) => {
+      setVariants((prev) =>
+        prev.map((v, idx) => (idx === index ? { ...v, image: null } : v)),
+      );
+    };
 
   const handleRemoveImage = async (indexToRemove: number) => {
     const urlToRemove = images[indexToRemove];
@@ -262,7 +305,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
     } finally {
       setIsPending(false);
     }
-  };;
+  };
 
   return (
     <form
@@ -467,7 +510,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
             )}
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               multiple
               onChange={handleFileChange}
               disabled={isPending || isUploading}
@@ -597,6 +640,36 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
                 key={index}
                 className="flex items-center justify-between bg-zinc-50 border border-zinc-200 px-3 py-2 rounded-md gap-4"
               >
+                <div className="relative h-12 w-12 shrink-0">
+                  {variant.image ? (
+                    <>
+                      <img
+                        src={variant.image}
+                        alt={`Foto da variante ${variant.name || index + 1}`}
+                        className="h-12 w-12 rounded border object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveVariantImage(index)}
+                        disabled={isPending || isUploading}
+                        className="absolute -top-1 -right-1 bg-black/70 text-white rounded-full p-0.5 hover:bg-black"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </>
+                  ) : (
+                    <label className="flex h-12 w-12 cursor-pointer items-center justify-center rounded border-2 border-dashed border-zinc-300 bg-white hover:border-zinc-500">
+                      <ImagePlus className="w-4 h-4 text-zinc-400" />
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(e) => handleVariantImageChange(index, e)}
+                        disabled={isPending || isUploading}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
                 <div className="flex-1">
                   <input
                     type="text"
@@ -612,7 +685,7 @@ export function ProductForm({ action, initialData, drops }: ProductFormProps) {
                   <button
                     type="button"
                     onClick={() => handleRemoveVariant(index)}
-                    disabled={isPending}
+                    disabled={isPending || isUploading}
                     className="p-1 text-red-600 hover:text-red-800 disabled:opacity-30"
                   >
                     <Trash2 className="w-4 h-4" />
