@@ -6,26 +6,46 @@ import { revalidatePath } from "next/cache";
 import { deleteBlobImages } from "./blob.actions";
 
 /**
- * Instantly closes sales for an entire drop by setting its endsAt date to now.
+ * Instantly closes sales for an open drop by setting its endsAt date to now.
+ * Closing an already-closed drop is a no-op, so a stale click never moves
+ * its endsAt forward.
  */
 export async function closeDropSales(dropId: string) {
   await requireSession();
 
-  await prisma.drop.update({
-    where: { id: dropId },
-    data: {
-      endsAt: new Date(),
-    },
+  const now = new Date();
+
+  await prisma.drop.updateMany({
+    where: { id: dropId, endsAt: { gte: now } },
+    data: { endsAt: now },
   });
 
   revalidatePath("/");
+  revalidatePath("/produto/[slug]", "page");
+  revalidatePath("/admin");
   revalidatePath("/admin/produtos");
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2002"
+  );
+}
+
+const dropConflictError = (name: string) =>
+  `Já existe um semestre ${name}. Apague-o antes de iniciar um novo semestre com o mesmo nome.`;
+
 /**
  * Auto-generates and creates a new active semester Drop.
+ * Expected failures are returned (not thrown) so the message survives
+ * production builds, where thrown action errors are masked.
  */
-export async function createDrop() {
+export async function createDrop(): Promise<
+  { success: true } | { success: false; error: string }
+> {
   await requireSession();
 
   const now = new Date();
@@ -34,21 +54,46 @@ export async function createDrop() {
   const name = `${year}.${semester}`;
   const slug = `${year}-${semester}`;
 
+  const openDrop = await prisma.drop.findFirst({
+    where: { endsAt: { gte: now } },
+    select: { name: true },
+  });
+  if (openDrop) {
+    return {
+      success: false,
+      error: `O semestre ${openDrop.name} ainda está aberto. Encerre as vendas dele antes de iniciar outro.`,
+    };
+  }
+
+  const conflict = await prisma.drop.findFirst({
+    where: { OR: [{ name }, { slug }] },
+    select: { id: true },
+  });
+  if (conflict) {
+    return { success: false, error: dropConflictError(name) };
+  }
+
   const endsAt = new Date(now);
   endsAt.setMonth(endsAt.getMonth() + 6);
 
-  await prisma.drop.create({
-    data: {
-      name,
-      slug,
-      startsAt: now,
-      endsAt,
-    },
-  });
+  try {
+    await prisma.drop.create({
+      data: { name, slug, startsAt: now, endsAt },
+    });
+  } catch (error) {
+    // Lost a race against another create between the check and the insert.
+    if (isUniqueConstraintError(error)) {
+      return { success: false, error: dropConflictError(name) };
+    }
+    throw error;
+  }
 
   revalidatePath("/");
+  revalidatePath("/produto/[slug]", "page");
   revalidatePath("/admin");
   revalidatePath("/admin/produtos");
+
+  return { success: true };
 }
 
 /**
@@ -117,6 +162,7 @@ export async function purgeDrop(dropId: string) {
   }
 
   revalidatePath("/");
+    revalidatePath("/produto/[slug]", "page");
   revalidatePath("/admin");
   revalidatePath("/admin/produtos");
 }

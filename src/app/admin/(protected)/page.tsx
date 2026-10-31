@@ -1,8 +1,8 @@
-import { getActiveDrop } from "@/services/drop.service";
+import { getAdminDrops } from "@/services/drop.service";
 import { SemesterLifecycleSlot } from "@/components/admin/SemesterLifecycleSlot";
 
 export default async function AdminDashboardPage() {
-  const activeDrop = await getActiveDrop();
+  const drops = await getAdminDrops();
 
   return (
     <div className="space-y-6">
@@ -15,7 +15,7 @@ export default async function AdminDashboardPage() {
         </p>
       </div>
 
-      <SemesterLifecycleSlot activeDrop={activeDrop} />
+      <SemesterLifecycleSlot drops={drops} />
     </div>
   );
 }
