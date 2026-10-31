@@ -334,3 +334,114 @@ describe("createOrder retry and duplicate protection", () => {
     expect(prisma.product.findMany).not.toHaveBeenCalled();
   });
 });
+
+describe("createOrder variant and size selection", () => {
+  const payload = {
+    customerName: "Maria Silva",
+    customerPhone: "11999999999",
+    customerEmail: "maria@example.com",
+    customerCpf: "52998224725",
+    items: [{ productId: "prod-1", quantity: 1 }],
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(prisma.product.findMany).mockResolvedValue([
+      {
+        id: "prod-1",
+        name: "Camisa",
+        priceCents: 5000,
+        drop: { name: "Drop 1" },
+        sizes: [],
+      },
+    ] as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("rejects a product-only line when the product requires a variant", async () => {
+    vi.mocked(checkProductAvailability).mockResolvedValue({
+      available: false,
+      reason: "VARIANT_UNAVAILABLE",
+    });
+
+    const result = await createOrder(payload);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/variação/);
+    // The action forwards the missing selection untouched to the rule.
+    expect(checkProductAvailability).toHaveBeenCalledWith(
+      "prod-1",
+      undefined,
+      undefined,
+      1,
+    );
+    expect(prisma.order.create).not.toHaveBeenCalled();
+    expect(createPixOrder).not.toHaveBeenCalled();
+  });
+
+  it("still creates the order for a product without variants", async () => {
+    vi.mocked(checkProductAvailability).mockResolvedValue({ available: true });
+    vi.mocked(prisma.order.create).mockResolvedValue({
+      id: "order-1",
+      accessToken: "token-1",
+      idempotencyKey: "key-1",
+      status: "PENDING",
+      paymentStatus: "PENDING",
+      customerName: "Maria Silva",
+      customerPhone: "11999999999",
+      customerEmail: "maria@example.com",
+      totalPriceCents: 5000,
+      pixQrCode: null,
+      mpPaymentId: null,
+    } as never);
+    vi.mocked(prisma.order.update).mockResolvedValue({} as never);
+    vi.mocked(createPixOrder).mockResolvedValue({
+      paymentId: "pay-1",
+      orderId: "ORD1",
+      qrCode: "qr",
+      qrCodeBase64: "b64",
+      status: "action_required",
+    });
+
+    const result = await createOrder(payload);
+
+    expect(result).toMatchObject({
+      success: true,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a variant that belongs to a different product than the line", async () => {
+    vi.mocked(prisma.productVariant.findMany).mockResolvedValue([
+      {
+        id: "var-1",
+        productId: "prod-2",
+        name: "Preta",
+        product: {
+          id: "prod-2",
+          name: "Outra",
+          priceCents: 1000,
+          drop: { name: "Drop 1" },
+          sizes: [],
+        },
+      },
+    ] as never);
+
+    const result = await createOrder({
+      ...payload,
+      items: [{ productId: "prod-1", variantId: "var-1", quantity: 1 }],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/não pertence/);
+    expect(checkProductAvailability).not.toHaveBeenCalled();
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+});
