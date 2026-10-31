@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getProducts } from "@/services/product.service";
 import { getStorefrontDrop } from "@/services/drop.service";
+import { getProductImage } from "@/lib/media";
 import { formatPrice } from "@/lib/utils";
 
 // Time-based ISR fallback: revalidate static shell every 1 hour (3600 seconds)
@@ -101,7 +102,7 @@ export default async function LojaPage() {
               >
                 <div className="aspect-4/5 overflow-hidden border-b-2 border-black bg-zinc-100">
                   <img
-                    src={product.images[0]}
+                    src={getProductImage(product.images)}
                     alt={product.name}
                     className="
                       h-full
