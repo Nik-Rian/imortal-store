@@ -2,6 +2,15 @@
 
 import { put, del } from "@vercel/blob";
 import { requireSession } from "@/lib/auth-guard";
+import { randomUUID } from "node:crypto";
+import {
+  ALLOWED_IMAGE_TYPES,
+  IMAGE_SIGNATURE_BYTES,
+  IMAGE_SIZE_ERROR,
+  IMAGE_TYPE_ERROR,
+  MAX_IMAGE_BYTES,
+  detectImageType,
+} from "@/lib/media";
 
 const allowedBlobHosts = new Set(
   (process.env.VERCEL_BLOB_HOSTNAMES ?? "")
@@ -29,24 +38,37 @@ function isAllowedBlobUrl(value: string): boolean {
 }
 
 /**
- * Uploads a single image file to Vercel Blob and returns its public URL.
+ * Uploads a single image to Vercel Blob and returns its public URL.
+ * Admin-only. Size and real file type are validated before anything is stored.
  */
-export async function uploadProductImage(formData: FormData): Promise<string> {
+export async function uploadProductImage(
+  formData: FormData,
+): Promise<{ success: true; url: string } | { success: false; error: string }> {
   await requireSession();
 
-  const file = formData.get("file") as File | null;
-
-  if (!file || file.size === 0) {
-    throw new Error("Nenhum arquivo enviado.");
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { success: false, error: "Nenhum arquivo enviado." };
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    return { success: false, error: IMAGE_SIZE_ERROR };
   }
 
-  // Generate a clean filename under a `products/` path prefix
-  const cleanFilename = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-  const blob = await put(`products/${Date.now()}-${cleanFilename}`, file, {
-    access: "public",
-  });
+  const header = new Uint8Array(
+    await file.slice(0, IMAGE_SIGNATURE_BYTES).arrayBuffer(),
+  );
+  const contentType = detectImageType(header);
+  if (!contentType) {
+    return { success: false, error: IMAGE_TYPE_ERROR };
+  }
 
-  return blob.url;
+  // Keep the `products/` prefix: next.config.ts allows images only under it.
+  const blob = await put(
+    `products/${randomUUID()}.${ALLOWED_IMAGE_TYPES[contentType]}`,
+    file,
+    { access: "public", contentType },
+  );
+  return { success: true, url: blob.url };
 }
 
 /**

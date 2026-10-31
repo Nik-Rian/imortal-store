@@ -191,8 +191,27 @@ export async function updateProduct(id: string, formData: FormData) {
     throw new Error("Produto não encontrado.");
   }
 
-  const removedImages = currentProduct.images.filter(
-    (img) => !newImages.includes(img),
+  // URLs that must survive this save (product photos + variant images).
+  const keptImageUrls = new Set<string>([
+    ...newImages,
+    ...variants.flatMap((v) => (v.image ? [v.image] : [])),
+  ]);
+
+  // Candidates for deletion: product photos plus the images of variants that
+  // were deleted, cleared or replaced. `incoming.image === undefined` means the
+  // field wasn't sent, which Prisma treats as "leave unchanged".
+  const staleImageUrls = [
+    ...currentProduct.images,
+    ...currentProduct.variants.flatMap((current) => {
+      if (!current.image) return [];
+      const incoming = variants.find((v) => v.id === current.id);
+      if (incoming && incoming.image === undefined) return [];
+      return [current.image];
+    }),
+  ];
+
+  const removedImages = Array.from(new Set(staleImageUrls)).filter(
+    (url) => !keptImageUrls.has(url),
   );
 
   const sizesToCreate = sizes.filter((s) => !s.id);
@@ -307,23 +326,23 @@ export async function updateProduct(id: string, formData: FormData) {
 
 export async function deleteProduct(id: string) {
   await requireSession();
-
   const currentProduct = await prisma.product.findUnique({
     where: { id },
-    select: { images: true },
+    select: { images: true, variants: { select: { image: true } } },
   });
-
   if (!currentProduct) {
     throw new Error("Produto não encontrado.");
   }
-
+  const imageUrls = [
+    ...currentProduct.images,
+    ...currentProduct.variants.flatMap((v) => (v.image ? [v.image] : [])),
+  ];
   try {
     await prisma.product.delete({
       where: { id },
     });
-
-    if (currentProduct.images.length > 0) {
-      await deleteBlobImages(currentProduct.images);
+    if (imageUrls.length > 0) {
+      await deleteBlobImages(imageUrls);
     }
   } catch (error: unknown) {
     if (error instanceof Error) {
@@ -331,7 +350,6 @@ export async function deleteProduct(id: string) {
     }
     throw new Error("Erro desconhecido ao deletar produto.");
   }
-
   revalidatePath("/admin/produtos");
   revalidatePath("/");
 }

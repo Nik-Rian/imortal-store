@@ -8,6 +8,12 @@ const blobHostnames = (process.env.VERCEL_BLOB_HOSTNAMES ?? "")
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
+  experimental: {
+    serverActions: {
+      // MAX_IMAGE_BYTES (5 MiB, src/lib/media.ts) + multipart overhead.
+      bodySizeLimit: 6 * 1024 * 1024,
+    },
+  },
   allowedDevOrigins: ["*.ngrok-free.dev", "aside-drew-flavored.ngrok-free.dev"],
   images: {
     remotePatterns: [

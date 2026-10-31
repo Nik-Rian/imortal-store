@@ -112,12 +112,15 @@ export async function purgeDrop(dropId: string) {
   await prisma.$transaction(async (tx) => {
     const products = await tx.product.findMany({
       where: { dropId },
-      select: { id: true, images: true },
+      select: { id: true, images: true, variants: { select: { image: true } } },
     });
 
     const productIds = products.map((p) => p.id);
 
-    imagesToDelete = products.flatMap((p) => p.images);
+    imagesToDelete = products.flatMap((p) => [
+      ...p.images,
+      ...p.variants.flatMap((v) => (v.image ? [v.image] : [])),
+    ]);
 
     if (productIds.length > 0) {
       const orderItems = await tx.orderItem.findMany({
@@ -162,7 +165,7 @@ export async function purgeDrop(dropId: string) {
   }
 
   revalidatePath("/");
-    revalidatePath("/produto/[slug]", "page");
+  revalidatePath("/produto/[slug]", "page");
   revalidatePath("/admin");
   revalidatePath("/admin/produtos");
 }
