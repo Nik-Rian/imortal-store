@@ -33,7 +33,7 @@ export function verifyMercadoPagoSignature({
     if (key === "v1") hash = value;
   }
 
-  if (!ts || !hash) {
+  if (!ts || !hash || !/^[0-9a-f]{64}$/i.test(hash)) {
     return false;
   }
 
