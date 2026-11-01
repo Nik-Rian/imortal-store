@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -9,6 +9,10 @@ import { ArrowLeft, Loader2, ShoppingBag } from "lucide-react";
 import { createOrder } from "@/actions/order.actions";
 import { checkoutSchema } from "@/lib/validations/checkout.schema";
 import { MercadoPagoInitializer } from "@/components/storefront/MercadoPagoInitializer";
+import {
+  CardPaymentFields,
+  type CardPaymentFieldsHandle,
+} from "@/components/storefront/CardPaymentFields";
 
 // Format CPF: 000.000.000-00
 function formatCPF(value: string) {
@@ -32,6 +36,19 @@ function formatPhone(value: string) {
     .replace(/(\d{5})(\d{1,4})$/, "$1-$2");
 }
 
+type PaymentMethod = "PIX" | "CARD";
+
+// NEXT_PUBLIC_* is inlined at build time. Without the key, card fields cannot
+// load, so the card option is hidden and checkout behaves exactly as before.
+const CARD_ENABLED = Boolean(process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY);
+
+const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
+  { value: "PIX", label: "Pix" },
+  ...(CARD_ENABLED
+    ? [{ value: "CARD" as const, label: "Cartão de crédito ou débito" }]
+    : []),
+];
+
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, cartTotal, clearCart } = useCart();
@@ -51,7 +68,10 @@ export default function CheckoutPage() {
   );
   const [pendingOrder, setPendingOrder] = useState<
     { id: string; accessToken: string } | undefined
-  >(undefined);
+    >(undefined);
+
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("PIX");
+  const cardRef = useRef<CardPaymentFieldsHandle>(null);
 
   if (items.length === 0) {
     return (
@@ -107,6 +127,15 @@ const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
       quantity: item.quantity,
     }));
 
+    // Tokenization happens in the browser. Only the token reaches the server.
+    const card =
+      paymentMethod === "CARD"
+        ? await cardRef.current?.tokenize(validData.customerCpf)
+        : undefined;
+    if (paymentMethod === "CARD" && !card) {
+      throw new Error("Preencha os dados do cartão.");
+    }
+
     const orderResult = await createOrder({
       orderId: pendingOrder?.id,
       accessToken: pendingOrder?.accessToken,
@@ -116,6 +145,8 @@ const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
       customerPhone: cleanPhone,
       customerCpf: validData.customerCpf, // Stays in memory
       items: formattedItems,
+      paymentMethod,
+      card,
     });
 
     if (!orderResult.success || !orderResult.accessToken) {
@@ -125,7 +156,10 @@ const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
           accessToken: orderResult.accessToken,
         });
       }
-      throw new Error(orderResult.error || "Falha ao processar o pedido.");
+      throw new Error(
+        orderResult.error ||
+          "Ocorreu um erro inesperado ao processar o pagamento.",
+      );
     }
 
     // Clear cart and redirect using the order accessToken
@@ -233,7 +267,54 @@ const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
                 </div>
               </div>
 
-              <div className="pt-4 border-t dark:border-zinc-800">
+              <div className="pt-4 border-t dark:border-zinc-800 space-y-4">
+                {PAYMENT_OPTIONS.length > 1 && (
+                  <div className="space-y-2">
+                    <span className="block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+                      Forma de pagamento
+                    </span>
+                    <div
+                      role="radiogroup"
+                      aria-label="Forma de pagamento"
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                    >
+                      {PAYMENT_OPTIONS.map((option) => {
+                        const selected = paymentMethod === option.value;
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            disabled={isLoading}
+                            onClick={() => {
+                              setPaymentMethod(option.value);
+                              setError(null);
+                            }}
+                            className={`rounded-lg border-2 px-4 py-3 text-sm font-bold transition-colors cursor-pointer disabled:opacity-50 ${
+                              selected
+                                ? "border-emerald-600 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                : "border-zinc-300 text-zinc-700 hover:border-zinc-400 dark:border-zinc-700 dark:text-zinc-300"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {paymentMethod === "CARD" && (
+                  // key: installment amounts depend on the total, so the fields
+                  // remount (and re-query) if the cart total changes.
+                  <CardPaymentFields
+                    key={cartTotal}
+                    ref={cardRef}
+                    amountCents={cartTotal}
+                  />
+                )}
+
                 <button
                   type="submit"
                   disabled={isLoading}
@@ -242,8 +323,12 @@ const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
                   {isLoading ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      Gerando Pagamento Pix...
+                      {paymentMethod === "CARD"
+                        ? "Processando Pagamento..."
+                        : "Gerando Pagamento Pix..."}
                     </>
+                  ) : paymentMethod === "CARD" ? (
+                    "Pagar com Cartão"
                   ) : (
                     "Pagar com Pix"
                   )}
