@@ -128,6 +128,7 @@ describe("purgeDrop", () => {
       order: { deleteMany: vi.fn() },
       productVariant: { deleteMany: vi.fn() },
       drop: { delete: vi.fn() },
+      bundleComponent: { deleteMany: vi.fn() },
     };
     vi.mocked(prisma.$transaction).mockImplementation(((
       callback: (client: typeof tx) => unknown,
@@ -138,9 +139,23 @@ describe("purgeDrop", () => {
     expect(tx.drop.delete).toHaveBeenCalledWith({
       where: { id: "expired-drop" },
     });
+
+    expect(tx.bundleComponent.deleteMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { bundleId: { in: ["p1"] } },
+          { componentProductId: { in: ["p1"] } },
+        ],
+      },
+    });
+    expect(
+      tx.bundleComponent.deleteMany.mock.invocationCallOrder[0],
+    ).toBeLessThan(tx.product.deleteMany.mock.invocationCallOrder[0]);
+
     expect(deleteBlobImages).toHaveBeenCalledWith([
       "https://blob/x.png",
       "https://blob/v.png",
     ]);
+
   });
 });

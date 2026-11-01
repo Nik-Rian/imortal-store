@@ -50,6 +50,7 @@ async function main() {
   await prisma.stockReservation.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
+  await prisma.bundleComponent.deleteMany();
   await prisma.productVariant.deleteMany();
   await prisma.product.deleteMany();
   await prisma.drop.deleteMany();

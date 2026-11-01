@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { productSchema } from "@/lib/validations/product.schema";
+import {
+  applyBundleRules,
+  productSchema,
+} from "@/lib/validations/product.schema";
+import { assertBundleIntegrity } from "@/services/bundle.service";
 import { deleteBlobImages } from "@/actions/blob.actions";
 import { requireSession } from "@/lib/auth-guard";
 
@@ -44,6 +48,14 @@ export async function createProduct(formData: FormData) {
    formData.get("showVariantsInStore") === "on" ||
    formData.get("showVariantsInStore") === null;
 
+  const isBundle =
+    formData.get("isBundle") === "true" || formData.get("isBundle") === "on";
+  const rawComponents = formData.get("components") as string;
+  let componentsInput: unknown = [];
+  try {
+    if (rawComponents) componentsInput = JSON.parse(rawComponents);
+  } catch {}
+
  const validationResult = productSchema.safeParse({
    name: formData.get("name"),
    slug: formData.get("slug"),
@@ -57,6 +69,8 @@ export async function createProduct(formData: FormData) {
    showVariantsInStore,
    sizes: sizesInput,
    variants: variantsInput,
+   isBundle,
+   components: componentsInput,
  });
 
   if (!validationResult.success) {
@@ -66,10 +80,18 @@ export async function createProduct(formData: FormData) {
     throw new Error(firstErrorMessage);
   }
 
+  const input = applyBundleRules(validationResult.data);
+
   const { name, slug, description, dropId, priceCents, sizes, variants } =
-    validationResult.data;
+    input;
 
   const images = formData.getAll("images") as string[];
+
+  await assertBundleIntegrity({
+    dropId,
+    isBundle: input.isBundle,
+    components: input.components,
+  });
 
   try {
     await prisma.product.create({
@@ -80,11 +102,12 @@ export async function createProduct(formData: FormData) {
         priceCents,
         dropId,
         images,
-        isAvailable: validationResult.data.isAvailable,
-        controlStock: validationResult.data.controlStock,
-        hasSizes: validationResult.data.hasSizes,
-        hasVariants: validationResult.data.hasVariants,
-        showVariantsInStore: validationResult.data.showVariantsInStore,
+        isAvailable: input.isAvailable,
+        isBundle: input.isBundle,
+        controlStock: input.controlStock,
+        hasSizes: input.hasSizes,
+        hasVariants: input.hasVariants,
+        showVariantsInStore: input.showVariantsInStore,
         sizes: {
           create: sizes.map((s) => ({
             size: s.size,
@@ -98,6 +121,12 @@ export async function createProduct(formData: FormData) {
             image: v.image,
             isAvailable: v.isAvailable,
             sortOrder: v.sortOrder,
+          })),
+        },
+        components: {
+          create: input.components.map((c) => ({
+            componentProductId: c.componentProductId,
+            quantity: c.quantity,
           })),
         },
       },
@@ -156,6 +185,14 @@ export async function updateProduct(id: string, formData: FormData) {
     formData.get("showVariantsInStore") === "on" ||
     formData.get("showVariantsInStore") === null;
 
+  const isBundle =
+    formData.get("isBundle") === "true" || formData.get("isBundle") === "on";
+  const rawComponents = formData.get("components") as string;
+  let componentsInput: unknown = [];
+  try {
+    if (rawComponents) componentsInput = JSON.parse(rawComponents);
+  } catch {}
+
   const validationResult = productSchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
@@ -169,6 +206,8 @@ export async function updateProduct(id: string, formData: FormData) {
     showVariantsInStore,
     sizes: sizesInput,
     variants: variantsInput,
+    isBundle,
+    components: componentsInput,
   });
 
   if (!validationResult.success) {
@@ -178,8 +217,9 @@ export async function updateProduct(id: string, formData: FormData) {
     throw new Error(firstErrorMessage);
   }
 
+  const input = applyBundleRules(validationResult.data);
   const { name, slug, description, dropId, priceCents, sizes, variants } =
-    validationResult.data;
+    input;
   const newImages = formData.getAll("images") as string[];
 
   const currentProduct = await prisma.product.findUnique({
@@ -190,6 +230,13 @@ export async function updateProduct(id: string, formData: FormData) {
   if (!currentProduct) {
     throw new Error("Produto não encontrado.");
   }
+
+  await assertBundleIntegrity({
+    productId: id,
+    dropId,
+    isBundle: input.isBundle,
+    components: input.components,
+  });
 
   // URLs that must survive this save (product photos + variant images).
   const keptImageUrls = new Set<string>([
@@ -290,6 +337,18 @@ export async function updateProduct(id: string, formData: FormData) {
             }),
           ]
         : []),
+      prisma.bundleComponent.deleteMany({ where: { bundleId: id } }),
+      ...(input.components.length > 0
+        ? [
+            prisma.bundleComponent.createMany({
+              data: input.components.map((c) => ({
+                bundleId: id,
+                componentProductId: c.componentProductId,
+                quantity: c.quantity,
+              })),
+            }),
+          ]
+        : []),
       prisma.product.update({
         where: { id },
         data: {
@@ -298,11 +357,12 @@ export async function updateProduct(id: string, formData: FormData) {
           description,
           priceCents,
           dropId,
-          isAvailable: validationResult.data.isAvailable,
-          controlStock: validationResult.data.controlStock,
-          hasSizes: validationResult.data.hasSizes,
-          hasVariants: validationResult.data.hasVariants,
-          showVariantsInStore: validationResult.data.showVariantsInStore,
+          isAvailable: input.isAvailable,
+          isBundle: input.isBundle,
+          controlStock: input.controlStock,
+          hasSizes: input.hasSizes,
+          hasVariants: input.hasVariants,
+          showVariantsInStore: input.showVariantsInStore,
           images: newImages,
         },
       }),
@@ -326,28 +386,50 @@ export async function updateProduct(id: string, formData: FormData) {
 
 export async function deleteProduct(id: string) {
   await requireSession();
+
   const currentProduct = await prisma.product.findUnique({
     where: { id },
-    select: { images: true, variants: { select: { image: true } } },
+    select: {
+      images: true,
+      variants: { select: { image: true } },
+      componentOf: { select: { bundle: { select: { name: true } } } },
+    },
   });
+
   if (!currentProduct) {
     throw new Error("Produto não encontrado.");
   }
+
+  if (currentProduct.componentOf.length > 0) {
+    const bundleNames = currentProduct.componentOf
+      .map((c) => c.bundle.name)
+      .join(", ");
+    throw new Error(
+      `Este produto faz parte dos kits: ${bundleNames}. Remova-o dos kits antes de excluí-lo.`,
+    );
+  }
+
   const imageUrls = [
     ...currentProduct.images,
     ...currentProduct.variants.flatMap((v) => (v.image ? [v.image] : [])),
   ];
+
   try {
+
     await prisma.product.delete({
       where: { id },
     });
+
     if (imageUrls.length > 0) {
       await deleteBlobImages(imageUrls);
     }
+
   } catch (error: unknown) {
+
     if (error instanceof Error) {
       throw new Error(`Erro ao deletar produto: ${error.message}`);
     }
+
     throw new Error("Erro desconhecido ao deletar produto.");
   }
   revalidatePath("/admin/produtos");

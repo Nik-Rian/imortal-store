@@ -37,6 +37,7 @@ model Product {
   hasSizes            Boolean  @default(false)
   hasVariants         Boolean  @default(false)
   showVariantsInStore Boolean  @default(true)
+  isBundle            Boolean  @default(false)
 
   dropId              String
   drop                Drop     @relation(fields: [dropId], references: [id], onDelete: Restrict)
@@ -48,6 +49,8 @@ model Product {
   variants            ProductVariant[]
   orderItems          OrderItem[]
   stockItems          StockItem[]
+  components          BundleComponent[] @relation("BundleComponents")
+  componentOf         BundleComponent[] @relation("ComponentProduct")
 
   @@index([dropId])
 }
@@ -86,6 +89,24 @@ model ProductVariant {
 
   @@unique([productId, name])
 }
+
+model BundleComponent {
+  id                 String   @id @default(uuid())
+
+  bundleId           String
+  bundle             Product  @relation("BundleComponents", fields: [bundleId], references: [id], onDelete: Cascade)
+
+  componentProductId String
+  componentProduct   Product  @relation("ComponentProduct", fields: [componentProductId], references: [id], onDelete: Restrict)
+
+  quantity           Int      @default(1)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([bundleId, componentProductId])
+  @@index([componentProductId])
+} 
 
 model StockItem {
   id          String   @id @default(uuid())
