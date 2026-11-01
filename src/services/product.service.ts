@@ -53,6 +53,15 @@ export const getProductBySlug = cache(
           variants: {
             orderBy: { sortOrder: "asc" },
           },
+          components: {
+            orderBy: { componentProduct: { name: "asc" } },
+            select: {
+              quantity: true,
+              componentProduct: {
+                select: { id: true, name: true, images: true },
+              },
+            },
+          },
         },
       });
     } catch (error) {
