@@ -77,6 +77,10 @@ export const getProductById = cache(async (id: string) => {
         variants: {
           orderBy: { sortOrder: "asc" },
         },
+        components: {
+          orderBy: { componentProduct: { name: "asc" } },
+        },
+        _count: { select: { componentOf: true } },
       },
     });
   } catch (error) {

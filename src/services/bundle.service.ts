@@ -62,3 +62,16 @@ export async function assertBundleIntegrity(input: {
     throw new Error("Os produtos do kit devem pertencer ao mesmo drop do kit.");
   }
 }
+
+/**
+ * Products the admin may pick as bundle components. Bundles are
+ * excluded here; same-drop filtering depends on the drop chosen in the form,
+ * so it happens client-side and is enforced again by assertBundleIntegrity.
+ */
+export async function getBundleComponentOptions() {
+  return prisma.product.findMany({
+    where: { isBundle: false },
+    select: { id: true, name: true, dropId: true, isBundle: true },
+    orderBy: { name: "asc" },
+  });
+}

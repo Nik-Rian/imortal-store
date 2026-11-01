@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
-import { assertBundleIntegrity } from "./bundle.service";
+import {
+  assertBundleIntegrity,
+  getBundleComponentOptions,
+} from "./bundle.service";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -106,5 +109,17 @@ describe("assertBundleIntegrity", () => {
     });
     expect(prisma.product.findMany).not.toHaveBeenCalled();
     expect(prisma.bundleComponent.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("getBundleComponentOptions", () => {
+  it("queries ordinary products only", async () => {
+    mockFound([]);
+    await getBundleComponentOptions();
+    expect(prisma.product.findMany).toHaveBeenCalledWith({
+      where: { isBundle: false },
+      select: { id: true, name: true, dropId: true, isBundle: true },
+      orderBy: { name: "asc" },
+    });
   });
 });
