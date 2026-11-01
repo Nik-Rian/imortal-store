@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { detectImageType, getProductImage, PLACEHOLDER_IMAGE } from "./media";
+import {
+  detectImageType,
+  getBundleGalleryImages,
+  getProductImage,
+  PLACEHOLDER_IMAGE,
+} from "./media";
 
 describe("getProductImage", () => {
   it("returns the first image", () => {
@@ -46,5 +51,52 @@ describe("detectImageType", () => {
   it("rejects text, SVG and empty input", () => {
     expect(detectImageType(new TextEncoder().encode("<svg xmlns"))).toBeNull();
     expect(detectImageType(new Uint8Array())).toBeNull();
+  });
+});
+
+describe("getBundleGalleryImages", () => {
+  const component = (...images: string[]) => ({ componentProduct: { images } });
+
+  it("lists the components' images in component order", () => {
+    expect(
+      getBundleGalleryImages(
+        ["https://a/bundle.png"],
+        [
+          component("https://a/1.png", "https://a/2.png"),
+          component("https://a/3.png"),
+        ],
+      ),
+    ).toEqual(["https://a/1.png", "https://a/2.png", "https://a/3.png"]);
+  });
+
+  it("removes URLs shared by several components", () => {
+    expect(
+      getBundleGalleryImages(
+        [],
+        [
+          component("https://a/1.png"),
+          component("https://a/1.png", "https://a/2.png"),
+        ],
+      ),
+    ).toEqual(["https://a/1.png", "https://a/2.png"]);
+  });
+
+  it("falls back to the bundle's own images when no component has one", () => {
+    expect(
+      getBundleGalleryImages(
+        ["https://a/bundle.png"],
+        [component(), component()],
+      ),
+    ).toEqual(["https://a/bundle.png"]);
+  });
+
+  it("returns an empty list when there are no images at all", () => {
+    expect(getBundleGalleryImages(null, [])).toEqual([]);
+  });
+
+  it("ignores empty URLs", () => {
+    expect(
+      getBundleGalleryImages([], [component("", "https://a/1.png")]),
+    ).toEqual(["https://a/1.png"]);
   });
 });

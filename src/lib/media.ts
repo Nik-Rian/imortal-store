@@ -6,6 +6,25 @@ export function getProductImage(
 ): string {
   return images?.[0] || PLACEHOLDER_IMAGE;
 }
+
+/**
+ * Images for a bundle's detail carousel (BND-003): the components' images in
+ * component order, without duplicate URLs. When no component has an image,
+ * the bundle's own images are used so the carousel is never emptier than today.
+ */
+export function getBundleGalleryImages(
+  bundleImages: readonly string[] | null | undefined,
+  components: readonly { componentProduct: { images: readonly string[] } }[],
+): string[] {
+  const gallery = Array.from(
+    new Set(
+      components.flatMap((c) => c.componentProduct.images).filter(Boolean),
+    ),
+  );
+  if (gallery.length > 0) return gallery;
+  return (bundleImages ?? []).filter(Boolean);
+}
+
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /** Allowed upload types and the extension used for the stored file. */

@@ -5,6 +5,7 @@ import { ProductGallery } from "@/components/product/ProductGallery";
 import { AddToCartButton } from "@/components/product/AddToCartButton";
 import { getProductBySlug } from "@/services/product.service";
 import { formatPrice } from "@/lib/utils";
+import { getBundleGalleryImages } from "@/lib/media";
 
 // Time-based ISR fallback: revalidate product details every 1 hour (3600 seconds)
 export const revalidate = 3600;
@@ -48,6 +49,12 @@ export default async function ProductPage({ params }: Props) {
     notFound();
   }
 
+  // A bundle's carousel shows its components' images; its own uploaded image
+  // stays the listing thumbnail and the link-preview image (BND-003).
+  const galleryImages = product.isBundle
+    ? getBundleGalleryImages(product.images, product.components)
+    : product.images;
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-12">
       {/* Breadcrumb / Back Link */}
@@ -60,7 +67,7 @@ export default async function ProductPage({ params }: Props) {
 
       <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
         {/* Left Column: Product Gallery */}
-        <ProductGallery images={product.images} productName={product.name} />
+        <ProductGallery images={galleryImages} productName={product.name} />
 
         {/* Right Column: Product Details */}
         <div className="flex flex-col">
