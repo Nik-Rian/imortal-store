@@ -6,8 +6,10 @@ import {
   checkProductAvailability,
   type AvailabilityCheckResult,
 } from "@/services/product.service";
-import { createPixOrder } from "@/services/mercadopago.service";
-import { requireSession } from "@/lib/auth-guard";
+import {
+  createCardOrder,
+  createPixOrder,
+} from "@/services/mercadopago.service";import { requireSession } from "@/lib/auth-guard";
 import { getAdminTransitionRule } from "@/lib/order-status";
 import { revalidatePath } from "next/cache";
 import { OrderStatus } from "@/generated/prisma/client";
@@ -65,6 +67,8 @@ export async function createOrder(payload: CreateOrderInput) {
       customerPhone,
       customerEmail,
       customerCpf,
+      paymentMethod,
+      card,
       items,
     } = parsed.data;
 
@@ -252,6 +256,14 @@ export async function createOrder(payload: CreateOrderInput) {
       };
     }
 
+    if (order.mpPaymentId && order.paymentMethod === "CARD") {
+      return {
+        success: true,
+        orderId: order.id,
+        accessToken: order.accessToken,
+      };
+    }
+
     let currentIdempotencyKey = order.idempotencyKey;
     if (!currentIdempotencyKey) {
       currentIdempotencyKey = attemptKey || randomUUID();
@@ -263,8 +275,7 @@ export async function createOrder(payload: CreateOrderInput) {
 
     // Clean and use the stateless CPF straight from the payload for the provider call
     const cleanedCpf = customerCpf.replace(/\D/g, "");
-
-    const paymentResult = await createPixOrder({
+    const providerInput = {
       orderId: order.id,
       amount: order.totalPriceCents / 100,
       email: order.customerEmail ?? undefined,
@@ -274,17 +285,49 @@ export async function createOrder(payload: CreateOrderInput) {
       phone: order.customerPhone ?? undefined,
       cpf: cleanedCpf,
       idempotencyKey: currentIdempotencyKey,
-    });
-
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        mpPaymentId: paymentResult.paymentId,
-        mpOrderId: paymentResult.orderId,
-        pixQrCode: paymentResult.qrCode,
-        pixQrCodeBase64: paymentResult.qrCodeBase64,
-      },
-    });
+    };
+    if (paymentMethod === "CARD") {
+      if (!card) {
+        // Unreachable after schema validation; keeps the types honest.
+        return { success: false, error: "Dados do cartão ausentes." };
+      }
+      const cardResult = await createCardOrder({
+        ...providerInput,
+        token: card.token,
+        paymentMethodId: card.paymentMethodId,
+        paymentTypeId: card.paymentTypeId,
+        installments: card.installments,
+      });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          paymentMethod: "CARD",
+          installments: card.installments,
+          mpPaymentId: cardResult.paymentId,
+          mpOrderId: cardResult.orderId,
+        },
+      });
+      // Record the provider's raw status only if the webhook has not already
+      // written a (newer) one. paymentStatus stays webhook-owned.
+      await prisma.order.updateMany({
+        where: { id: order.id, providerStatus: null },
+        data: {
+          providerStatus: cardResult.status,
+          providerStatusDetail: cardResult.statusDetail ?? null,
+        },
+      });
+    } else {
+      const paymentResult = await createPixOrder(providerInput);
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          mpPaymentId: paymentResult.paymentId,
+          mpOrderId: paymentResult.orderId,
+          pixQrCode: paymentResult.qrCode,
+          pixQrCodeBase64: paymentResult.qrCodeBase64,
+        },
+      });
+    }
 
     return {
       success: true,

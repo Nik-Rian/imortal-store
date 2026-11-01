@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createOrder, updateOrderStatus } from "./order.actions";
 import { prisma } from "@/lib/prisma";
-import { createPixOrder } from "@/services/mercadopago.service";
+import {
+  createCardOrder,
+  createPixOrder,
+} from "@/services/mercadopago.service";
 import { checkProductAvailability } from "@/services/product.service";
 
 // Mock das dependências
@@ -29,6 +32,7 @@ vi.mock("@/services/product.service", () => ({
 
 vi.mock("@/services/mercadopago.service", () => ({
   createPixOrder: vi.fn(),
+  createCardOrder: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({
@@ -505,5 +509,202 @@ describe("updateOrderStatus", () => {
       success: false,
       error: "Pedido não está elegível para esta transição.",
     });
+  });
+});
+
+describe("createOrder card payments", () => {
+  const TOKEN = "0123456789abcdef0123456789abcdef";
+  const cardPayload = {
+    customerName: "Maria Silva",
+    customerPhone: "11999999999",
+    customerEmail: "maria@example.com",
+    customerCpf: "52998224725",
+    items: [{ productId: "prod-1", quantity: 1 }],
+    paymentMethod: "CARD" as const,
+    card: {
+      token: TOKEN,
+      paymentMethodId: "master",
+      paymentTypeId: "credit_card" as const,
+      installments: 3,
+    },
+  };
+  const storedOrder = (overrides: Record<string, unknown> = {}) => ({
+    id: "order-1",
+    accessToken: "token-1",
+    idempotencyKey: "key-1",
+    status: "PENDING",
+    paymentStatus: "PENDING",
+    customerName: "Maria Silva",
+    customerPhone: "11999999999",
+    customerEmail: "maria@example.com",
+    totalPriceCents: 5000,
+    pixQrCode: null,
+    mpPaymentId: null,
+    paymentMethod: "PIX",
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(createCardOrder).mockResolvedValue({
+      paymentId: "pay-1",
+      orderId: "ORD1",
+      status: "processed",
+      statusDetail: "accredited",
+    });
+    vi.mocked(createPixOrder).mockResolvedValue({
+      paymentId: "pay-2",
+      orderId: "ORD2",
+      qrCode: "qr",
+      qrCodeBase64: "b64",
+      status: "action_required",
+    });
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.order.create).mockResolvedValue(storedOrder() as never);
+    vi.mocked(prisma.order.update).mockResolvedValue({} as never);
+    vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 1 } as never);
+    vi.mocked(checkProductAvailability).mockResolvedValue({
+      available: true,
+    } as never);
+    vi.mocked(prisma.product.findMany).mockResolvedValue([
+      {
+        id: "prod-1",
+        name: "Camisa",
+        priceCents: 5000,
+        drop: { name: "Drop 1" },
+        sizes: [],
+      },
+    ] as never);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("creates the card charge from the stored total and persists provider data", async () => {
+    const result = await createOrder({ ...cardPayload, attemptKey: "key-1" });
+    expect(result).toMatchObject({
+      success: true,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(createPixOrder).not.toHaveBeenCalled();
+    expect(createCardOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId: "order-1",
+        idempotencyKey: "key-1",
+        amount: 50,
+        token: TOKEN,
+        paymentMethodId: "master",
+        paymentTypeId: "credit_card",
+        installments: 3,
+        cpf: "52998224725",
+      }),
+    );
+    expect(prisma.order.update).toHaveBeenCalledWith({
+      where: { id: "order-1" },
+      data: {
+        paymentMethod: "CARD",
+        installments: 3,
+        mpPaymentId: "pay-1",
+        mpOrderId: "ORD1",
+      },
+    });
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: "order-1", providerStatus: null },
+      data: { providerStatus: "processed", providerStatusDetail: "accredited" },
+    });
+  });
+
+  it.each([0, 4, 1.5])(
+    "rejects %s installments before creating anything",
+    async (installments) => {
+      const result = await createOrder({
+        ...cardPayload,
+        card: { ...cardPayload.card, installments },
+      });
+      expect(result.success).toBe(false);
+      expect(prisma.order.create).not.toHaveBeenCalled();
+      expect(createCardOrder).not.toHaveBeenCalled();
+    },
+  );
+
+  it("limits the installments message to the configured maximum", async () => {
+    const result = await createOrder({
+      ...cardPayload,
+      card: { ...cardPayload.card, installments: 4 },
+    });
+    expect(result.error).toMatch(/3x/);
+  });
+
+  it("rejects debit cards with installments", async () => {
+    const result = await createOrder({
+      ...cardPayload,
+      card: { ...cardPayload.card, paymentTypeId: "debit_card" },
+    });
+    expect(result.success).toBe(false);
+    expect(createCardOrder).not.toHaveBeenCalled();
+  });
+
+  it("requires card data for a card payment and refuses it for Pix", async () => {
+    const missing = await createOrder({ ...cardPayload, card: undefined });
+    expect(missing.error).toBe("Dados do cartão ausentes.");
+    const extra = await createOrder({
+      ...cardPayload,
+      paymentMethod: undefined,
+    });
+    expect(extra.error).toMatch(/não são aceitos/);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses raw card fields instead of processing them", async () => {
+    const result = await createOrder({
+      ...cardPayload,
+      card: { ...cardPayload.card, cardNumber: "4111111111111111" } as never,
+    });
+    expect(result.success).toBe(false);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+    expect(createCardOrder).not.toHaveBeenCalled();
+  });
+
+  it("never creates a second charge once a card charge exists", async () => {
+    vi.mocked(prisma.order.findUnique).mockResolvedValue(
+      storedOrder({
+        mpPaymentId: "pay-1",
+        mpOrderId: "ORD1",
+        paymentMethod: "CARD",
+      }) as never,
+    );
+    const result = await createOrder({
+      ...cardPayload,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(result).toMatchObject({ success: true, orderId: "order-1" });
+    expect(createCardOrder).not.toHaveBeenCalled();
+    expect(createPixOrder).not.toHaveBeenCalled();
+  });
+
+  it("keeps the order retryable and stores nothing when the provider call fails", async () => {
+    vi.mocked(createCardOrder).mockRejectedValueOnce(
+      new Error("Mercado Pago API Error: boom"),
+    );
+    const result = await createOrder({ ...cardPayload, attemptKey: "key-1" });
+    expect(result).toMatchObject({
+      success: false,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(prisma.order.update).not.toHaveBeenCalled();
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("still creates a Pix charge when no payment method is given", async () => {
+    const { paymentMethod: _method, card: _card, ...pixPayload } = cardPayload;
+    const result = await createOrder({ ...pixPayload, attemptKey: "key-1" });
+    expect(result.success).toBe(true);
+    expect(createPixOrder).toHaveBeenCalledTimes(1);
+    expect(createCardOrder).not.toHaveBeenCalled();
   });
 });

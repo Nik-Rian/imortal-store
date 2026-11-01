@@ -1,6 +1,7 @@
 const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN;
 const MP_BASE_URL = "https://api.mercadopago.com";
 import { inspect } from "node:util";
+import { MAX_CARD_INSTALLMENTS } from "@/lib/validations/checkout.schema";
 
 export interface CreatePixPaymentInput {
   orderId: string;
@@ -21,6 +22,21 @@ export interface CreatePixPaymentResult {
   qrCodeBase64: string;
   ticketUrl?: string;
   status: string;
+}
+
+export interface CreateCardPaymentInput extends CreatePixPaymentInput {
+  /** Single-use token generated in the browser by Mercado Pago's SDK. A secret: never log it. */
+  token: string;
+  /** Card brand as reported by the SDK (e.g. "visa", "master"). */
+  paymentMethodId: string;
+  paymentTypeId: "credit_card" | "debit_card";
+  installments: number;
+}
+export interface CreateCardPaymentResult {
+  paymentId: string;
+  orderId: string;
+  status: string;
+  statusDetail?: string;
 }
 
 export interface MercadoPagoPaymentDetails {
@@ -52,30 +68,20 @@ export interface MercadoPagoOrderDetails {
 }
 
 
-/*
- * Creates a Pix order via Mercado Pago Checkout Transparente Orders API (/v1/orders).
- */
-export async function createPixOrder(
-  input: CreatePixPaymentInput,
-): Promise<CreatePixPaymentResult> {
-  if (!MP_ACCESS_TOKEN) {
-    throw new Error("MERCADOPAGO_ACCESS_TOKEN is not configured.");
-  }
+type PayerInput = Pick<
+  CreatePixPaymentInput,
+  "email" | "firstName" | "lastName" | "phone" | "cpf"
+>;
 
-  const idempotencyHeader = input.idempotencyKey || input.orderId;
+function buildPayer(input: PayerInput) {
   const cleanedCpf = input.cpf.replace(/\D/g, "");
-
   if (cleanedCpf.length !== 11) {
     throw new Error("Mercado Pago API Error: CPF do pagador é inválido.");
   }
-
-    const trimmedEmail = input.email?.trim();
-    if (!trimmedEmail) {
-      throw new Error(
-        "Mercado Pago API Error: E-mail do cliente é obrigatório.",
-      );
-    }
-
+  const trimmedEmail = input.email?.trim();
+  if (!trimmedEmail) {
+    throw new Error("Mercado Pago API Error: E-mail do cliente é obrigatório.");
+  }
   const cleanedPhone = input.phone ? input.phone.replace(/\D/g, "") : undefined;
   const phonePayload =
     cleanedPhone && cleanedPhone.length >= 10
@@ -86,29 +92,93 @@ export async function createPixOrder(
           },
         }
       : {};
+  return {
+    email: trimmedEmail,
+    ...(input.firstName?.trim() ? { first_name: input.firstName.trim() } : {}),
+    ...(input.lastName?.trim() ? { last_name: input.lastName.trim() } : {}),
+    identification: {
+      type: "CPF",
+      number: cleanedCpf,
+    },
+    ...phonePayload,
+  };
+}
 
+/**
+ * POSTs to /v1/orders and returns the parsed response. The request body is
+ * never logged (it can carry a card token); only the provider's error
+ * response is.
+ */
+async function postOrder(body: unknown, idempotencyKey: string) {
   const response = await fetch(`${MP_BASE_URL}/v1/orders`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
-      "X-Idempotency-Key": idempotencyHeader,
+      "X-Idempotency-Key": idempotencyKey,
     },
-    body: JSON.stringify({
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    // util.inspect avoids Node's default console depth limit, which was
+    // hiding nested arrays/objects as "[Object]" in prior logs.
+    console.error(
+      "Mercado Pago /v1/orders rejected request:",
+      response.status,
+      inspect(errorData, { depth: null }),
+    );
+    // MP uses different error shapes depending on the failure:
+    // - "cause": schema/validation errors (e.g. required_properties, property_value)
+    // - "errors": order created but a transaction failed (payment-level rejection)
+    type MPCause = { code?: string; description?: string };
+    type MPTransactionError = {
+      code?: string;
+      detail?: string;
+      message?: string;
+    };
+    const causeMessage = Array.isArray(errorData.cause)
+      ? (errorData.cause as MPCause[])
+          .map((c) => `${c.code ? `[${c.code}] ` : ""}${c.description ?? ""}`)
+          .join("; ")
+      : null;
+    const transactionErrorMessage = Array.isArray(errorData.errors)
+      ? (errorData.errors as MPTransactionError[])
+          .map(
+            (e) =>
+              `${e.code ? `[${e.code}] ` : ""}${e.detail ?? e.message ?? ""}`,
+          )
+          .join("; ")
+      : null;
+    const errorMessage =
+      causeMessage ||
+      transactionErrorMessage ||
+      errorData.message ||
+      errorData.error ||
+      response.statusText;
+    throw new Error(`Mercado Pago API Error: ${errorMessage}`);
+  }
+  return response.json();
+}
+
+/*
+ * Creates a Pix order via Mercado Pago Checkout Transparente Orders API (/v1/orders).
+ */
+export async function createPixOrder(
+  input: CreatePixPaymentInput,
+): Promise<CreatePixPaymentResult> {
+  if (!MP_ACCESS_TOKEN) {
+    throw new Error("MERCADOPAGO_ACCESS_TOKEN is not configured.");
+  }
+  const idempotencyHeader = input.idempotencyKey || input.orderId;
+  const payer = buildPayer(input);
+  const data = await postOrder(
+    {
       type: "online",
       external_reference: input.orderId,
       total_amount: input.amount.toFixed(2),
       processing_mode: "automatic",
-      payer: {
-        email: trimmedEmail,
-        ...(input.firstName?.trim() ? { first_name: input.firstName.trim() } : {}),
-        ...(input.lastName?.trim() ? { last_name: input.lastName.trim() } : {}),
-        identification: {
-          type: "CPF",
-          number: cleanedCpf,
-        },
-        ...phonePayload,
-      },
+      payer,
       transactions: {
         payments: [
           {
@@ -120,63 +190,14 @@ export async function createPixOrder(
           },
         ],
       },
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-
-    // util.inspect avoids Node's default console depth limit, which was
-    // hiding nested arrays/objects as "[Object]" in prior logs.
-    console.error(
-      "Mercado Pago /v1/orders rejected request:",
-      response.status,
-      inspect(errorData, { depth: null }),
-    );
-
-    // MP uses different error shapes depending on the failure:
-    // - "cause": schema/validation errors (e.g. required_properties, property_value)
-    // - "errors": order created but a transaction failed (payment-level rejection)
-    type MPCause = { code?: string; description?: string };
-    type MPTransactionError = {
-      code?: string;
-      detail?: string;
-      message?: string;
-    };
-
-    const causeMessage = Array.isArray(errorData.cause)
-      ? (errorData.cause as MPCause[])
-          .map((c) => `${c.code ? `[${c.code}] ` : ""}${c.description ?? ""}`)
-          .join("; ")
-      : null;
-
-    const transactionErrorMessage = Array.isArray(errorData.errors)
-      ? (errorData.errors as MPTransactionError[])
-          .map(
-            (e) =>
-              `${e.code ? `[${e.code}] ` : ""}${e.detail ?? e.message ?? ""}`,
-          )
-          .join("; ")
-      : null;
-
-    const errorMessage =
-      causeMessage ||
-      transactionErrorMessage ||
-      errorData.message ||
-      errorData.error ||
-      response.statusText;
-
-    throw new Error(`Mercado Pago API Error: ${errorMessage}`);
-  }
-
-  const data = await response.json();
+    },
+    idempotencyHeader,
+  );
   const payment = data.transactions?.payments?.[0];
   const paymentMethod = payment?.payment_method;
-
   if (!data.id || !payment?.id) {
     throw new Error("Mercado Pago API Error: Invalid order response.");
   }
-
   return {
     paymentId: String(payment.id),
     orderId: String(data.id),
@@ -184,6 +205,67 @@ export async function createPixOrder(
     qrCodeBase64: paymentMethod?.qr_code_base64 ?? "",
     ticketUrl: paymentMethod?.ticket_url ?? undefined,
     status: data.status,
+  };
+}
+
+/*
+ * Creates a card order from a client-generated token. Raw card data never
+ * reaches this server. total_amount is the order total: installments never
+ * change it, and the amounts shown to the customer come from the provider.
+ */
+export async function createCardOrder(
+  input: CreateCardPaymentInput,
+): Promise<CreateCardPaymentResult> {
+  if (!MP_ACCESS_TOKEN) {
+    throw new Error("MERCADOPAGO_ACCESS_TOKEN is not configured.");
+  }
+  if (
+    !Number.isInteger(input.installments) ||
+    input.installments < 1 ||
+    input.installments > MAX_CARD_INSTALLMENTS
+  ) {
+    throw new Error(
+      `Mercado Pago API Error: parcelas devem ser de 1 a ${MAX_CARD_INSTALLMENTS}.`,
+    );
+  }
+  if (!input.token) {
+    throw new Error("Mercado Pago API Error: token do cartão é obrigatório.");
+  }
+  const idempotencyHeader = input.idempotencyKey || input.orderId;
+  const payer = buildPayer(input);
+  const amount = input.amount.toFixed(2);
+  const data = await postOrder(
+    {
+      type: "online",
+      external_reference: input.orderId,
+      total_amount: amount,
+      processing_mode: "automatic",
+      payer,
+      transactions: {
+        payments: [
+          {
+            amount,
+            payment_method: {
+              id: input.paymentMethodId,
+              type: input.paymentTypeId,
+              token: input.token,
+              installments: input.installments,
+            },
+          },
+        ],
+      },
+    },
+    idempotencyHeader,
+  );
+  const payment = data.transactions?.payments?.[0];
+  if (!data.id || !payment?.id) {
+    throw new Error("Mercado Pago API Error: Invalid order response.");
+  }
+  return {
+    paymentId: String(payment.id),
+    orderId: String(data.id),
+    status: String(data.status),
+    statusDetail: data.status_detail ?? payment.status_detail ?? undefined,
   };
 }
 
