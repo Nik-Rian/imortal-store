@@ -150,6 +150,17 @@ export async function purgeDrop(dropId: string) {
         where: { productId: { in: productIds } },
       });
 
+      // Bundle rows first: componentProductId is ON DELETE RESTRICT, so the
+      // component and bundle products can't be removed while join rows exist.
+      await tx.bundleComponent.deleteMany({
+        where: {
+          OR: [
+            { bundleId: { in: productIds } },
+            { componentProductId: { in: productIds } },
+          ],
+        },
+      });
+
       await tx.product.deleteMany({
         where: { dropId },
       });
