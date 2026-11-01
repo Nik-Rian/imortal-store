@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { OrderPixSection } from "@/components/storefront/OrderPixSection";
+import { OrderCardSection } from "@/components/storefront/OrderCardSection";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -25,15 +26,27 @@ function getStatusBadge(status: string) {
           "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800",
       };
     case "PENDING":
-    case "IN_REVIEW":
       return {
         label: "Aguardando Pagamento",
         icon: Clock,
         className:
           "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800",
       };
-    case "CANCELED":
+    case "IN_REVIEW":
+      return {
+        label: "Pagamento em análise",
+        icon: Clock,
+        className:
+          "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800",
+      };
     case "FAILED":
+      return {
+        label: "Pagamento recusado",
+        icon: XCircle,
+        className:
+          "bg-red-100 text-red-800 border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800",
+      };
+    case "CANCELED":
     case "EXPIRED":
       return {
         label: "Cancelado",
@@ -113,11 +126,18 @@ if (!order) {
         </div>
 
         {/* Interactive Pix QR code and polling section if order is PENDING */}
-        <OrderPixSection
-          status={order.paymentStatus}
-          qrCode={order.pixQrCode}
-          qrCodeBase64={order.pixQrCodeBase64}
-        />
+        {order.paymentMethod === "CARD" ? (
+          <OrderCardSection
+            status={order.paymentStatus}
+            providerStatusDetail={order.providerStatusDetail}
+          />
+        ) : (
+          <OrderPixSection
+            status={order.paymentStatus}
+            qrCode={order.pixQrCode}
+            qrCodeBase64={order.pixQrCodeBase64}
+          />
+        )}
 
         {/* Customer Information Section */}
         <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-xl p-4 text-xs space-y-1.5">

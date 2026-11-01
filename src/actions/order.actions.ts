@@ -17,6 +17,7 @@ import {
   createOrderSchema,
   type CreateOrderInput,
 } from "@/lib/validations/checkout.schema";
+import { PaymentRejectedError, describeCardFailure } from "@/lib/card-outcome";
 
 interface OrderItemData {
   productId: string;
@@ -335,6 +336,20 @@ export async function createOrder(payload: CreateOrderInput) {
       accessToken: order.accessToken,
     };
   } catch (error) {
+    if (error instanceof PaymentRejectedError) {
+      // The provider refused the payment. Its failed order is final and the
+      // webhook cancels this local order (PAY-003), so the customer must start
+      // a new order: no orderId/accessToken is returned for a retry.
+      console.warn("[createOrder] Payment rejected by provider", {
+        orderId: orderIdForRetry,
+        statusDetail: error.statusDetail,
+      });
+      return {
+        success: false,
+        error: describeCardFailure(error.statusDetail),
+        paymentRejected: true,
+      };
+    }
     console.error("Error creating order:", error);
     return {
       success: false,

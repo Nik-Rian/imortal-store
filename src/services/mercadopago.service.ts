@@ -2,6 +2,7 @@ const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN;
 const MP_BASE_URL = "https://api.mercadopago.com";
 import { inspect } from "node:util";
 import { MAX_CARD_INSTALLMENTS } from "@/lib/validations/checkout.schema";
+import { PaymentRejectedError } from "@/lib/card-outcome";
 
 export interface CreatePixPaymentInput {
   orderId: string;
@@ -104,6 +105,13 @@ function buildPayer(input: PayerInput) {
   };
 }
 
+/** The provider echoes the single-use card token back in error bodies. */
+function redactCardTokens(value: unknown): unknown {
+  return JSON.parse(
+    JSON.stringify(value, (key, v) => (key === "token" ? "[redacted]" : v)),
+  );
+}
+
 /**
  * POSTs to /v1/orders and returns the parsed response. The request body is
  * never logged (it can carry a card token); only the provider's error
@@ -126,7 +134,7 @@ async function postOrder(body: unknown, idempotencyKey: string) {
     console.error(
       "Mercado Pago /v1/orders rejected request:",
       response.status,
-      inspect(errorData, { depth: null }),
+      inspect(redactCardTokens(errorData), { depth: null }),
     );
     // MP uses different error shapes depending on the failure:
     // - "cause": schema/validation errors (e.g. required_properties, property_value)
@@ -156,6 +164,14 @@ async function postOrder(body: unknown, idempotencyKey: string) {
       errorData.message ||
       errorData.error ||
       response.statusText;
+    if (response.status === 402) {
+      // Payment-level refusal. The failed provider order and its payment come
+      // back in errorData.data; the reason is on the payment, not the order.
+      throw new PaymentRejectedError(
+        `Mercado Pago API Error: ${errorMessage}`,
+        errorData.data?.transactions?.payments?.[0]?.status_detail ?? undefined,
+      );
+    }
     throw new Error(`Mercado Pago API Error: ${errorMessage}`);
   }
   return response.json();
