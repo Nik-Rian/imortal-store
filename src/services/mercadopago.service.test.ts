@@ -185,4 +185,48 @@ describe("createCardOrder", () => {
     expect((failure as Error).message).not.toContain(TOKEN);
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(TOKEN);
   });
+  it("turns a 402 refusal into a typed error with the payment reason and no token in the logs", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockFetch(
+      {
+        errors: [
+          {
+            code: "failed",
+            message: "The following transactions failed",
+            details: ["PAY1: rejected_by_issuer"],
+          },
+        ],
+        data: {
+          id: "ORDTST1",
+          status: "failed",
+          status_detail: "failed",
+          transactions: {
+            payments: [
+              {
+                id: "PAY1",
+                status: "failed",
+                status_detail: "rejected_by_issuer",
+                payment_method: {
+                  id: "master",
+                  type: "credit_card",
+                  token: TOKEN,
+                  installments: 3,
+                },
+              },
+            ],
+          },
+        },
+      },
+      { ok: false, status: 402 },
+    );
+    const { createCardOrder } = await loadService();
+    const failure = await createCardOrder(cardInput).catch((e: unknown) => e);
+    expect(failure).toMatchObject({
+      name: "PaymentRejectedError",
+      statusDetail: "rejected_by_issuer",
+      message:
+        "Mercado Pago API Error: [failed] The following transactions failed",
+    });
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(TOKEN);
+  });
 });

@@ -49,6 +49,12 @@ const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
     : []),
 ];
 
+function newAttemptKey() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).substring(2) + Date.now().toString(36);
+}
+
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, cartTotal, clearCart } = useCart();
@@ -61,11 +67,8 @@ export default function CheckoutPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [attemptKey] = useState(() =>
-    typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : Math.random().toString(36).substring(2) + Date.now().toString(36),
-  );
+  const [attemptKey, setAttemptKey] = useState(newAttemptKey);
+
   const [pendingOrder, setPendingOrder] = useState<
     { id: string; accessToken: string } | undefined
     >(undefined);
@@ -150,7 +153,11 @@ const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     });
 
     if (!orderResult.success || !orderResult.accessToken) {
-      if (orderResult.orderId && orderResult.accessToken) {
+      if (orderResult.paymentRejected) {
+        // A refused payment ends that order: the next attempt is a new order.
+        setPendingOrder(undefined);
+        setAttemptKey(newAttemptKey());
+      } else if (orderResult.orderId && orderResult.accessToken) {
         setPendingOrder({
           id: orderResult.orderId,
           accessToken: orderResult.accessToken,

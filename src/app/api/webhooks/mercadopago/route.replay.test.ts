@@ -131,4 +131,80 @@ describe("Mercado Pago webhook route", () => {
     expect(res.status).toBe(409);
     expect(prisma.order.findFirst).toHaveBeenCalledTimes(3);
   });
+
+  it("cancels the order and keeps the payment-level reason when a card is refused", async () => {
+    vi.mocked(getMercadoPagoOrder).mockResolvedValue(
+      mpOrder({
+        status: "failed",
+        status_detail: "failed",
+        totalPaidAmount: 0,
+        payments: [
+          {
+            paymentId: "pay-1",
+            status: "failed",
+            statusDetail: "rejected_by_issuer",
+          },
+        ],
+      }) as never,
+    );
+    const res = await POST(webhookRequest());
+    expect(res.status).toBe(200);
+    expect(prisma.order.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          paymentStatus: "FAILED",
+          status: "CANCELED",
+          providerStatus: "failed",
+          providerStatusDetail: "rejected_by_issuer",
+        }),
+      }),
+    );
+  });
+  it("marks a card order IN_REVIEW while the provider is still processing it", async () => {
+    vi.mocked(getMercadoPagoOrder).mockResolvedValue(
+      mpOrder({
+        status: "processing",
+        status_detail: "in_process",
+        totalPaidAmount: 0,
+        payments: [
+          {
+            paymentId: "pay-1",
+            status: "processing",
+            statusDetail: "in_process",
+          },
+        ],
+      }) as never,
+    );
+    await POST(webhookRequest());
+    expect(prisma.order.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          paymentStatus: "IN_REVIEW",
+          status: "PENDING",
+        }),
+      }),
+    );
+  });
+  it("never lets a late failure notice undo a paid card order", async () => {
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(
+      localOrder({ paymentStatus: "PAID" }) as never,
+    );
+    vi.mocked(getMercadoPagoOrder).mockResolvedValue(
+      mpOrder({
+        status: "failed",
+        status_detail: "failed",
+        totalPaidAmount: 0,
+        payments: [
+          {
+            paymentId: "pay-1",
+            status: "failed",
+            statusDetail: "rejected_by_issuer",
+          },
+        ],
+      }) as never,
+    );
+    const res = await POST(webhookRequest());
+    expect(res.status).toBe(200);
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
 });

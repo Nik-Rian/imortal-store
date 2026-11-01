@@ -6,6 +6,7 @@ import {
   createPixOrder,
 } from "@/services/mercadopago.service";
 import { checkProductAvailability } from "@/services/product.service";
+import { PaymentRejectedError, describeCardFailure } from "@/lib/card-outcome";
 
 // Mock das dependências
 vi.mock("@/lib/prisma", () => ({
@@ -706,5 +707,25 @@ describe("createOrder card payments", () => {
     expect(result.success).toBe(true);
     expect(createPixOrder).toHaveBeenCalledTimes(1);
     expect(createCardOrder).not.toHaveBeenCalled();
+  });
+  
+  it("reports a refused card with a customer message and no retry credentials", async () => {
+    vi.mocked(createCardOrder).mockRejectedValueOnce(
+      new PaymentRejectedError(
+        "Mercado Pago API Error: [failed] The following transactions failed",
+        "rejected_by_issuer",
+      ),
+    );
+    const result = await createOrder({ ...cardPayload, attemptKey: "key-1" });
+    expect(result).toMatchObject({
+      success: false,
+      paymentRejected: true,
+      error: describeCardFailure("rejected_by_issuer"),
+    });
+    expect(result.error).not.toMatch(/Mercado Pago/);
+    expect(result).not.toHaveProperty("orderId");
+    expect(result).not.toHaveProperty("accessToken");
+    expect(prisma.order.update).not.toHaveBeenCalled();
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
   });
 });

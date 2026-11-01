@@ -17,7 +17,7 @@ type SyncOutcome = "updated" | "unchanged" | "not_found" | "conflict";
 async function syncOrderPayment(
 
   mpOrder: MercadoPagoOrderDetails,
-  
+
 ): Promise<SyncOutcome> {
 
   const payment = mpOrder.payments[0] as
@@ -59,7 +59,7 @@ async function syncOrderPayment(
         status: decision.fulfillmentStatus,
         paymentReviewReason: decision.reviewReason,
         providerStatus: mpOrder.status,
-        providerStatusDetail: mpStatusDetail || null,
+        providerStatusDetail: payment?.statusDetail || mpStatusDetail || null,
         paidAmount: providerPaidCents,
         lastPaymentSync: new Date(),
         ...(payment?.paymentId ? { mpPaymentId: payment.paymentId } : {}),
