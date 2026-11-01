@@ -4,6 +4,7 @@ import { getProductById } from "@/services/product.service";
 import { updateProduct } from "@/actions/product.actions";
 import { ProductForm } from "@/components/admin/ProductForm";
 import { getDrops } from "@/services/drop.service";
+import { getBundleComponentOptions } from "@/services/bundle.service";
 
 interface EditProductPageProps {
   params: Promise<{ id: string }>;
@@ -15,6 +16,7 @@ export default async function EditProductPage({
   const { id } = await params;
   const product = await getProductById(id);
   const drops = await getDrops();
+  const componentOptions = await getBundleComponentOptions();
 
   if (!product) {
     notFound();
@@ -43,6 +45,7 @@ export default async function EditProductPage({
         action={updateProductWithId}
         initialData={product}
         drops={drops}
+        componentOptions={componentOptions}
       />
     </div>
   );

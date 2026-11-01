@@ -2,9 +2,11 @@ import Link from "next/link";
 import { ProductForm } from "@/components/admin/ProductForm";
 import { createProduct } from "@/actions/product.actions";
 import { getDrops } from "@/services/drop.service";
+import { getBundleComponentOptions } from "@/services/bundle.service";
 
 export default async function NewProductPage() {
   const drops = await getDrops();
+  const componentOptions = await getBundleComponentOptions();
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -23,7 +25,11 @@ export default async function NewProductPage() {
         </Link>
       </div>
 
-      <ProductForm action={createProduct} drops={drops} />
+      <ProductForm
+        action={createProduct}
+        drops={drops}
+        componentOptions={componentOptions}
+      />
     </div>
   );
 }
