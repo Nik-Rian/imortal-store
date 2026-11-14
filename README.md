@@ -110,7 +110,7 @@ bun install
 Create a `.env` file in the project root.
 
 ```env
-DATABASE_URL="postgresql://<username>:<password>@localhost:5432/imortal_store?schema=public"
+DATABASE_URL="postgresql://<>:<>@localhost:5432/imortal_store?schema=public"
 
 BETTER_AUTH_SECRET=<your-random-secret>
 BETTER_AUTH_URL=http://localhost:3000
