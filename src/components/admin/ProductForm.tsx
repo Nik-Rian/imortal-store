@@ -315,9 +315,11 @@ export function ProductForm({
 
     const description = (formData.get("description") as string) ?? "";
     const parsedDisplayPrice = parseFloat(priceInput);
-    const priceCents = isNaN(parsedDisplayPrice)
-      ? NaN
-      : Math.round(parsedDisplayPrice * 100);
+    if (!Number.isFinite(parsedDisplayPrice) || parsedDisplayPrice < 0) {
+      setError("Informe um preço válido.");
+      return;
+    }
+    const priceCents = Math.round(parsedDisplayPrice * 100);
 
     // Ensure sizes are sorted properly by their explicit ALLOWED_SIZES order before saving
     const sortedSizes = [...sizes].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -357,6 +359,10 @@ export function ProductForm({
       "showVariantsInStore",
       validData.showVariantsInStore ? "true" : "false",
     );
+
+    // The reais input is converted once above; the action only accepts cents.
+    formData.set("priceCents", String(validData.priceCents));
+    formData.set("isAvailable", validData.isAvailable ? "true" : "false");
     formData.set("sizes", JSON.stringify(validData.sizes));
     formData.set("variants", JSON.stringify(validData.variants));
 
@@ -666,7 +672,6 @@ export function ProductForm({
           <input
             type="number"
             id="price"
-            name="price"
             step="0.01"
             placeholder="0.00"
             value={priceInput}

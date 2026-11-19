@@ -218,3 +218,76 @@ describe("ProductForm edit mode", () => {
     );
   });
 });
+
+describe("ProductForm price and availability contract", () => {
+  function fillRequiredFields(price: string) {
+    fireEvent.change(screen.getByLabelText("Nome do Produto"), {
+      target: { value: "Camiseta Imortal" },
+    });
+    fireEvent.change(screen.getByLabelText("Descrição"), {
+      target: { value: "Camiseta oficial" },
+    });
+    fireEvent.change(screen.getByLabelText("Preço (R$)"), {
+      target: { value: price },
+    });
+  }
+
+  // The "Disponível na loja" label is not associated with its checkbox.
+  function availabilityCheckbox() {
+    return document.querySelector<HTMLInputElement>(
+      'input[name="isAvailable"]',
+    )!;
+  }
+
+  it("posts the reais input as integer cents and an unchecked box as false", async () => {
+    const action = renderForm();
+    // A type="number" input always exposes a dot-decimal value ("49,90" typed
+    // in a pt-BR browser reads back as "49.90"); jsdom discards a comma value.
+    fillRequiredFields("49.90");
+    fireEvent.click(availabilityCheckbox());
+
+    fireEvent.submit(document.querySelector("form")!);
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    const formData = action.mock.calls[0][0] as FormData;
+    expect(formData.get("priceCents")).toBe("4990");
+    expect(formData.get("isAvailable")).toBe("false");
+    expect(formData.has("price")).toBe(false);
+  });
+
+  it("posts a checked box as true", async () => {
+    const action = renderForm();
+    fillRequiredFields("50");
+
+    fireEvent.submit(document.querySelector("form")!);
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    const formData = action.mock.calls[0][0] as FormData;
+    expect(formData.get("priceCents")).toBe("5000");
+    expect(formData.get("isAvailable")).toBe("true");
+  });
+
+  it("does not submit a negative price", async () => {
+    const action = renderForm();
+    fillRequiredFields("-5");
+
+    fireEvent.submit(document.querySelector("form")!);
+
+    expect(await screen.findByText("Informe um preço válido.")).toBeTruthy();
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  it("shows a stored price in reais and posts it back unchanged", async () => {
+    const action = renderForm({ ...baseProduct, priceCents: 4990 });
+    expect(
+      (screen.getByLabelText("Preço (R$)") as HTMLInputElement).value,
+    ).toBe("49.90");
+
+    fireEvent.submit(document.querySelector("form")!);
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    const formData = action.mock.calls[0][0] as FormData;
+    expect(formData.get("priceCents")).toBe("4990");
+    expect(formData.get("isAvailable")).toBe("true");
+  });
+});
