@@ -19,18 +19,21 @@ export default function StorefrontError({ error, reset }: ErrorProps) {
         <p className="text-sm font-black uppercase tracking-[0.25em] text-orange-500">
           ERRO DO SISTEMA
         </p>
-        
+
         <h1 className="mt-4 text-4xl font-black uppercase leading-tight tracking-tight">
           Oops! Algo quebrou no caminho.
         </h1>
 
         <p className="mt-4 text-zinc-600 font-medium">
-          Não conseguimos carregar essa seção da loja. Pode ser uma oscilação na conexão ou um imprevisto técnico.
+          Não conseguimos carregar essa seção da loja. Pode ser uma oscilação na
+          conexão ou um imprevisto técnico.
         </p>
 
         {error.message && (
           <div className="mt-6 border-2 border-black bg-zinc-50 p-4">
-            <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1">Detalhes do erro:</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1">
+              Detalhes do erro:
+            </p>
             <code className="block text-sm font-mono break-all text-red-600">
               {error.message}
             </code>
@@ -62,7 +65,7 @@ export default function StorefrontError({ error, reset }: ErrorProps) {
           >
             Tentar novamente
           </button>
-          
+
           <Link
             href="/"
             className="

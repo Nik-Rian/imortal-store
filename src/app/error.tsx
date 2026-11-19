@@ -36,7 +36,9 @@ export default function RootError({ error, reset }: ErrorProps) {
         </div>
 
         <div className="space-y-2">
-          <h1 className="text-3xl font-extrabold tracking-tight">Ops! Algo deu errado</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight">
+            Ops! Algo deu errado
+          </h1>
           <p className="text-zinc-500 dark:text-zinc-400">
             Ocorreu um erro inesperado ao carregar esta página.
           </p>

@@ -80,9 +80,9 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
     include: { items: true },
   });
 
-if (!order) {
-  notFound();
-}
+  if (!order) {
+    notFound();
+  }
 
   const badge = getStatusBadge(order.paymentStatus);
   const StatusIcon = badge.icon;

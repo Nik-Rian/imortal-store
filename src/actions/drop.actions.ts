@@ -102,7 +102,6 @@ export async function createDrop(): Promise<
 export async function purgeDrop(dropId: string) {
   await requireSession();
 
-
   if (!dropId) {
     throw new Error("ID do drop não fornecido.");
   }

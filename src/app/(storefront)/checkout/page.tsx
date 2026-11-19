@@ -71,7 +71,7 @@ export default function CheckoutPage() {
 
   const [pendingOrder, setPendingOrder] = useState<
     { id: string; accessToken: string } | undefined
-    >(undefined);
+  >(undefined);
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("PIX");
   const cardRef = useRef<CardPaymentFieldsHandle>(null);
@@ -98,91 +98,91 @@ export default function CheckoutPage() {
     );
   }
 
-const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
-  e.preventDefault();
-  setError(null);
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
 
-  const validationResult = checkoutSchema.safeParse({
-    customerName,
-    customerEmail,
-    customerPhone,
-    customerCpf,
-  });
-
-  if (!validationResult.success) {
-    setError(
-      validationResult.error.issues[0]?.message ||
-        "Verifique os dados informados.",
-    );
-    return;
-  }
-
-  const validData = validationResult.data;
-  const cleanPhone = validData.customerPhone.replace(/\D/g, "");
-
-  setIsLoading(true);
-
-  try {
-    const formattedItems = items.map((item) => ({
-      productId: item.variantId ? undefined : item.productId || item.id,
-      variantId: item.variantId || undefined,
-      sizeId: item.sizeId || undefined,
-      quantity: item.quantity,
-    }));
-
-    // Tokenization happens in the browser. Only the token reaches the server.
-    const card =
-      paymentMethod === "CARD"
-        ? await cardRef.current?.tokenize(validData.customerCpf)
-        : undefined;
-    if (paymentMethod === "CARD" && !card) {
-      throw new Error("Preencha os dados do cartão.");
-    }
-
-    const orderResult = await createOrder({
-      orderId: pendingOrder?.id,
-      accessToken: pendingOrder?.accessToken,
-      attemptKey,
-      customerName: validData.customerName,
-      customerEmail: validData.customerEmail,
-      customerPhone: cleanPhone,
-      customerCpf: validData.customerCpf, // Stays in memory
-      items: formattedItems,
-      paymentMethod,
-      card,
+    const validationResult = checkoutSchema.safeParse({
+      customerName,
+      customerEmail,
+      customerPhone,
+      customerCpf,
     });
 
-    if (!orderResult.success || !orderResult.accessToken) {
-      if (orderResult.paymentRejected) {
-        // A refused payment ends that order: the next attempt is a new order.
-        setPendingOrder(undefined);
-        setAttemptKey(newAttemptKey());
-      } else if (orderResult.orderId && orderResult.accessToken) {
-        setPendingOrder({
-          id: orderResult.orderId,
-          accessToken: orderResult.accessToken,
-        });
-      }
-      throw new Error(
-        orderResult.error ||
-          "Ocorreu um erro inesperado ao processar o pagamento.",
+    if (!validationResult.success) {
+      setError(
+        validationResult.error.issues[0]?.message ||
+          "Verifique os dados informados.",
       );
+      return;
     }
 
-    // Clear cart and redirect using the order accessToken
-    clearCart();
-    router.push(`/pedidos/${orderResult.accessToken}`);
-  } catch (err) {
-    console.error("[CHECKOUT_SUBMIT_ERROR]", err);
-    setError(
-      err instanceof Error
-        ? err.message
-        : "Ocorreu um erro inesperado ao gerar o pagamento Pix.",
-    );
-  } finally {
-    setIsLoading(false);
-  }
-};
+    const validData = validationResult.data;
+    const cleanPhone = validData.customerPhone.replace(/\D/g, "");
+
+    setIsLoading(true);
+
+    try {
+      const formattedItems = items.map((item) => ({
+        productId: item.variantId ? undefined : item.productId || item.id,
+        variantId: item.variantId || undefined,
+        sizeId: item.sizeId || undefined,
+        quantity: item.quantity,
+      }));
+
+      // Tokenization happens in the browser. Only the token reaches the server.
+      const card =
+        paymentMethod === "CARD"
+          ? await cardRef.current?.tokenize(validData.customerCpf)
+          : undefined;
+      if (paymentMethod === "CARD" && !card) {
+        throw new Error("Preencha os dados do cartão.");
+      }
+
+      const orderResult = await createOrder({
+        orderId: pendingOrder?.id,
+        accessToken: pendingOrder?.accessToken,
+        attemptKey,
+        customerName: validData.customerName,
+        customerEmail: validData.customerEmail,
+        customerPhone: cleanPhone,
+        customerCpf: validData.customerCpf, // Stays in memory
+        items: formattedItems,
+        paymentMethod,
+        card,
+      });
+
+      if (!orderResult.success || !orderResult.accessToken) {
+        if (orderResult.paymentRejected) {
+          // A refused payment ends that order: the next attempt is a new order.
+          setPendingOrder(undefined);
+          setAttemptKey(newAttemptKey());
+        } else if (orderResult.orderId && orderResult.accessToken) {
+          setPendingOrder({
+            id: orderResult.orderId,
+            accessToken: orderResult.accessToken,
+          });
+        }
+        throw new Error(
+          orderResult.error ||
+            "Ocorreu um erro inesperado ao processar o pagamento.",
+        );
+      }
+
+      // Clear cart and redirect using the order accessToken
+      clearCart();
+      router.push(`/pedidos/${orderResult.accessToken}`);
+    } catch (err) {
+      console.error("[CHECKOUT_SUBMIT_ERROR]", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ocorreu um erro inesperado ao gerar o pagamento Pix.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 py-10 max-w-5xl">

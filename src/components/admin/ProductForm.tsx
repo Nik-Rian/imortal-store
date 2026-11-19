@@ -382,7 +382,7 @@ export function ProductForm({
     } finally {
       setIsPending(false);
     }
-  };;
+  };
 
   return (
     <form

@@ -68,7 +68,6 @@ export interface MercadoPagoOrderDetails {
   }>;
 }
 
-
 type PayerInput = Pick<
   CreatePixPaymentInput,
   "email" | "firstName" | "lastName" | "phone" | "cpf"

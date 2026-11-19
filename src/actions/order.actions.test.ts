@@ -708,7 +708,7 @@ describe("createOrder card payments", () => {
     expect(createPixOrder).toHaveBeenCalledTimes(1);
     expect(createCardOrder).not.toHaveBeenCalled();
   });
-  
+
   it("reports a refused card with a customer message and no retry credentials", async () => {
     vi.mocked(createCardOrder).mockRejectedValueOnce(
       new PaymentRejectedError(

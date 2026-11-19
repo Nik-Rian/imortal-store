@@ -34,14 +34,20 @@ export default function AdminError({ error, reset }: ErrorProps) {
             </svg>
           </div>
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-zinc-900">Erro no Painel Administrativo</h2>
-            <p className="text-xs text-zinc-500">Ocorreu uma falha ao processar a requisição.</p>
+            <h2 className="text-xl font-bold tracking-tight text-zinc-900">
+              Erro no Painel Administrativo
+            </h2>
+            <p className="text-xs text-zinc-500">
+              Ocorreu uma falha ao processar a requisição.
+            </p>
           </div>
         </div>
 
         <div className="space-y-2">
           <p className="text-sm text-zinc-600">
-            A ação solicitada não pôde ser concluída. Verifique suas credenciais, certifique-se de que os campos requeridos estão corretos ou tente reiniciar o processo.
+            A ação solicitada não pôde ser concluída. Verifique suas
+            credenciais, certifique-se de que os campos requeridos estão
+            corretos ou tente reiniciar o processo.
           </p>
           <div className="rounded-md bg-zinc-50 border border-zinc-200 p-4">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block mb-1">
@@ -60,7 +66,7 @@ export default function AdminError({ error, reset }: ErrorProps) {
           >
             Tentar Novamente
           </button>
-          
+
           <Link
             href="/admin"
             className="flex-1 inline-flex items-center justify-center rounded-md border border-zinc-200 bg-white text-sm font-medium text-zinc-700 hover:bg-zinc-50 h-10 px-4 py-2 transition-colors"
