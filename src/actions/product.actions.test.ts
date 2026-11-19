@@ -172,8 +172,7 @@ function productForm(overrides: Record<string, string | undefined> = {}) {
 }
 
 function updatedProductData() {
-  const call = vi.mocked(prisma.product.update).mock
-    .calls[0] as unknown as [
+  const call = vi.mocked(prisma.product.update).mock.calls[0] as unknown as [
     { data: { priceCents?: number; isAvailable?: boolean } },
   ];
   return call[0].data;

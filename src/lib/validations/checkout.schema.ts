@@ -90,11 +90,6 @@ export const createOrderSchema = checkoutSchema
       .enum(["PIX", "CARD"], { message: "Método de pagamento inválido." })
       .optional(),
     card: cardPaymentSchema.optional(),
-    customerPhone: z
-      .string()
-      .min(10, "Informe um telefone válido com DDD")
-      .optional(),
-    customerEmail: z.email("Informe um e-mail válido").optional(),
     items: z
       .array(orderItemSchema)
       .min(1, "O carrinho está vazio.")

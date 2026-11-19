@@ -20,6 +20,12 @@ import {
 } from "@/lib/validations/checkout.schema";
 import { PaymentRejectedError, describeCardFailure } from "@/lib/card-outcome";
 
+// Unexpected failures never expose Error.message to the customer: it can carry
+// configuration or database details. Not exported because a "use server" module
+// may only export async functions.
+const ORDER_CREATION_FAILURE_MESSAGE =
+  "Não foi possível processar o pedido agora. Tente novamente em instantes.";
+
 interface OrderItemData {
   productId: string;
   productName: string;
@@ -354,10 +360,7 @@ export async function createOrder(payload: CreateOrderInput) {
     console.error("Error creating order:", error);
     return {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Ocorreu um erro ao processar o pedido. Tente novamente.",
+      error: ORDER_CREATION_FAILURE_MESSAGE,
       orderId: orderIdForRetry,
       accessToken: accessTokenForRetry,
     };

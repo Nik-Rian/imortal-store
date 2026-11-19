@@ -163,9 +163,7 @@ export async function purgeDrop(dropId: string) {
     const orderItems = await tx.orderItem.findMany({
       where: {
         OR: [
-          ...(productIds.length > 0
-            ? [{ productId: { in: productIds } }]
-            : []),
+          ...(productIds.length > 0 ? [{ productId: { in: productIds } }] : []),
           { dropName: drop.name },
         ],
       },
