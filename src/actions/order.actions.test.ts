@@ -112,6 +112,26 @@ describe("createOrder Validation", () => {
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/CPF válido/);
   });
+
+  it.each(["customerPhone", "customerEmail"] as const)(
+    "rejeita o pedido sem %s antes de acessar o banco",
+    async (field) => {
+      const payloadWithoutField: Partial<typeof validPayload> = {
+        ...validPayload,
+      };
+      delete payloadWithoutField[field];
+
+      const result = await createOrder(payloadWithoutField as never);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeTruthy();
+      expect(prisma.order.findUnique).not.toHaveBeenCalled();
+      expect(prisma.order.findFirst).not.toHaveBeenCalled();
+      expect(prisma.order.create).not.toHaveBeenCalled();
+      expect(prisma.productVariant.findMany).not.toHaveBeenCalled();
+      expect(prisma.product.findMany).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("createOrder retry and duplicate protection", () => {
@@ -148,6 +168,9 @@ describe("createOrder retry and duplicate protection", () => {
     qrCodeBase64: "b64",
     status: "action_required",
   };
+
+  const SAFE_ORDER_FAILURE_MESSAGE =
+    "Não foi possível processar o pedido agora. Tente novamente em instantes.";
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -263,15 +286,64 @@ describe("createOrder retry and duplicate protection", () => {
     );
   });
 
-  it("surfaces a create failure when no order exists for the key", async () => {
+  it("hides a create failure behind a safe message when no order exists for the key", async () => {
+    const failure = new Error("db down");
     vi.mocked(prisma.order.findFirst).mockResolvedValue(null);
-    vi.mocked(prisma.order.create).mockRejectedValue(new Error("db down"));
+    vi.mocked(prisma.order.create).mockRejectedValue(failure);
     const result = await createOrder({ ...payload, attemptKey: "key-1" });
     expect(result.success).toBe(false);
-    expect(result.error).toBe("db down");
+    expect(result.error).toBe(SAFE_ORDER_FAILURE_MESSAGE);
+    expect(result.error).not.toMatch(/db down/);
     expect(result.accessToken).toBeUndefined();
     expect(result.orderId).toBeUndefined();
+    expect(console.error).toHaveBeenCalledWith(
+      "Error creating order:",
+      failure,
+    );
     expect(createPixOrder).not.toHaveBeenCalled();
+  });
+
+  it("hides a provider error from the customer and keeps the retry credentials", async () => {
+    const failure = new Error(
+      "Mercado Pago API Error: access token is missing",
+    );
+    vi.mocked(prisma.order.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(prisma.order.create).mockResolvedValue(storedOrder() as never);
+    vi.mocked(createPixOrder).mockRejectedValueOnce(failure);
+
+    const result = await createOrder({ ...payload, attemptKey: "key-1" });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: SAFE_ORDER_FAILURE_MESSAGE,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(result.error).not.toMatch(/Mercado Pago|access token/);
+    expect(console.error).toHaveBeenCalledWith(
+      "Error creating order:",
+      failure,
+    );
+  });
+
+  it("hides a database error raised after the order exists and keeps the retry credentials", async () => {
+    const failure = new Error("db down");
+    vi.mocked(prisma.order.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(prisma.order.create).mockResolvedValue(storedOrder() as never);
+    vi.mocked(prisma.order.update).mockRejectedValueOnce(failure);
+
+    const result = await createOrder({ ...payload, attemptKey: "key-1" });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: SAFE_ORDER_FAILURE_MESSAGE,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(console.error).toHaveBeenCalledWith(
+      "Error creating order:",
+      failure,
+    );
   });
 
   it("lets the customer retry the same order after a provider failure", async () => {
