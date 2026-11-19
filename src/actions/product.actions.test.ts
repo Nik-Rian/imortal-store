@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { deleteBlobImages } from "@/actions/blob.actions";
+import { revalidatePath } from "next/cache";
 import { createProduct, deleteProduct, updateProduct } from "./product.actions";
 
 vi.mock("@/lib/prisma", () => ({
@@ -141,5 +142,139 @@ describe("deleteProduct (bundles)", () => {
 
     expect(prisma.product.delete).toHaveBeenCalledWith({ where: { id: "b1" } });
     expect(deleteBlobImages).toHaveBeenCalledWith(["https://blob/k.png"]);
+  });
+});
+
+// Payload shaped like the one the admin form posts: priceCents in cents and an
+// explicit isAvailable flag. An `undefined` override omits the field.
+function productForm(overrides: Record<string, string | undefined> = {}) {
+  const fields: Record<string, string | undefined> = {
+    name: "Camiseta",
+    slug: "camiseta",
+    description: "d",
+    dropId: "d1",
+    priceCents: "4990",
+    isAvailable: "true",
+    isBundle: "false",
+    controlStock: "false",
+    hasSizes: "false",
+    hasVariants: "false",
+    sizes: "[]",
+    variants: "[]",
+    components: "[]",
+    ...overrides,
+  };
+  const fd = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined) fd.set(key, value);
+  }
+  return fd;
+}
+
+function updatedProductData() {
+  const call = vi.mocked(prisma.product.update).mock
+    .calls[0] as unknown as [
+    { data: { priceCents?: number; isAvailable?: boolean } },
+  ];
+  return call[0].data;
+}
+
+describe("createProduct (price and availability)", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.product.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.product.create).mockResolvedValue({} as never);
+  });
+
+  it("rejects a payload that only carries the legacy price field", async () => {
+    await expect(
+      createProduct(productForm({ priceCents: undefined, price: "49.90" })),
+    ).rejects.toThrow();
+    expect(prisma.product.create).not.toHaveBeenCalled();
+  });
+
+  it("persists priceCents exactly as posted", async () => {
+    await createProduct(productForm({ priceCents: "4990" }));
+    expect(prisma.product.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ priceCents: 4990 }),
+    });
+  });
+
+  it("persists isAvailable=false when the form posts false", async () => {
+    await createProduct(productForm({ isAvailable: "false" }));
+    expect(prisma.product.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ isAvailable: false }),
+    });
+  });
+
+  it("persists isAvailable=true when the form posts true", async () => {
+    await createProduct(productForm({ isAvailable: "true" }));
+    expect(prisma.product.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ isAvailable: true }),
+    });
+  });
+
+  it("defaults to available when the field is absent", async () => {
+    await createProduct(productForm({ isAvailable: undefined }));
+    expect(prisma.product.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ isAvailable: true }),
+    });
+  });
+});
+
+describe("updateProduct (price, availability and page revalidation)", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue({
+      slug: "camiseta",
+      images: [],
+      variants: [],
+      sizes: [],
+    } as never);
+    vi.mocked(prisma.product.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.$transaction).mockResolvedValue([] as never);
+  });
+
+  it("rejects a payload that only carries the legacy price field", async () => {
+    await expect(
+      updateProduct(
+        "p1",
+        productForm({ priceCents: undefined, price: "49.90" }),
+      ),
+    ).rejects.toThrow();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("persists priceCents exactly as posted", async () => {
+    await updateProduct("p1", productForm({ priceCents: "4990" }));
+    expect(updatedProductData().priceCents).toBe(4990);
+  });
+
+  it("closes the listing when the form posts false", async () => {
+    await updateProduct("p1", productForm({ isAvailable: "false" }));
+    expect(updatedProductData().isAvailable).toBe(false);
+  });
+
+  it("keeps the stored availability when the field is absent", async () => {
+    await updateProduct("p1", productForm({ isAvailable: undefined }));
+    expect(updatedProductData().isAvailable).toBeUndefined();
+  });
+
+  it("revalidates the product page for the saved slug", async () => {
+    await updateProduct("p1", productForm({ slug: "camiseta" }));
+    expect(revalidatePath).toHaveBeenCalledWith("/");
+    expect(revalidatePath).toHaveBeenCalledWith("/produto/camiseta");
+  });
+
+  it("also revalidates the previous slug when it changed", async () => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue({
+      slug: "camiseta-antiga",
+      images: [],
+      variants: [],
+      sizes: [],
+    } as never);
+    await updateProduct("p1", productForm({ slug: "camiseta" }));
+    expect(revalidatePath).toHaveBeenCalledWith("/produto/camiseta");
+    expect(revalidatePath).toHaveBeenCalledWith("/produto/camiseta-antiga");
   });
 });

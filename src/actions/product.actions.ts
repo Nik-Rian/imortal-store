@@ -11,11 +11,21 @@ import { assertBundleIntegrity } from "@/services/bundle.service";
 import { deleteBlobImages } from "@/actions/blob.actions";
 import { requireSession } from "@/lib/auth-guard";
 
+/**
+ * Reads the availability flag posted by the admin form.
+ * Returns `undefined` when the field is absent so each caller can apply its own
+ * default (create: available; update: leave the stored value unchanged).
+ */
+function parseIsAvailable(raw: FormDataEntryValue | null): boolean | undefined {
+  if (raw === "true" || raw === "on") return true;
+  if (raw === "false") return false;
+  return undefined;
+}
+
 export async function createProduct(formData: FormData) {
   await requireSession();
 
-  const rawPrice = (formData.get("priceCents") ??
-    formData.get("price")) as string;
+  const rawPrice = formData.get("priceCents") as string | null;
 
   const rawSizes = formData.get("sizes") as string;
   let sizesInput: unknown = [];
@@ -29,11 +39,7 @@ export async function createProduct(formData: FormData) {
     if (rawVariants) variantsInput = JSON.parse(rawVariants);
   } catch {}
 
-  const rawIsAvailable = formData.get("isAvailable");
-  const isAvailable =
-    rawIsAvailable === "true" ||
-    rawIsAvailable === "on" ||
-    rawIsAvailable === null;
+  const isAvailable = parseIsAvailable(formData.get("isAvailable")) ?? true;
 
   const controlStock =
     formData.get("controlStock") === "true" ||
@@ -146,8 +152,7 @@ export async function createProduct(formData: FormData) {
 export async function updateProduct(id: string, formData: FormData) {
   await requireSession();
 
-  const rawPrice = (formData.get("priceCents") ??
-    formData.get("price")) as string;
+  const rawPrice = formData.get("priceCents") as string | null;
 
   const rawSizes = formData.get("sizes") as string;
   let sizesInput: unknown = [];
@@ -169,8 +174,7 @@ export async function updateProduct(id: string, formData: FormData) {
     }
   }
 
-  const rawIsAvailable = formData.get("isAvailable");
-  const isAvailable = rawIsAvailable === "true" || rawIsAvailable === "on";
+  const isAvailable = parseIsAvailable(formData.get("isAvailable"));
 
   const controlStock =
     formData.get("controlStock") === "true" ||
@@ -357,7 +361,7 @@ export async function updateProduct(id: string, formData: FormData) {
           description,
           priceCents,
           dropId,
-          isAvailable: input.isAvailable,
+          isAvailable,
           isBundle: input.isBundle,
           controlStock: input.controlStock,
           hasSizes: input.hasSizes,
@@ -379,6 +383,10 @@ export async function updateProduct(id: string, formData: FormData) {
   }
 
   revalidatePath("/");
+  revalidatePath(`/produto/${slug}`);
+  if (currentProduct.slug !== slug) {
+    revalidatePath(`/produto/${currentProduct.slug}`);
+  }
   revalidatePath("/admin/produtos");
   revalidatePath(`/admin/produtos/${id}/editar`);
   redirect("/admin/produtos");
