@@ -15,6 +15,7 @@ interface AdminDropItem {
 
 interface SemesterLifecycleSlotProps {
   drops: AdminDropItem[];
+  purgeEnabled: boolean;
 }
 
 // Fixed time zone so server and client render the same date text.
@@ -26,7 +27,10 @@ const formatDate = (value: Date | string) =>
 const REQUIRED_PHRASE =
   "Estou ciente dos riscos e quero deletar o banco de dados";
 
-export function SemesterLifecycleSlot({ drops }: SemesterLifecycleSlotProps) {
+export function SemesterLifecycleSlot({
+  drops,
+  purgeEnabled,
+}: SemesterLifecycleSlotProps) {
   const [isPending, startTransition] = useTransition();
   const [purgeTarget, setPurgeTarget] = useState<{
     id: string;
@@ -133,19 +137,21 @@ export function SemesterLifecycleSlot({ drops }: SemesterLifecycleSlotProps) {
               </div>
               <div className="flex items-center gap-2">
                 <CloseDropButton dropId={drop.id} isClosed={drop.isClosed} />
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => {
-                    setPurgeTarget({ id: drop.id, name: drop.name });
-                    setConfirmStep(1);
-                    setTypedText("");
-                    setError(null);
-                  }}
-                  className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  Apagar Semestre
-                </button>
+                {purgeEnabled && drop.isClosed && (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => {
+                      setPurgeTarget({ id: drop.id, name: drop.name });
+                      setConfirmStep(1);
+                      setTypedText("");
+                      setError(null);
+                    }}
+                    className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    Apagar Semestre
+                  </button>
+                )}
               </div>
             </li>
           ))}

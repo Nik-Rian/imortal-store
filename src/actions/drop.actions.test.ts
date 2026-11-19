@@ -24,6 +24,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 describe("createDrop", () => {
@@ -109,52 +110,234 @@ describe("closeDropSales", () => {
 });
 
 describe("purgeDrop", () => {
-  it("purges an expired drop and removes its blob images", async () => {
+  const closedDrop = {
+    name: "2026.1",
+    endsAt: new Date("2026-06-30T00:00:00Z"),
+  };
+  const openDrop = {
+    name: "2026.2",
+    endsAt: new Date("2026-12-31T00:00:00Z"),
+  };
+
+  type PurgeOrder = {
+    paymentStatus: string;
+    paymentReviewReason: string | null;
+  };
+
+  function buildTransaction({
+    drop = closedDrop,
+    orders = [],
+    orderItems = [{ orderId: "o1" }],
+    products = [
+      {
+        id: "p1",
+        images: ["https://blob/x.png"],
+        variants: [{ image: "https://blob/v.png" }, { image: null }],
+      },
+    ],
+  }: {
+    drop?: typeof closedDrop | null;
+    orders?: PurgeOrder[];
+    orderItems?: { orderId: string }[];
+    products?: {
+      id: string;
+      images: string[];
+      variants: { image: string | null }[];
+    }[];
+  } = {}) {
     const tx = {
+      drop: {
+        findUnique: vi.fn().mockResolvedValue(drop),
+        delete: vi.fn(),
+      },
       product: {
-        findMany: vi.fn().mockResolvedValue([
-          {
-            id: "p1",
-            images: ["https://blob/x.png"],
-            variants: [{ image: "https://blob/v.png" }, { image: null }],
-          },
-        ]),
+        findMany: vi.fn().mockResolvedValue(products),
         deleteMany: vi.fn(),
       },
       orderItem: {
-        findMany: vi.fn().mockResolvedValue([{ orderId: "o1" }]),
+        findMany: vi.fn().mockResolvedValue(orderItems),
         deleteMany: vi.fn(),
       },
-      order: { deleteMany: vi.fn() },
+      order: {
+        findMany: vi.fn().mockResolvedValue(orders),
+        deleteMany: vi.fn(),
+      },
       productVariant: { deleteMany: vi.fn() },
-      drop: { delete: vi.fn() },
       bundleComponent: { deleteMany: vi.fn() },
+      stockReservation: { deleteMany: vi.fn() },
+      stockItem: { deleteMany: vi.fn() },
     };
     vi.mocked(prisma.$transaction).mockImplementation(((
       callback: (client: typeof tx) => unknown,
     ) => callback(tx)) as never);
+    return tx;
+  }
+
+  function expectNothingDeleted(tx: ReturnType<typeof buildTransaction>) {
+    expect(tx.drop.delete).not.toHaveBeenCalled();
+    for (const model of [
+      tx.product,
+      tx.orderItem,
+      tx.order,
+      tx.productVariant,
+      tx.bundleComponent,
+      tx.stockReservation,
+      tx.stockItem,
+    ]) {
+      expect(model.deleteMany).not.toHaveBeenCalled();
+    }
+    expect(deleteBlobImages).not.toHaveBeenCalled();
+  }
+
+  beforeEach(() => {
+    vi.stubEnv("ALLOW_DESTRUCTIVE_PURGE", "true");
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-19T12:00:00Z"));
+  });
+
+  it.each([undefined, "false", "1"])(
+    "refuses and deletes nothing when the purge flag is %s",
+    async (flag) => {
+      vi.stubEnv("ALLOW_DESTRUCTIVE_PURGE", flag);
+
+      await expect(purgeDrop("expired-drop")).rejects.toThrow(/desabilitada/);
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(deleteBlobImages).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses when the drop does not exist", async () => {
+    const tx = buildTransaction({ drop: null });
+
+    await expect(purgeDrop("missing-drop")).rejects.toThrow(/não encontrado/);
+    expectNothingDeleted(tx);
+  });
+
+  it("refuses while the sales window is open", async () => {
+    const tx = buildTransaction({ drop: openDrop });
+
+    await expect(purgeDrop("open-drop")).rejects.toThrow(/ainda está aberto/);
+    expectNothingDeleted(tx);
+  });
+
+  it("refuses when the sales window ends exactly now", async () => {
+    const tx = buildTransaction({
+      drop: { name: "2026.2", endsAt: new Date("2026-11-19T12:00:00Z") },
+    });
+
+    await expect(purgeDrop("edge-drop")).rejects.toThrow(/ainda está aberto/);
+    expectNothingDeleted(tx);
+  });
+
+  it.each([
+    "PENDING",
+    "IN_REVIEW",
+    "PAID",
+    "PARTIALLY_REFUNDED",
+    "REFUNDED",
+    "CHARGEBACK_IN_REVIEW",
+    "CHARGEBACK_LOST",
+    "CHARGEBACK_WON",
+  ])("refuses when any order is %s", async (paymentStatus) => {
+    const tx = buildTransaction({
+      orders: [
+        { paymentStatus: "CANCELED", paymentReviewReason: null },
+        { paymentStatus, paymentReviewReason: null },
+      ],
+    });
+
+    await expect(purgeDrop("expired-drop")).rejects.toThrow(/pedidos/);
+    expectNothingDeleted(tx);
+  });
+
+  it("refuses when a purgeable order carries a payment review reason", async () => {
+    const tx = buildTransaction({
+      orders: [
+        { paymentStatus: "FAILED", paymentReviewReason: "LATE_PAYMENT" },
+      ],
+    });
+
+    await expect(purgeDrop("expired-drop")).rejects.toThrow(/pedidos/);
+    expectNothingDeleted(tx);
+  });
+
+  it("counts orders reached only through the dropName snapshot", async () => {
+    const tx = buildTransaction({
+      products: [],
+      orders: [{ paymentStatus: "PAID", paymentReviewReason: null }],
+    });
+
+    await expect(purgeDrop("expired-drop")).rejects.toThrow(/pedidos/);
+
+    expect(tx.orderItem.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { OR: [{ dropName: "2026.1" }] } }),
+    );
+    expectNothingDeleted(tx);
+  });
+
+  it.each(["FAILED", "EXPIRED", "CANCELED"])(
+    "purges a closed drop whose orders are %s, including stock rows and images",
+    async (paymentStatus) => {
+      const tx = buildTransaction({
+        orders: [{ paymentStatus, paymentReviewReason: null }],
+      });
+
+      await purgeDrop("expired-drop");
+
+      expect(tx.stockReservation.deleteMany).toHaveBeenCalledWith({
+        where: { orderId: { in: ["o1"] } },
+      });
+      expect(tx.stockItem.deleteMany).toHaveBeenCalledWith({
+        where: { productId: { in: ["p1"] } },
+      });
+      expect(tx.order.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ["o1"] } },
+      });
+      expect(tx.bundleComponent.deleteMany).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { bundleId: { in: ["p1"] } },
+            { componentProductId: { in: ["p1"] } },
+          ],
+        },
+      });
+      expect(tx.drop.delete).toHaveBeenCalledWith({
+        where: { id: "expired-drop" },
+      });
+
+      const order = (mock: { mock: { invocationCallOrder: number[] } }) =>
+        mock.mock.invocationCallOrder[0];
+      expect(order(tx.stockReservation.deleteMany)).toBeLessThan(
+        order(tx.order.deleteMany),
+      );
+      expect(order(tx.stockReservation.deleteMany)).toBeLessThan(
+        order(tx.stockItem.deleteMany),
+      );
+      expect(order(tx.stockItem.deleteMany)).toBeLessThan(
+        order(tx.product.deleteMany),
+      );
+      expect(order(tx.bundleComponent.deleteMany)).toBeLessThan(
+        order(tx.product.deleteMany),
+      );
+
+      expect(deleteBlobImages).toHaveBeenCalledWith([
+        "https://blob/x.png",
+        "https://blob/v.png",
+      ]);
+    },
+  );
+
+  it("purges a closed drop that has no orders", async () => {
+    const tx = buildTransaction({ orderItems: [], orders: [] });
 
     await purgeDrop("expired-drop");
 
+    expect(tx.stockReservation.deleteMany).not.toHaveBeenCalled();
+    expect(tx.order.deleteMany).not.toHaveBeenCalled();
+    expect(tx.stockItem.deleteMany).toHaveBeenCalled();
     expect(tx.drop.delete).toHaveBeenCalledWith({
       where: { id: "expired-drop" },
     });
-
-    expect(tx.bundleComponent.deleteMany).toHaveBeenCalledWith({
-      where: {
-        OR: [
-          { bundleId: { in: ["p1"] } },
-          { componentProductId: { in: ["p1"] } },
-        ],
-      },
-    });
-    expect(
-      tx.bundleComponent.deleteMany.mock.invocationCallOrder[0],
-    ).toBeLessThan(tx.product.deleteMany.mock.invocationCallOrder[0]);
-
-    expect(deleteBlobImages).toHaveBeenCalledWith([
-      "https://blob/x.png",
-      "https://blob/v.png",
-    ]);
   });
 });
