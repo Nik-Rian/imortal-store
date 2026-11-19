@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -69,6 +70,15 @@ function getStatusBadge(status: string) {
         className: "bg-zinc-100 text-zinc-800 border-zinc-200",
       };
   }
+}
+
+// The page URL acts as the access credential for the order. It must stay out of
+// search indexes and must not be forwarded to third parties via the Referer header.
+export function generateMetadata(): Metadata {
+  return {
+    robots: { index: false, follow: false },
+    referrer: "no-referrer",
+  };
 }
 
 export default async function OrderDetailPage({ params }: OrderPageProps) {
