@@ -9,9 +9,7 @@ export default function StorefrontLayout({
   return (
     <CartProvider>
       <Header />
-      <main className="flex-1">
-        {children}
-      </main>
+      <main className="flex-1">{children}</main>
     </CartProvider>
   );
 }

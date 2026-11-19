@@ -156,6 +156,5 @@ describe("purgeDrop", () => {
       "https://blob/x.png",
       "https://blob/v.png",
     ]);
-
   });
 });

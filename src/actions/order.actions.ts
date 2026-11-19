@@ -9,7 +9,8 @@ import {
 import {
   createCardOrder,
   createPixOrder,
-} from "@/services/mercadopago.service";import { requireSession } from "@/lib/auth-guard";
+} from "@/services/mercadopago.service";
+import { requireSession } from "@/lib/auth-guard";
 import { getAdminTransitionRule } from "@/lib/order-status";
 import { revalidatePath } from "next/cache";
 import { OrderStatus } from "@/generated/prisma/client";
@@ -416,7 +417,7 @@ export async function markAllPaidAsReady() {
   await prisma.order.updateMany({
     where: {
       paymentStatus: "PAID",
-      status: "PENDING"
+      status: "PENDING",
     },
     data: { status: "READY_FOR_PICKUP" },
   });

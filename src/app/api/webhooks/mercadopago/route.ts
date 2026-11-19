@@ -15,14 +15,9 @@ const MAX_SYNC_ATTEMPTS = 3;
 type SyncOutcome = "updated" | "unchanged" | "not_found" | "conflict";
 
 async function syncOrderPayment(
-
   mpOrder: MercadoPagoOrderDetails,
-
 ): Promise<SyncOutcome> {
-
-  const payment = mpOrder.payments[0] as
-    | MercadoPagoPaymentDetails
-    | undefined;
+  const payment = mpOrder.payments[0] as MercadoPagoPaymentDetails | undefined;
   const mpStatusDetail = mpOrder.status_detail || payment?.statusDetail;
   const providerTotalCents = Math.round(mpOrder.totalAmount * 100);
   const providerPaidCents = Math.round(mpOrder.totalPaidAmount * 100);

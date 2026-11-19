@@ -10,7 +10,7 @@ interface DeleteProductButtonProps {
 export function DeleteProductButton({ productId }: DeleteProductButtonProps) {
   // Local state to track whether the user is in the confirmation step
   const [isConfirming, setIsConfirming] = useState(false);
-  
+
   // useTransition hooks give an 'isPending' state for server interactions
   const [isPending, startTransition] = useTransition();
 
