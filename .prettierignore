@@ -1,0 +1,15 @@
+# Dependencies
+node_modules
+
+# Next.js
+.next
+out
+
+# Build artifacts
+build
+dist
+coverage
+.turbo
+
+# Package manager lockfile
+pnpm-lock.yaml

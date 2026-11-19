@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import { fixupConfigRules } from "@eslint/compat";
+import eslintConfigPrettier from "eslint-config-prettier/flat";
 
 const eslintConfig = defineConfig([
   ...fixupConfigRules(nextVitals),
@@ -14,6 +15,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  eslintConfigPrettier,
 ]);
 
 export default eslintConfig;
