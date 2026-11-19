@@ -3,6 +3,7 @@ import { SemesterLifecycleSlot } from "@/components/admin/SemesterLifecycleSlot"
 
 export default async function AdminDashboardPage() {
   const drops = await getAdminDrops();
+  const purgeEnabled = process.env.ALLOW_DESTRUCTIVE_PURGE === "true";
 
   return (
     <div className="space-y-6">
@@ -15,7 +16,7 @@ export default async function AdminDashboardPage() {
         </p>
       </div>
 
-      <SemesterLifecycleSlot drops={drops} />
+      <SemesterLifecycleSlot drops={drops} purgeEnabled={purgeEnabled} />
     </div>
   );
 }

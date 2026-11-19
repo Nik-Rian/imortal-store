@@ -1,6 +1,6 @@
 import { test, describe } from "vitest";
 
-describe("Critical Paths: Reservations, Bundles, and Purge Guard", () => {
+describe("Critical Paths: Reservations and Bundles", () => {
   // Mock prisma behavior for availability tests conceptually.
   // Full integration tests would require a DB setup.
 
@@ -15,13 +15,6 @@ describe("Critical Paths: Reservations, Bundles, and Purge Guard", () => {
     "Bundle Aggregation: Applies bundle rules and combined pricing correctly",
     () => {
       // Requires bundle aggregation logic implementation in order.actions.ts
-    },
-  );
-
-  test.todo(
-    "Purge Guard: Prevents deletion/purge of PAID and COMPLETED orders",
-    () => {
-      // Requires purge cron/service implementation
     },
   );
 });

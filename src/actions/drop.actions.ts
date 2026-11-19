@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth-guard";
 import { revalidatePath } from "next/cache";
 import { deleteBlobImages } from "./blob.actions";
+import type { PaymentStatus } from "@/generated/prisma/client";
 
 /**
  * Instantly closes sales for an open drop by setting its endsAt date to now.
@@ -97,10 +98,32 @@ export async function createDrop(): Promise<
 }
 
 /**
- * Purges an active drop period and all dependent Order, OrderItem, Product, and ProductVariant rows.
+ * Payment states of orders that hold no money and no open obligation. Any
+ * other state (pending, in review, paid, refunded, chargeback) is a record
+ * that a purge must never destroy.
+ */
+const PURGEABLE_PAYMENT_STATUSES: readonly PaymentStatus[] = [
+  "FAILED",
+  "EXPIRED",
+  "CANCELED",
+];
+
+/**
+ * Permanently deletes a closed drop and every dependent row (orders, items,
+ * stock reservations, stock items, products, variants, bundle components).
+ * Refuses, before deleting anything, unless the purge flag is enabled, the
+ * sales window is closed and every order of the drop is FAILED, EXPIRED or
+ * CANCELED without a payment review reason.
  */
 export async function purgeDrop(dropId: string) {
   await requireSession();
+
+  // Read at call time so the flag can change without a module reload.
+  if (process.env.ALLOW_DESTRUCTIVE_PURGE !== "true") {
+    throw new Error(
+      "A exclusão permanente de semestres está desabilitada neste ambiente.",
+    );
+  }
 
   if (!dropId) {
     throw new Error("ID do drop não fornecido.");
@@ -109,6 +132,19 @@ export async function purgeDrop(dropId: string) {
   let imagesToDelete: string[] = [];
 
   await prisma.$transaction(async (tx) => {
+    const drop = await tx.drop.findUnique({
+      where: { id: dropId },
+      select: { name: true, endsAt: true },
+    });
+    if (!drop) {
+      throw new Error("Semestre não encontrado.");
+    }
+    if (drop.endsAt >= new Date()) {
+      throw new Error(
+        `O semestre ${drop.name} ainda está aberto. Encerre as vendas dele antes de apagá-lo.`,
+      );
+    }
+
     const products = await tx.product.findMany({
       where: { dropId },
       select: { id: true, images: true, variants: { select: { image: true } } },
@@ -121,30 +157,61 @@ export async function purgeDrop(dropId: string) {
       ...p.variants.flatMap((v) => (v.image ? [v.image] : [])),
     ]);
 
-    if (productIds.length > 0) {
-      const orderItems = await tx.orderItem.findMany({
-        where: { productId: { in: productIds } },
-        select: { orderId: true },
+    // Orders have no direct drop link. They are reached through the items'
+    // products and, for items whose product was already removed (productId
+    // set to null), through the dropName snapshot, so none is missed.
+    const orderItems = await tx.orderItem.findMany({
+      where: {
+        OR: [
+          ...(productIds.length > 0
+            ? [{ productId: { in: productIds } }]
+            : []),
+          { dropName: drop.name },
+        ],
+      },
+      select: { orderId: true },
+    });
+    const orderIds = Array.from(new Set(orderItems.map((oi) => oi.orderId)));
+
+    if (orderIds.length > 0) {
+      const orders = await tx.order.findMany({
+        where: { id: { in: orderIds } },
+        select: { paymentStatus: true, paymentReviewReason: true },
       });
-      const orderIds = Array.from(
-        new Set(orderItems.map((oi) => oi.orderId).filter(Boolean)),
+      const hasRetainedOrder = orders.some(
+        (order) =>
+          !PURGEABLE_PAYMENT_STATUSES.includes(order.paymentStatus) ||
+          order.paymentReviewReason !== null,
       );
-
-      await tx.orderItem.deleteMany({
-        where: {
-          OR: [
-            { productId: { in: productIds } },
-            ...(orderIds.length > 0 ? [{ orderId: { in: orderIds } }] : []),
-          ],
-        },
-      });
-
-      if (orderIds.length > 0) {
-        await tx.order.deleteMany({
-          where: { id: { in: orderIds } },
-        });
+      if (hasRetainedOrder) {
+        throw new Error(
+          `O semestre ${drop.name} possui pedidos pagos, pendentes ou com pagamento em análise e não pode ser apagado.`,
+        );
       }
 
+      // StockReservation -> Order and -> StockItem are ON DELETE RESTRICT:
+      // reservations must go before the orders and the stock items.
+      await tx.stockReservation.deleteMany({
+        where: { orderId: { in: orderIds } },
+      });
+    }
+
+    if (productIds.length > 0) {
+      await tx.stockItem.deleteMany({
+        where: { productId: { in: productIds } },
+      });
+    }
+
+    if (orderIds.length > 0) {
+      await tx.orderItem.deleteMany({
+        where: { orderId: { in: orderIds } },
+      });
+      await tx.order.deleteMany({
+        where: { id: { in: orderIds } },
+      });
+    }
+
+    if (productIds.length > 0) {
       await tx.productVariant.deleteMany({
         where: { productId: { in: productIds } },
       });
