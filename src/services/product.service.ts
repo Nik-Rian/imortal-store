@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { cache } from "react";
 import { buildStockKey } from "@/lib/stock-key";
 import { getStorefrontDrop } from "@/services/drop.service";
+import { cache } from "react";
 
 export interface GetProductsOptions {
   activeOnly?: boolean;

@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { requireSession } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
-import { createAdminUser, deleteAdminUser } from "./user.actions";
 import { APIError } from "better-auth/api";
+import { redirect } from "next/navigation";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createAdminUser, deleteAdminUser } from "./user.actions";
 
 vi.mock("@/lib/auth", () => ({
   auth: { api: { createUser: vi.fn() } },

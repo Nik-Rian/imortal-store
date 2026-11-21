@@ -31,7 +31,11 @@ export default function RootLayout({
       <body className="min-h-full bg-background text-foreground">
         {children}
         {/* Render Toaster component globally with nice UI configurations */}
-        <Toaster richColors closeButton position="top-right" />
+        <Toaster
+          richColors
+          closeButton
+          position="top-right"
+        />
       </body>
     </html>
   );

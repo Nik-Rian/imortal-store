@@ -1,8 +1,9 @@
+import { inspect } from "node:util";
+import { PaymentRejectedError } from "@/lib/card-outcome";
+import { MAX_CARD_INSTALLMENTS } from "@/lib/validations/checkout.schema";
+
 const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN;
 const MP_BASE_URL = "https://api.mercadopago.com";
-import { inspect } from "node:util";
-import { MAX_CARD_INSTALLMENTS } from "@/lib/validations/checkout.schema";
-import { PaymentRejectedError } from "@/lib/card-outcome";
 
 export interface CreatePixPaymentInput {
   orderId: string;

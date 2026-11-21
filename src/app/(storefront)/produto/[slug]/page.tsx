@@ -1,11 +1,11 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ProductGallery } from "@/components/product/ProductGallery";
 import { AddToCartButton } from "@/components/product/AddToCartButton";
-import { getProductBySlug } from "@/services/product.service";
-import { formatPrice } from "@/lib/utils";
+import { ProductGallery } from "@/components/product/ProductGallery";
 import { getBundleGalleryImages } from "@/lib/media";
+import { formatPrice } from "@/lib/utils";
+import { getProductBySlug } from "@/services/product.service";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
 
 // Time-based ISR fallback: revalidate product details every 1 hour (3600 seconds)
 export const revalidate = 3600;
@@ -60,18 +60,21 @@ export default async function ProductPage({ params }: Props) {
       {/* Breadcrumb / Back Link */}
       <Link
         href="/"
-        className="text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 mb-8 inline-block transition-colors"
+        className="mb-8 inline-block text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
       >
         &larr; Voltar para a loja
       </Link>
 
       <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
         {/* Left Column: Product Gallery */}
-        <ProductGallery images={galleryImages} productName={product.name} />
+        <ProductGallery
+          images={galleryImages}
+          productName={product.name}
+        />
 
         {/* Right Column: Product Details */}
         <div className="flex flex-col">
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-4xl">
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl dark:text-zinc-50">
             {product.name}
           </h1>
           <p className="mt-4 text-2xl font-medium text-zinc-900 dark:text-zinc-100">
@@ -80,7 +83,7 @@ export default async function ProductPage({ params }: Props) {
 
           <div className="mt-6">
             <h3 className="sr-only">Descrição</h3>
-            <p className="text-base text-zinc-700 dark:text-zinc-300 leading-relaxed">
+            <p className="text-base leading-relaxed text-zinc-700 dark:text-zinc-300">
               {product.description}
             </p>
           </div>

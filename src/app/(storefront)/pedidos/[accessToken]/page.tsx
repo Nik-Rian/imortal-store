@@ -1,16 +1,16 @@
-import type { Metadata } from "next";
-import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { OrderPixSection } from "@/components/storefront/OrderPixSection";
 import { OrderCardSection } from "@/components/storefront/OrderCardSection";
+import { OrderPixSection } from "@/components/storefront/OrderPixSection";
+import { prisma } from "@/lib/prisma";
 import {
   ArrowLeft,
   CheckCircle2,
   Clock,
-  XCircle,
   RefreshCw,
+  XCircle,
 } from "lucide-react";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
 
 interface OrderPageProps {
   params: Promise<{ accessToken: string }> | { accessToken: string };
@@ -98,24 +98,24 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
   const StatusIcon = badge.icon;
 
   return (
-    <div className="container mx-auto px-4 py-10 max-w-3xl">
+    <div className="container mx-auto max-w-3xl px-4 py-10">
       <div className="mb-6">
         <Link
           href="/"
-          className="inline-flex items-center text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+          className="inline-flex items-center text-xs font-semibold text-zinc-500 transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
         >
-          <ArrowLeft className="w-4 h-4 mr-1" /> Voltar à loja
+          <ArrowLeft className="mr-1 h-4 w-4" /> Voltar à loja
         </Link>
       </div>
 
-      <div className="border rounded-2xl p-6 sm:p-8 bg-white dark:bg-zinc-900 dark:border-zinc-800 shadow-sm space-y-6">
+      <div className="space-y-6 rounded-2xl border bg-white p-6 shadow-sm sm:p-8 dark:border-zinc-800 dark:bg-zinc-900">
         {/* Header section with order ID, date, and status badge */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b dark:border-zinc-800 pb-6">
+        <div className="flex flex-col items-start justify-between gap-4 border-b pb-6 sm:flex-row sm:items-center dark:border-zinc-800">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">
               Pedido #{order.id.slice(-6)}
             </h1>
-            <p className="text-xs text-zinc-500 mt-1">
+            <p className="mt-1 text-xs text-zinc-500">
               Realizado em{" "}
               {new Date(order.createdAt).toLocaleDateString("pt-BR", {
                 day: "2-digit",
@@ -128,9 +128,9 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
           </div>
 
           <span
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border ${badge.className}`}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-bold ${badge.className}`}
           >
-            <StatusIcon className="w-4 h-4" />
+            <StatusIcon className="h-4 w-4" />
             {badge.label}
           </span>
         </div>
@@ -150,8 +150,8 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
         )}
 
         {/* Customer Information Section */}
-        <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-xl p-4 text-xs space-y-1.5">
-          <p className="text-zinc-500 font-bold uppercase tracking-wider mb-2">
+        <div className="space-y-1.5 rounded-xl bg-zinc-50 p-4 text-xs dark:bg-zinc-800/50">
+          <p className="mb-2 font-bold tracking-wider text-zinc-500 uppercase">
             Dados do Cliente
           </p>
           <p className="text-zinc-800 dark:text-zinc-200">
@@ -171,14 +171,14 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
 
         {/* Order Items Breakdown */}
         <div>
-          <h2 className="font-bold text-base border-b dark:border-zinc-800 pb-2 mb-4">
+          <h2 className="mb-4 border-b pb-2 text-base font-bold dark:border-zinc-800">
             Itens Solicitados
           </h2>
           <div className="divide-y dark:divide-zinc-800">
             {order.items.map((item) => (
               <div
                 key={item.id}
-                className="py-3 flex justify-between items-center text-sm"
+                className="flex items-center justify-between py-3 text-sm"
               >
                 <div>
                   <p className="font-semibold text-zinc-900 dark:text-zinc-100">
@@ -204,7 +204,7 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
         </div>
 
         {/* Order Summary Total */}
-        <div className="border-t dark:border-zinc-800 pt-4 flex justify-between items-center text-lg font-extrabold">
+        <div className="flex items-center justify-between border-t pt-4 text-lg font-extrabold dark:border-zinc-800">
           <span>Total do Pedido</span>
           <span className="text-emerald-600 dark:text-emerald-400">
             {(order.totalPriceCents / 100).toLocaleString("pt-BR", {

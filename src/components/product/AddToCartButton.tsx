@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
-import { Minus, Plus, ShoppingBag } from "lucide-react";
-import { toast } from "sonner";
-import Image from "next/image";
+import { useCart } from "@/context/CartContext";
 import { getProductImage } from "@/lib/media";
+import { Minus, Plus, ShoppingBag } from "lucide-react";
+import Image from "next/image";
+import { useState } from "react";
+import { toast } from "sonner";
 
 interface Size {
   id: string;
@@ -88,7 +88,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
     return (
       <Button
         disabled
-        className="w-full sm:w-64 uppercase tracking-wider font-semibold"
+        className="w-full font-semibold tracking-wider uppercase sm:w-64"
       >
         Vendas Encerradas
       </Button>
@@ -101,7 +101,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
       <Button
         disabled
         variant="outline"
-        className="w-full sm:w-64 uppercase tracking-wider font-semibold border-red-800/50 text-red-500"
+        className="w-full border-red-800/50 font-semibold tracking-wider text-red-500 uppercase sm:w-64"
       >
         Esgotado
       </Button>
@@ -152,11 +152,11 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
   };
 
   return (
-    <div className="flex flex-col gap-6 w-full">
+    <div className="flex w-full flex-col gap-6">
       {/* Variants Selector */}
       {hasVariants && product.variants && (
         <div className="space-y-2">
-          <label className="text-sm font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+          <label className="text-sm font-bold tracking-wider text-zinc-700 uppercase dark:text-zinc-300">
             Modelo / Cor
           </label>
           <div className="flex flex-wrap gap-2">
@@ -170,19 +170,16 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
                   type="button"
                   disabled={!isAvailable}
                   onClick={() => setSelectedVariantId(variant.id)}
-                  className={`
-                    relative h-11 px-4 text-sm font-extrabold uppercase rounded-md border-2 transition-all cursor-pointer flex items-center gap-2
-                    ${
-                      !isAvailable
-                        ? "border-zinc-200 bg-zinc-100 text-zinc-400 line-through cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900"
-                        : isSelected
-                          ? "border-orange-500 bg-orange-500/10 text-orange-600 dark:text-orange-500 shadow-sm"
-                          : "border-zinc-300 dark:border-zinc-700 bg-background text-foreground hover:border-zinc-400 dark:hover:border-zinc-500"
-                    }
-                  `}
+                  className={`relative flex h-11 cursor-pointer items-center gap-2 rounded-md border-2 px-4 text-sm font-extrabold uppercase transition-all ${
+                    !isAvailable
+                      ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400 line-through dark:border-zinc-800 dark:bg-zinc-900"
+                      : isSelected
+                        ? "border-orange-500 bg-orange-500/10 text-orange-600 shadow-sm dark:text-orange-500"
+                        : "border-zinc-300 bg-background text-foreground hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500"
+                  } `}
                 >
                   {variant.image && (
-                    <div className="relative w-6 h-6 rounded-sm overflow-hidden shrink-0">
+                    <div className="relative h-6 w-6 shrink-0 overflow-hidden rounded-sm">
                       <Image
                         src={variant.image}
                         alt={variant.name}
@@ -202,7 +199,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
       {/* Size Selector */}
       {hasSizes && product.sizes && (
         <div className="space-y-2">
-          <label className="text-sm font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+          <label className="text-sm font-bold tracking-wider text-zinc-700 uppercase dark:text-zinc-300">
             Tamanho
           </label>
           <div className="flex flex-wrap gap-2">
@@ -216,16 +213,13 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
                   type="button"
                   disabled={!isAvailable}
                   onClick={() => setSelectedSizeId(size.id)}
-                  className={`
-                    relative h-11 min-w-11 px-4 text-sm font-extrabold uppercase rounded-md border-2 transition-all cursor-pointer
-                    ${
-                      !isAvailable
-                        ? "border-zinc-200 bg-zinc-100 text-zinc-400 line-through cursor-not-allowed dark:border-zinc-800 dark:bg-zinc-900"
-                        : isSelected
-                          ? "border-orange-500 bg-orange-500 text-white shadow-sm"
-                          : "border-zinc-300 dark:border-zinc-700 bg-background text-foreground hover:border-zinc-400 dark:hover:border-zinc-500"
-                    }
-                  `}
+                  className={`relative h-11 min-w-11 cursor-pointer rounded-md border-2 px-4 text-sm font-extrabold uppercase transition-all ${
+                    !isAvailable
+                      ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400 line-through dark:border-zinc-800 dark:bg-zinc-900"
+                      : isSelected
+                        ? "border-orange-500 bg-orange-500 text-white shadow-sm"
+                        : "border-zinc-300 bg-background text-foreground hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500"
+                  } `}
                 >
                   {size.size}
                 </button>
@@ -236,8 +230,8 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
       )}
 
       {/* Quantity & Action */}
-      <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
-        <div className="flex items-center border border-input rounded-md w-fit bg-background">
+      <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
+        <div className="flex w-fit items-center rounded-md border border-input bg-background">
           <Button
             variant="ghost"
             size="icon"
@@ -247,7 +241,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
           >
             <Minus className="h-4 w-4" />
           </Button>
-          <span className="w-12 text-center font-medium text-sm select-none">
+          <span className="w-12 text-center text-sm font-medium select-none">
             {quantity}
           </span>
           <Button
@@ -262,7 +256,7 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
 
         <Button
           onClick={handleAddToCart}
-          className="w-full sm:w-64 gap-2 text-base font-semibold"
+          className="w-full gap-2 text-base font-semibold sm:w-64"
           size="lg"
         >
           <ShoppingBag className="h-5 w-5" />

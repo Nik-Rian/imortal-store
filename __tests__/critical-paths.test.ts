@@ -1,4 +1,4 @@
-import { test, describe } from "vitest";
+import { describe, test } from "vitest";
 
 describe("Critical Paths: Reservations and Bundles", () => {
   // Mock prisma behavior for availability tests conceptually.

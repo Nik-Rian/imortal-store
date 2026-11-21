@@ -1,9 +1,9 @@
 "use client";
 
-import { useTransition } from "react";
 import { updateOrderStatus } from "@/actions/order.actions";
-import { nextAdminStatus } from "@/lib/order-status";
 import type { OrderStatus, PaymentStatus } from "@/generated/prisma/client";
+import { nextAdminStatus } from "@/lib/order-status";
+import { useTransition } from "react";
 
 export function OrderStatusButtons({
   orderId,
@@ -30,7 +30,7 @@ export function OrderStatusButtons({
       <button
         onClick={() => handleUpdate("READY_FOR_PICKUP" as OrderStatus)}
         disabled={isPending}
-        className="text-xs font-semibold bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1.5 rounded-md transition-colors disabled:opacity-50"
+        className="rounded-md bg-emerald-100 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-200 disabled:opacity-50"
       >
         {isPending ? "Atualizando..." : "Marcar Pronto"}
       </button>
@@ -42,7 +42,7 @@ export function OrderStatusButtons({
       <button
         onClick={() => handleUpdate("COMPLETED" as OrderStatus)}
         disabled={isPending}
-        className="text-xs font-semibold bg-blue-100 text-blue-800 hover:bg-blue-200 px-2.5 py-1.5 rounded-md transition-colors disabled:opacity-50"
+        className="rounded-md bg-blue-100 px-2.5 py-1.5 text-xs font-semibold text-blue-800 transition-colors hover:bg-blue-200 disabled:opacity-50"
       >
         {isPending ? "Atualizando..." : "Entregar (Concluir)"}
       </button>
@@ -50,7 +50,7 @@ export function OrderStatusButtons({
   }
 
   return (
-    <span className="text-xs text-zinc-400 font-medium">
+    <span className="text-xs font-medium text-zinc-400">
       {currentStatus === "COMPLETED" ? "Concluído" : "Sem ação"}
     </span>
   );

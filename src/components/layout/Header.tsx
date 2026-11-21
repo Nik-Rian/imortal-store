@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { useCart } from "@/context/CartContext";
-import { ShoppingBag, X, Trash2, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useCart } from "@/context/CartContext";
 import { formatPrice } from "@/lib/utils";
+import { Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
 
 export function Header() {
   const { items, cartCount, cartTotal, updateQuantity, removeItem } = useCart();
@@ -18,7 +18,7 @@ export function Header() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <Link
             href="/"
-            className="text-xl font-bold tracking-tight hover:opacity-80 transition"
+            className="text-xl font-bold tracking-tight transition hover:opacity-80"
           >
             imortal<span className="text-primary">-store</span>
           </Link>
@@ -32,7 +32,7 @@ export function Header() {
           >
             <ShoppingBag className="h-5 w-5" />
             {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground animate-in zoom-in-50 duration-200">
+              <span className="absolute -top-1 -right-1 flex h-5 w-5 animate-in items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground duration-200 zoom-in-50">
                 {cartCount}
               </span>
             )}
@@ -50,27 +50,34 @@ export function Header() {
 
       {/* Cart Drawer Panel */}
       <div
-        className={`fixed top-0 right-0 z-50 h-full w-full sm:w-[450px] bg-background p-6 shadow-xl transition-transform duration-300 ease-in-out border-l border-border flex flex-col ${
+        className={`fixed top-0 right-0 z-50 flex h-full w-full flex-col border-l border-border bg-background p-6 shadow-xl transition-transform duration-300 ease-in-out sm:w-[450px] ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         {/* Drawer Header */}
         <div className="flex items-center justify-between border-b border-border pb-4">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
             <ShoppingBag className="h-5 w-5" /> Seu Carrinho
           </h2>
-          <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsOpen(false)}
+          >
             <X className="h-5 w-5" />
           </Button>
         </div>
 
         {/* Drawer Content */}
-        <div className="flex-1 overflow-y-auto py-4 space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto py-4">
           {items.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center text-center gap-2 text-muted-foreground">
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
               <ShoppingBag className="h-12 w-12 stroke-1" />
               <p className="font-medium">Seu carrinho está vazio.</p>
-              <Button variant="link" onClick={() => setIsOpen(false)}>
+              <Button
+                variant="link"
+                onClick={() => setIsOpen(false)}
+              >
                 Continuar comprando
               </Button>
             </div>
@@ -78,19 +85,19 @@ export function Header() {
             items.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center gap-4 p-3 border border-border rounded-lg bg-card transition-all"
+                className="flex items-center gap-4 rounded-lg border border-border bg-card p-3 transition-all"
               >
                 {/* Product Thumbnail Image */}
                 <img
                   src={item.image}
                   alt={item.name}
-                  className="h-16 w-16 rounded-md object-cover bg-muted"
+                  className="h-16 w-16 rounded-md bg-muted object-cover"
                 />
 
                 {/* Info and Item Actions */}
-                <div className="flex-1 min-w-0 flex flex-col gap-1">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
                   <div className="flex items-center gap-2 pr-2">
-                    <h4 className="font-medium text-sm truncate">
+                    <h4 className="truncate text-sm font-medium">
                       {item.name}
                     </h4>
                     {item.sizeLabel && (
@@ -104,13 +111,13 @@ export function Header() {
                   </p>
 
                   {/* Quantity Actions */}
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="flex items-center border border-input rounded bg-background">
+                  <div className="mt-1 flex items-center gap-2">
+                    <div className="flex items-center rounded border border-input bg-background">
                       <button
                         onClick={() =>
                           updateQuantity(item.id, item.quantity - 1)
                         }
-                        className="p-1 hover:bg-muted text-muted-foreground"
+                        className="p-1 text-muted-foreground hover:bg-muted"
                       >
                         <Minus className="h-3 w-3" />
                       </button>
@@ -121,7 +128,7 @@ export function Header() {
                         onClick={() =>
                           updateQuantity(item.id, item.quantity + 1)
                         }
-                        className="p-1 hover:bg-muted text-muted-foreground"
+                        className="p-1 text-muted-foreground hover:bg-muted"
                       >
                         <Plus className="h-3 w-3" />
                       </button>
@@ -144,8 +151,8 @@ export function Header() {
 
         {/* Drawer Footer */}
         {items.length > 0 && (
-          <div className="border-t border-border pt-4 space-y-4 bg-background">
-            <div className="flex items-center justify-between font-semibold text-base">
+          <div className="space-y-4 border-t border-border bg-background pt-4">
+            <div className="flex items-center justify-between text-base font-semibold">
               <span>Subtotal:</span>
               <span className="text-xl text-primary">
                 {formatPrice(cartTotal)}
@@ -157,7 +164,7 @@ export function Header() {
             <Link
               href="/checkout"
               onClick={() => setIsOpen(false)}
-              className="w-full block text-center bg-black text-white py-3 rounded font-medium"
+              className="block w-full rounded bg-black py-3 text-center font-medium text-white"
             >
               Finalizar Compra
             </Link>

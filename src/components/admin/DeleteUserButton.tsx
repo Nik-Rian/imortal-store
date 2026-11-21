@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
 import { deleteAdminUser } from "@/actions/user.actions";
+import { useState, useTransition } from "react";
 
 export function DeleteUserButton({ userId }: { userId: string }) {
   const [isConfirming, setIsConfirming] = useState(false);
@@ -29,21 +29,21 @@ export function DeleteUserButton({ userId }: { userId: string }) {
 
   if (isConfirming) {
     return (
-      <div className="flex items-center gap-2 animate-in fade-in duration-200">
-        <span className="text-xs font-semibold text-red-700 bg-red-50 px-1.5 py-0.5 rounded">
+      <div className="flex animate-in items-center gap-2 duration-200 fade-in">
+        <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-700">
           {isPending ? "Removendo..." : "Certeza?"}
         </span>
         <button
           onClick={handleDelete}
           disabled={isPending}
-          className="text-xs font-bold text-red-600 hover:text-red-800 disabled:opacity-50 transition-colors"
+          className="text-xs font-bold text-red-600 transition-colors hover:text-red-800 disabled:opacity-50"
         >
           Sim
         </button>
         <button
           onClick={() => setIsConfirming(false)}
           disabled={isPending}
-          className="text-xs font-medium text-zinc-500 hover:text-zinc-700 disabled:opacity-50 transition-colors"
+          className="text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-700 disabled:opacity-50"
         >
           Não
         </button>
@@ -54,7 +54,7 @@ export function DeleteUserButton({ userId }: { userId: string }) {
   return (
     <button
       onClick={() => setIsConfirming(true)}
-      className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
+      className="text-sm font-medium text-red-600 transition-colors hover:text-red-800"
     >
       Remover
     </button>

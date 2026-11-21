@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { OrderStatus, PaymentStatus } from "@/generated/prisma/client";
+import { describe, expect, it } from "vitest";
 import {
   canAdminTransition,
   getAdminTransitionRule,

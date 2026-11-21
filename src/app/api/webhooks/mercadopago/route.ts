@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
+import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
+import { resolvePaymentSync } from "@/lib/payment-status";
 import { prisma } from "@/lib/prisma";
 import {
   getMercadoPagoOrder,
   MercadoPagoOrderDetails,
   MercadoPagoPaymentDetails,
 } from "@/services/mercadopago.service";
-import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
-import { resolvePaymentSync } from "@/lib/payment-status";
 import { revalidatePath } from "next/cache";
+import { NextResponse } from "next/server";
 
 const MP_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET;
 const MAX_SYNC_ATTEMPTS = 3;

@@ -1,5 +1,5 @@
-import { CartProvider } from "@/context/CartContext";
 import { Header } from "@/components/layout/Header";
+import { CartProvider } from "@/context/CartContext";
 
 export default function StorefrontLayout({
   children,

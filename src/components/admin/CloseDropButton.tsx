@@ -1,7 +1,7 @@
 "use client";
 
-import { useTransition } from "react";
 import { closeDropSales } from "@/actions/drop.actions";
+import { useTransition } from "react";
 
 interface CloseDropButtonProps {
   dropId: string;
@@ -36,7 +36,7 @@ export function CloseDropButton({ dropId, isClosed }: CloseDropButtonProps) {
       type="button"
       onClick={handleClose}
       disabled={isPending}
-      className="rounded-md bg-red-600/10 px-3 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-600/20 transition-colors disabled:opacity-50"
+      className="rounded-md bg-red-600/10 px-3 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-600/20 disabled:opacity-50"
     >
       {isPending ? "Encerrando..." : "Encerrar Vendas Agora"}
     </button>

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ProductWithVariants } from "@/types";
 import {
   fireEvent,
   render,
@@ -7,7 +8,6 @@ import {
   within,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ProductWithVariants } from "@/types";
 import { ProductForm } from "./ProductForm";
 
 vi.mock("@/actions/blob.actions", () => ({

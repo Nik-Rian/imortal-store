@@ -1,24 +1,24 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
-import {
-  checkProductAvailability,
-  type AvailabilityCheckResult,
-} from "@/services/product.service";
-import {
-  createCardOrder,
-  createPixOrder,
-} from "@/services/mercadopago.service";
-import { requireSession } from "@/lib/auth-guard";
-import { getAdminTransitionRule } from "@/lib/order-status";
-import { revalidatePath } from "next/cache";
 import { OrderStatus } from "@/generated/prisma/client";
+import { requireSession } from "@/lib/auth-guard";
+import { describeCardFailure, PaymentRejectedError } from "@/lib/card-outcome";
+import { getAdminTransitionRule } from "@/lib/order-status";
+import { prisma } from "@/lib/prisma";
 import {
   createOrderSchema,
   type CreateOrderInput,
 } from "@/lib/validations/checkout.schema";
-import { PaymentRejectedError, describeCardFailure } from "@/lib/card-outcome";
+import {
+  createCardOrder,
+  createPixOrder,
+} from "@/services/mercadopago.service";
+import {
+  checkProductAvailability,
+  type AvailabilityCheckResult,
+} from "@/services/product.service";
+import { revalidatePath } from "next/cache";
 
 // Unexpected failures never expose Error.message to the customer: it can carry
 // configuration or database details. Not exported because a "use server" module

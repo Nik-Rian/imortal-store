@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { put } from "@vercel/blob";
 import { requireSession } from "@/lib/auth-guard";
 import {
   IMAGE_SIZE_ERROR,
   IMAGE_TYPE_ERROR,
   MAX_IMAGE_BYTES,
 } from "@/lib/media";
+import { put } from "@vercel/blob";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { uploadProductImage } from "./blob.actions";
 
 vi.mock("@vercel/blob", () => ({ put: vi.fn(), del: vi.fn() }));

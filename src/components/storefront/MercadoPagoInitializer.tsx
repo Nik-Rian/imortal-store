@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
 import { initMercadoPago } from "@mercadopago/sdk-react";
+import { useEffect } from "react";
 
 export function MercadoPagoInitializer() {
   useEffect(() => {

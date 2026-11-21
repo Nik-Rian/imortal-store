@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { buildStockKey } from "@/lib/stock-key";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { checkProductAvailability } from "./product.service";
 
 vi.mock("react", () => ({ cache: <T>(fn: T) => fn }));

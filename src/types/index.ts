@@ -1,8 +1,8 @@
 import {
-  Product,
-  ProductVariant,
-  ProductSize,
   Drop,
+  Product,
+  ProductSize,
+  ProductVariant,
 } from "@/generated/prisma/client";
 
 export type { Product, ProductVariant, ProductSize, Drop };

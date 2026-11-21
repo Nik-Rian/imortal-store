@@ -1,15 +1,14 @@
-import Link from "next/link";
-import { getAdminOrders } from "@/services/order.service";
-import { formatPrice } from "@/lib/utils";
+import { MarkAllReadyButton } from "@/components/admin/MarkAllReadyButton";
 import { OrderStatusButtons } from "@/components/admin/OrderStatusButtons";
 import { PrintButton } from "@/components/admin/PrintButton";
-import { MarkAllReadyButton } from "@/components/admin/MarkAllReadyButton";
-
 import type {
   OrderStatus,
   PaymentReviewReason,
   PaymentStatus,
 } from "@/generated/prisma/client";
+import { formatPrice } from "@/lib/utils";
+import { getAdminOrders } from "@/services/order.service";
+import Link from "next/link";
 
 const PAYMENT_BADGES: Record<
   PaymentStatus,
@@ -76,7 +75,7 @@ export default async function AdminOrdersPage({
       <div className="flex items-center justify-between print:hidden">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Pedidos</h1>
-          <p className="text-zinc-500 mt-1">
+          <p className="mt-1 text-zinc-500">
             Gerencie pagamentos e imprima as listas de retirada.
           </p>
         </div>
@@ -90,7 +89,7 @@ export default async function AdminOrdersPage({
       <div className="flex gap-4 border-b border-zinc-200 pb-2 print:hidden">
         <Link
           href="/admin/pedidos"
-          className={`text-sm font-medium pb-2 border-b-2 transition-colors ${
+          className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
             !isFilterValid
               ? "border-zinc-900 text-zinc-900"
               : "border-transparent text-zinc-500 hover:text-zinc-700"
@@ -100,7 +99,7 @@ export default async function AdminOrdersPage({
         </Link>
         <Link
           href="/admin/pedidos?filter=valid"
-          className={`text-sm font-medium pb-2 border-b-2 transition-colors ${
+          className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
             isFilterValid
               ? "border-zinc-900 text-zinc-900"
               : "border-transparent text-zinc-500 hover:text-zinc-700"
@@ -111,8 +110,8 @@ export default async function AdminOrdersPage({
       </div>
 
       {/* Print-Only Header */}
-      <div className="hidden print:block mb-4">
-        <h1 className="text-2xl font-bold uppercase tracking-tight">
+      <div className="mb-4 hidden print:block">
+        <h1 className="text-2xl font-bold tracking-tight uppercase">
           Lista de Retirada
         </h1>
         <p className="text-sm text-zinc-500">
@@ -122,9 +121,9 @@ export default async function AdminOrdersPage({
       </div>
 
       {/* Main Table */}
-      <div className="border rounded-md bg-white shadow-sm print:border-none print:shadow-none print:bg-transparent">
-        <table className="w-full text-sm text-left text-zinc-600 print:text-xs">
-          <thead className="bg-zinc-50 text-zinc-900 font-medium border-b print:bg-white print:border-b-2 print:border-black">
+      <div className="rounded-md border bg-white shadow-sm print:border-none print:bg-transparent print:shadow-none">
+        <table className="w-full text-left text-sm text-zinc-600 print:text-xs">
+          <thead className="border-b bg-zinc-50 font-medium text-zinc-900 print:border-b-2 print:border-black print:bg-white">
             <tr>
               <th className="px-4 py-3 print:px-2 print:py-2">Pedido</th>
               <th className="px-4 py-3 print:px-2 print:py-2">Cliente</th>
@@ -133,7 +132,7 @@ export default async function AdminOrdersPage({
               <th className="px-4 py-3 print:hidden">Total</th>
               <th className="px-4 py-3 text-right print:hidden">Ações</th>
               {/* This column only exists on paper */}
-              <th className="px-4 py-3 hidden print:table-cell">
+              <th className="hidden px-4 py-3 print:table-cell">
                 Assinatura do Cliente
               </th>
             </tr>
@@ -141,7 +140,10 @@ export default async function AdminOrdersPage({
           <tbody className="divide-y print:divide-zinc-400">
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
+                <td
+                  colSpan={7}
+                  className="px-4 py-8 text-center text-zinc-500"
+                >
                   Nenhum pedido encontrado.
                 </td>
               </tr>
@@ -149,7 +151,7 @@ export default async function AdminOrdersPage({
               orders.map((order) => (
                 <tr
                   key={order.id}
-                  className={`hover:bg-zinc-50 transition-colors break-inside-avoid print:hover:bg-transparent ${
+                  className={`break-inside-avoid transition-colors hover:bg-zinc-50 print:hover:bg-transparent ${
                     order.paymentStatus === "PAID" &&
                     (order.status === "PENDING" ||
                       order.status === "READY_FOR_PICKUP")
@@ -174,9 +176,12 @@ export default async function AdminOrdersPage({
                     )}
                   </td>
                   <td className="px-4 py-3 print:px-2 print:py-4">
-                    <ul className="list-disc list-inside space-y-1">
+                    <ul className="list-inside list-disc space-y-1">
                       {order.items.map((item) => (
-                        <li key={item.id} className="text-xs">
+                        <li
+                          key={item.id}
+                          className="text-xs"
+                        >
                           <span className="font-bold text-zinc-900">
                             {item.quantity}x
                           </span>{" "}
@@ -186,7 +191,7 @@ export default async function AdminOrdersPage({
                       ))}
                     </ul>
                   </td>
-                  <td className="px-4 py-3 print:hidden space-y-1">
+                  <td className="space-y-1 px-4 py-3 print:hidden">
                     <div>
                       <span
                         className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${PAYMENT_BADGES[order.paymentStatus].className}`}
@@ -218,7 +223,7 @@ export default async function AdminOrdersPage({
                     />
                   </td>
                   {/* Print-only empty cell for paper signature */}
-                  <td className="px-4 py-3 hidden print:table-cell border-b border-zinc-300 w-48"></td>
+                  <td className="hidden w-48 border-b border-zinc-300 px-4 py-3 print:table-cell"></td>
                 </tr>
               ))
             )}

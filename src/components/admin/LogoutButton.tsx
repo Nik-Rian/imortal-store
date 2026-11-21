@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import { useRouter } from "next/navigation";
 
 export function LogoutButton() {
   const router = useRouter();
@@ -15,7 +15,7 @@ export function LogoutButton() {
   return (
     <button
       onClick={handleLogout}
-      className="text-sm text-zinc-400 hover:text-zinc-50 transition-colors"
+      className="text-sm text-zinc-400 transition-colors hover:text-zinc-50"
     >
       Sair
     </button>

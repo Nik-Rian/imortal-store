@@ -1,8 +1,8 @@
-import Link from "next/link";
-import { getProducts } from "@/services/product.service";
-import { getStorefrontDrop } from "@/services/drop.service";
 import { getProductImage } from "@/lib/media";
 import { formatPrice } from "@/lib/utils";
+import { getStorefrontDrop } from "@/services/drop.service";
+import { getProducts } from "@/services/product.service";
+import Link from "next/link";
 
 // Time-based ISR fallback: revalidate static shell every 1 hour (3600 seconds)
 export const revalidate = 3600;
@@ -25,10 +25,10 @@ export default async function LojaPage() {
     return (
       <div className="flex min-h-[70vh] items-center justify-center bg-zinc-50 px-6 text-zinc-900">
         <div className="w-full max-w-xl border-4 border-black bg-white p-8 text-center shadow-[10px_10px_0px_#f97316]">
-          <p className="text-sm font-black uppercase tracking-[0.25em] text-orange-500">
+          <p className="text-sm font-black tracking-[0.25em] text-orange-500 uppercase">
             IMORTAL STORE
           </p>
-          <h1 className="mt-4 text-4xl font-black uppercase leading-tight tracking-tight">
+          <h1 className="mt-4 text-4xl leading-tight font-black tracking-tight uppercase">
             Aguarde o próximo semestre
           </h1>
           <p className="mt-4 font-medium text-zinc-600">
@@ -48,11 +48,11 @@ export default async function LojaPage() {
         {/* HERO */}
 
         <section className="mb-20 border-b-4 border-orange-500 pb-10">
-          <p className="text-sm font-bold uppercase tracking-[0.35em] text-orange-500">
+          <p className="text-sm font-bold tracking-[0.35em] text-orange-500 uppercase">
             IMORTAL STORE
           </p>
 
-          <h1 className="mt-4 text-6xl font-black uppercase leading-none tracking-tight sm:text-7xl lg:text-8xl">
+          <h1 className="mt-4 text-6xl leading-none font-black tracking-tight uppercase sm:text-7xl lg:text-8xl">
             DROP
             <br />
             2026
@@ -64,7 +64,7 @@ export default async function LojaPage() {
           </p>
 
           {isSalesClosed && (
-            <p className="mt-6 inline-block border-2 border-black bg-zinc-900 px-4 py-2 text-sm font-black uppercase tracking-widest text-white">
+            <p className="mt-6 inline-block border-2 border-black bg-zinc-900 px-4 py-2 text-sm font-black tracking-widest text-white uppercase">
               Vendas encerradas
             </p>
           )}
@@ -74,11 +74,11 @@ export default async function LojaPage() {
 
         <section>
           <div className="mb-8 flex items-center justify-between border-b-2 border-black pb-4">
-            <h2 className="text-3xl font-black uppercase tracking-wide">
+            <h2 className="text-3xl font-black tracking-wide uppercase">
               Produtos
             </h2>
 
-            <span className="font-bold uppercase tracking-widest text-orange-500">
+            <span className="font-bold tracking-widest text-orange-500 uppercase">
               {products.length} itens
             </span>
           </div>
@@ -88,40 +88,23 @@ export default async function LojaPage() {
               <Link
                 key={product.id}
                 href={`/produto/${product.slug}`}
-                className="
-                  group
-                  overflow-hidden
-                  border-2
-                  border-black
-                  bg-white
-                  transition-all
-                  duration-300
-                  hover:-translate-y-2
-                  hover:shadow-[10px_10px_0px_#f97316]
-                "
+                className="group overflow-hidden border-2 border-black bg-white transition-all duration-300 hover:-translate-y-2 hover:shadow-[10px_10px_0px_#f97316]"
               >
                 <div className="aspect-4/5 overflow-hidden border-b-2 border-black bg-zinc-100">
                   <img
                     src={getProductImage(product.images)}
                     alt={product.name}
-                    className="
-                      h-full
-                      w-full
-                      object-cover
-                      transition-transform
-                      duration-500
-                      group-hover:scale-105
-                    "
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                 </div>
 
                 <div className="space-y-4 p-6">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.3em] text-orange-500">
+                    <p className="text-xs font-bold tracking-[0.3em] text-orange-500 uppercase">
                       Vestuário
                     </p>
 
-                    <h3 className="mt-2 text-2xl font-black uppercase leading-tight">
+                    <h3 className="mt-2 text-2xl leading-tight font-black uppercase">
                       {product.name}
                     </h3>
                   </div>
@@ -131,15 +114,7 @@ export default async function LojaPage() {
                       {formatPrice(product.priceCents)}
                     </span>
 
-                    <span
-                      className="
-                        font-bold
-                        uppercase
-                        tracking-widest
-                        transition-transform
-                        group-hover:translate-x-1
-                      "
-                    >
+                    <span className="font-bold tracking-widest uppercase transition-transform group-hover:translate-x-1">
                       Ver →
                     </span>
                   </div>
@@ -152,7 +127,7 @@ export default async function LojaPage() {
         {/* FOOTER STRIPE */}
 
         <section className="mt-24 border-t-4 border-black pt-8">
-          <p className="text-center text-sm font-bold uppercase tracking-[0.4em] text-zinc-400">
+          <p className="text-center text-sm font-bold tracking-[0.4em] text-zinc-400 uppercase">
             IMORTAL • ATLÉTICA • ENGENHARIA • UFC
           </p>
         </section>
