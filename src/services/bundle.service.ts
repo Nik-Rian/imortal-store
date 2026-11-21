@@ -6,8 +6,19 @@ export interface BundleComponentInput {
 }
 
 /**
- * Server-side bundle integrity (BND-001). Throws a readable Error on the
- * first violated rule.
+ * Expected rule violation raised by assertBundleIntegrity. Its message is
+ * written for the administrator and is safe to display; any other error
+ * thrown while checking is unexpected.
+ */
+export class BundleIntegrityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BundleIntegrityError";
+  }
+}
+
+/**
+ * Server-side bundle integrity. Throws a BundleIntegrityError on the first violated rule.
  *
  * - `productId` is undefined on create.
  * - Run it BEFORE writing. It reads current DB state.
@@ -28,12 +39,12 @@ export async function assertBundleIntegrity(input: {
     });
     if (memberships.length > 0) {
       if (isBundle) {
-        throw new Error(
+        throw new BundleIntegrityError(
           "Este produto já faz parte de um kit e não pode se tornar um kit.",
         );
       }
       if (memberships.some((m) => m.bundle.dropId !== dropId)) {
-        throw new Error(
+        throw new BundleIntegrityError(
           "Este produto faz parte de kits e não pode ser movido para outro drop.",
         );
       }
@@ -43,7 +54,7 @@ export async function assertBundleIntegrity(input: {
   if (!isBundle) return;
 
   if (productId && components.some((c) => c.componentProductId === productId)) {
-    throw new Error("Um kit não pode conter a si mesmo.");
+    throw new BundleIntegrityError("Um kit não pode conter a si mesmo.");
   }
 
   const ids = Array.from(new Set(components.map((c) => c.componentProductId)));
@@ -53,13 +64,13 @@ export async function assertBundleIntegrity(input: {
   });
 
   if (found.length !== ids.length) {
-    throw new Error("Um dos produtos do kit não existe.");
+    throw new BundleIntegrityError("Um dos produtos do kit não existe.");
   }
   if (found.some((p) => p.isBundle)) {
-    throw new Error("Um kit não pode conter outro kit.");
+    throw new BundleIntegrityError("Um kit não pode conter outro kit.");
   }
   if (found.some((p) => p.dropId !== dropId)) {
-    throw new Error("Os produtos do kit devem pertencer ao mesmo drop do kit.");
+    throw new BundleIntegrityError("Os produtos do kit devem pertencer ao mesmo drop do kit.");
   }
 }
 

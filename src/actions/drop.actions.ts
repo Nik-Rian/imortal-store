@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { deleteBlobImages } from "./blob.actions";
 import type { PaymentStatus } from "@/generated/prisma/client";
 
+type ActionResult = { success: true } | { success: false; error: string };
+
 /**
  * Instantly closes sales for an open drop by setting its endsAt date to now.
  * Closing an already-closed drop is a no-op, so a stale click never moves
@@ -113,127 +115,152 @@ const PURGEABLE_PAYMENT_STATUSES: readonly PaymentStatus[] = [
  * stock reservations, stock items, products, variants, bundle components).
  * Refuses, before deleting anything, unless the purge flag is enabled, the
  * sales window is closed and every order of the drop is FAILED, EXPIRED or
- * CANCELED without a payment review reason.
+ * CANCELED without a payment review reason. Refusals are returned as { success: false, error } rather than thrown.
  */
-export async function purgeDrop(dropId: string) {
+export async function purgeDrop(dropId: string): Promise<ActionResult> {
   await requireSession();
 
   // Read at call time so the flag can change without a module reload.
   if (process.env.ALLOW_DESTRUCTIVE_PURGE !== "true") {
-    throw new Error(
-      "A exclusão permanente de semestres está desabilitada neste ambiente.",
-    );
+    return {
+      success: false,
+      error:
+        "A exclusão permanente de semestres está desabilitada neste ambiente.",
+    };
   }
 
   if (!dropId) {
-    throw new Error("ID do drop não fornecido.");
+    return { success: false, error: "ID do drop não fornecido." };
   }
 
   let imagesToDelete: string[] = [];
 
-  await prisma.$transaction(async (tx) => {
-    const drop = await tx.drop.findUnique({
-      where: { id: dropId },
-      select: { name: true, endsAt: true },
-    });
-    if (!drop) {
-      throw new Error("Semestre não encontrado.");
-    }
-    if (drop.endsAt >= new Date()) {
-      throw new Error(
-        `O semestre ${drop.name} ainda está aberto. Encerre as vendas dele antes de apagá-lo.`,
-      );
-    }
+  let outcome: ActionResult;
 
-    const products = await tx.product.findMany({
-      where: { dropId },
-      select: { id: true, images: true, variants: { select: { image: true } } },
-    });
-
-    const productIds = products.map((p) => p.id);
-
-    imagesToDelete = products.flatMap((p) => [
-      ...p.images,
-      ...p.variants.flatMap((v) => (v.image ? [v.image] : [])),
-    ]);
-
-    // Orders have no direct drop link. They are reached through the items'
-    // products and, for items whose product was already removed (productId
-    // set to null), through the dropName snapshot, so none is missed.
-    const orderItems = await tx.orderItem.findMany({
-      where: {
-        OR: [
-          ...(productIds.length > 0 ? [{ productId: { in: productIds } }] : []),
-          { dropName: drop.name },
-        ],
-      },
-      select: { orderId: true },
-    });
-    const orderIds = Array.from(new Set(orderItems.map((oi) => oi.orderId)));
-
-    if (orderIds.length > 0) {
-      const orders = await tx.order.findMany({
-        where: { id: { in: orderIds } },
-        select: { paymentStatus: true, paymentReviewReason: true },
+  try {
+    outcome = await prisma.$transaction(async (tx): Promise<ActionResult> => {
+      const drop = await tx.drop.findUnique({
+        where: { id: dropId },
+        select: { name: true, endsAt: true },
       });
-      const hasRetainedOrder = orders.some(
-        (order) =>
-          !PURGEABLE_PAYMENT_STATUSES.includes(order.paymentStatus) ||
-          order.paymentReviewReason !== null,
-      );
-      if (hasRetainedOrder) {
-        throw new Error(
-          `O semestre ${drop.name} possui pedidos pagos, pendentes ou com pagamento em análise e não pode ser apagado.`,
-        );
+      if (!drop) {
+        return { success: false, error: "Semestre não encontrado." };
+      }
+      if (drop.endsAt >= new Date()) {
+        return {
+          success: false,
+          error: `O semestre ${drop.name} ainda está aberto. Encerre as vendas dele antes de apagá-lo.`,
+        };
       }
 
-      // StockReservation -> Order and -> StockItem are ON DELETE RESTRICT:
-      // reservations must go before the orders and the stock items.
-      await tx.stockReservation.deleteMany({
-        where: { orderId: { in: orderIds } },
-      });
-    }
-
-    if (productIds.length > 0) {
-      await tx.stockItem.deleteMany({
-        where: { productId: { in: productIds } },
-      });
-    }
-
-    if (orderIds.length > 0) {
-      await tx.orderItem.deleteMany({
-        where: { orderId: { in: orderIds } },
-      });
-      await tx.order.deleteMany({
-        where: { id: { in: orderIds } },
-      });
-    }
-
-    if (productIds.length > 0) {
-      await tx.productVariant.deleteMany({
-        where: { productId: { in: productIds } },
-      });
-
-      // Bundle rows first: componentProductId is ON DELETE RESTRICT, so the
-      // component and bundle products can't be removed while join rows exist.
-      await tx.bundleComponent.deleteMany({
-        where: {
-          OR: [
-            { bundleId: { in: productIds } },
-            { componentProductId: { in: productIds } },
-          ],
+      const products = await tx.product.findMany({
+        where: { dropId },
+        select: {
+          id: true,
+          images: true,
+          variants: { select: { image: true } },
         },
       });
 
-      await tx.product.deleteMany({
-        where: { dropId },
-      });
-    }
+      const productIds = products.map((p) => p.id);
 
-    await tx.drop.delete({
-      where: { id: dropId },
+      imagesToDelete = products.flatMap((p) => [
+        ...p.images,
+        ...p.variants.flatMap((v) => (v.image ? [v.image] : [])),
+      ]);
+
+      // Orders have no direct drop link. They are reached through the items'
+      // products and, for items whose product was already removed (productId
+      // set to null), through the dropName snapshot, so none is missed.
+      const orderItems = await tx.orderItem.findMany({
+        where: {
+          OR: [
+            ...(productIds.length > 0
+              ? [{ productId: { in: productIds } }]
+              : []),
+            { dropName: drop.name },
+          ],
+        },
+        select: { orderId: true },
+      });
+      const orderIds = Array.from(new Set(orderItems.map((oi) => oi.orderId)));
+
+      if (orderIds.length > 0) {
+        const orders = await tx.order.findMany({
+          where: { id: { in: orderIds } },
+          select: { paymentStatus: true, paymentReviewReason: true },
+        });
+        const hasRetainedOrder = orders.some(
+          (order) =>
+            !PURGEABLE_PAYMENT_STATUSES.includes(order.paymentStatus) ||
+            order.paymentReviewReason !== null,
+        );
+        if (hasRetainedOrder) {
+          return {
+            success: false,
+            error: `O semestre ${drop.name} possui pedidos pagos, pendentes ou com pagamento em análise e não pode ser apagado.`,
+          };
+        }
+
+        // StockReservation -> Order and -> StockItem are ON DELETE RESTRICT:
+        // reservations must go before the orders and the stock items.
+        await tx.stockReservation.deleteMany({
+          where: { orderId: { in: orderIds } },
+        });
+      }
+
+      if (productIds.length > 0) {
+        await tx.stockItem.deleteMany({
+          where: { productId: { in: productIds } },
+        });
+      }
+
+      if (orderIds.length > 0) {
+        await tx.orderItem.deleteMany({
+          where: { orderId: { in: orderIds } },
+        });
+        await tx.order.deleteMany({
+          where: { id: { in: orderIds } },
+        });
+      }
+
+      if (productIds.length > 0) {
+        await tx.productVariant.deleteMany({
+          where: { productId: { in: productIds } },
+        });
+
+        // Bundle rows first: componentProductId is ON DELETE RESTRICT, so the
+        // component and bundle products can't be removed while join rows exist.
+        await tx.bundleComponent.deleteMany({
+          where: {
+            OR: [
+              { bundleId: { in: productIds } },
+              { componentProductId: { in: productIds } },
+            ],
+          },
+        });
+
+        await tx.product.deleteMany({
+          where: { dropId },
+        });
+      }
+
+      await tx.drop.delete({
+        where: { id: dropId },
+      });
+      return { success: true };
     });
-  });
+  } catch (error) {
+    console.error("Erro ao apagar semestre:", error);
+    return {
+      success: false,
+      error: "Não foi possível apagar o semestre. Tente novamente.",
+    };
+  }
+
+  if (!outcome.success) {
+    return outcome;
+  }
 
   if (imagesToDelete.length > 0) {
     await deleteBlobImages(imagesToDelete);
@@ -243,4 +270,6 @@ export async function purgeDrop(dropId: string) {
   revalidatePath("/produto/[slug]", "page");
   revalidatePath("/admin");
   revalidatePath("/admin/produtos");
+
+  return { success: true };
 }

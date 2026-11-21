@@ -7,9 +7,64 @@ import {
   applyBundleRules,
   productSchema,
 } from "@/lib/validations/product.schema";
-import { assertBundleIntegrity } from "@/services/bundle.service";
+import {
+  assertBundleIntegrity,
+  BundleIntegrityError,
+} from "@/services/bundle.service";
 import { deleteBlobImages } from "@/actions/blob.actions";
 import { requireSession } from "@/lib/auth-guard";
+
+type ActionFailure = { success: false; error: string };
+type ActionResult = { success: true } | ActionFailure;
+
+type BundleIntegrityInput = Parameters<typeof assertBundleIntegrity>[0];
+
+const SLUG_CONFLICT_ERROR =
+  "Já existe um produto com este link. Altere o nome do produto.";
+const DUPLICATE_ENTRY_ERROR =
+  "Há um item duplicado neste produto (tamanho, variante ou produto do kit repetido). Revise os campos e tente novamente.";
+
+/**
+ * Maps a Prisma unique-constraint violation (P2002) to an admin-facing
+ * message, or returns null for any other error. The shape of `meta` depends
+ * on the driver adapter, but both the field list and the constraint name of
+ * the slug index contain "slug", while the size, variant and bundle-component
+ * indexes do not.
+ */
+function getUniqueConflictMessage(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) return null;
+  const { code, meta } = error as { code?: unknown; meta?: unknown };
+  if (code !== "P2002") return null;
+
+  let serializedMeta = "";
+  try {
+    serializedMeta = JSON.stringify(meta ?? {}).toLowerCase();
+  } catch {
+    // Unserializable metadata falls through to the duplicate-entry message.
+  }
+  return serializedMeta.includes("slug")
+    ? SLUG_CONFLICT_ERROR
+    : DUPLICATE_ENTRY_ERROR;
+}
+
+/**
+ * Runs the bundle rules and returns the violation message instead of
+ * throwing, so it reaches the client intact in production builds. Only
+ * BundleIntegrityError carries a displayable message; anything else is logged
+ * and replaced by a generic one.
+ */
+async function getBundleIntegrityError(
+  input: BundleIntegrityInput,
+): Promise<string | null> {
+  try {
+    await assertBundleIntegrity(input);
+    return null;
+  } catch (error) {
+    if (error instanceof BundleIntegrityError) return error.message;
+    console.error("Erro ao validar o kit:", error);
+    return "Não foi possível validar o kit. Tente novamente.";
+  }
+}
 
 /**
  * Reads the availability flag posted by the admin form.
@@ -22,7 +77,9 @@ function parseIsAvailable(raw: FormDataEntryValue | null): boolean | undefined {
   return undefined;
 }
 
-export async function createProduct(formData: FormData) {
+export async function createProduct(
+  formData: FormData,
+): Promise<ActionFailure> {
   await requireSession();
 
   const rawPrice = formData.get("priceCents") as string | null;
@@ -80,10 +137,12 @@ export async function createProduct(formData: FormData) {
   });
 
   if (!validationResult.success) {
-    const firstErrorMessage =
-      validationResult.error.issues[0]?.message ??
-      "Dados do produto inválidos.";
-    throw new Error(firstErrorMessage);
+    return {
+      success: false,
+      error:
+        validationResult.error.issues[0]?.message ??
+        "Dados do produto inválidos.",
+    };
   }
 
   const input = applyBundleRules(validationResult.data);
@@ -93,11 +152,14 @@ export async function createProduct(formData: FormData) {
 
   const images = formData.getAll("images") as string[];
 
-  await assertBundleIntegrity({
+  const integrityError = await getBundleIntegrityError({
     dropId,
     isBundle: input.isBundle,
     components: input.components,
   });
+  if (integrityError) {
+    return { success: false, error: integrityError };
+  }
 
   try {
     await prisma.product.create({
@@ -138,10 +200,15 @@ export async function createProduct(formData: FormData) {
       },
     });
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      throw new Error(`Erro ao criar produto: ${error.message}`);
+    const conflictMessage = getUniqueConflictMessage(error);
+    if (conflictMessage) {
+      return { success: false, error: conflictMessage };
     }
-    throw new Error("Erro desconhecido ao criar produto.");
+    console.error("Erro ao criar produto:", error);
+    return {
+      success: false,
+      error: "Não foi possível criar o produto. Tente novamente.",
+    };
   }
 
   revalidatePath("/");
@@ -149,7 +216,10 @@ export async function createProduct(formData: FormData) {
   redirect("/admin/produtos");
 }
 
-export async function updateProduct(id: string, formData: FormData) {
+export async function updateProduct(
+  id: string,
+  formData: FormData,
+): Promise<ActionFailure> {
   await requireSession();
 
   const rawPrice = formData.get("priceCents") as string | null;
@@ -215,10 +285,12 @@ export async function updateProduct(id: string, formData: FormData) {
   });
 
   if (!validationResult.success) {
-    const firstErrorMessage =
-      validationResult.error.issues[0]?.message ??
-      "Dados do produto inválidos.";
-    throw new Error(firstErrorMessage);
+    return {
+      success: false,
+      error:
+        validationResult.error.issues[0]?.message ??
+        "Dados do produto inválidos.",
+    };
   }
 
   const input = applyBundleRules(validationResult.data);
@@ -232,15 +304,18 @@ export async function updateProduct(id: string, formData: FormData) {
   });
 
   if (!currentProduct) {
-    throw new Error("Produto não encontrado.");
+    return { success: false, error: "Produto não encontrado." };
   }
 
-  await assertBundleIntegrity({
+  const integrityError = await getBundleIntegrityError({
     productId: id,
     dropId,
     isBundle: input.isBundle,
     components: input.components,
   });
+  if (integrityError) {
+    return { success: false, error: integrityError };
+  }
 
   // URLs that must survive this save (product photos + variant images).
   const keptImageUrls = new Set<string>([
@@ -376,10 +451,15 @@ export async function updateProduct(id: string, formData: FormData) {
       await deleteBlobImages(removedImages);
     }
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      throw new Error(`Erro ao atualizar produto: ${error.message}`);
+    const conflictMessage = getUniqueConflictMessage(error);
+    if (conflictMessage) {
+      return { success: false, error: conflictMessage };
     }
-    throw new Error("Erro desconhecido ao atualizar produto.");
+    console.error("Erro ao atualizar produto:", error);
+    return {
+      success: false,
+      error: "Não foi possível atualizar o produto. Tente novamente.",
+    };
   }
 
   revalidatePath("/");
@@ -392,7 +472,7 @@ export async function updateProduct(id: string, formData: FormData) {
   redirect("/admin/produtos");
 }
 
-export async function deleteProduct(id: string) {
+export async function deleteProduct(id: string): Promise<ActionResult> {
   await requireSession();
 
   const currentProduct = await prisma.product.findUnique({
@@ -405,16 +485,17 @@ export async function deleteProduct(id: string) {
   });
 
   if (!currentProduct) {
-    throw new Error("Produto não encontrado.");
+    return { success: false, error: "Produto não encontrado." };
   }
 
   if (currentProduct.componentOf.length > 0) {
     const bundleNames = currentProduct.componentOf
       .map((c) => c.bundle.name)
       .join(", ");
-    throw new Error(
-      `Este produto faz parte dos kits: ${bundleNames}. Remova-o dos kits antes de excluí-lo.`,
-    );
+    return {
+      success: false,
+      error: `Este produto faz parte dos kits: ${bundleNames}. Remova-o dos kits antes de excluí-lo.`,
+    };
   }
 
   const imageUrls = [
@@ -431,12 +512,14 @@ export async function deleteProduct(id: string) {
       await deleteBlobImages(imageUrls);
     }
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      throw new Error(`Erro ao deletar produto: ${error.message}`);
-    }
-
-    throw new Error("Erro desconhecido ao deletar produto.");
+    console.error("Erro ao deletar produto:", error);
+    return {
+      success: false,
+      error: "Não foi possível excluir o produto. Tente novamente.",
+    };
   }
   revalidatePath("/admin/produtos");
   revalidatePath("/");
+
+  return { success: true };
 }

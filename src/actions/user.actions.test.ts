@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { requireSession } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
 import { createAdminUser, deleteAdminUser } from "./user.actions";
+import { APIError } from "better-auth/api";
 
 vi.mock("@/lib/auth", () => ({
   auth: { api: { createUser: vi.fn() } },
@@ -67,36 +68,57 @@ describe("createAdminUser", () => {
   });
 
   it("rejects missing fields", async () => {
-    await expect(createAdminUser(userForm({ password: "" }))).rejects.toThrow(
-      "Missing required fields",
-    );
+    const result = await createAdminUser(userForm({ password: "" }));
+
+    expect(result).toEqual({
+      success: false,
+      error: "Preencha nome, e-mail e senha.",
+    });
     expect(auth.api.createUser).not.toHaveBeenCalled();
   });
 
   it("surfaces a createUser failure and does not redirect", async () => {
     vi.mocked(auth.api.createUser).mockRejectedValue(
-      new Error("User already exists."),
+      new APIError("BAD_REQUEST", { message: "User already exists." }),
     );
 
-    await expect(createAdminUser(userForm())).rejects.toThrow(
-      "User already exists.",
-    );
+    const result = await createAdminUser(userForm());
+
+    expect(result).toEqual({ success: false, error: "User already exists." });
     expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("logs unexpected failures and returns a generic message", async () => {
+    const logSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(auth.api.createUser).mockRejectedValue(new Error("db down"));
+
+    const result = await createAdminUser(userForm());
+
+    expect(result.success).toBe(false);
+    expect(result.error).not.toContain("db down");
+    expect(redirect).not.toHaveBeenCalled();
+    logSpy.mockRestore();
   });
 });
 
 describe("deleteAdminUser", () => {
   it("refuses to remove the caller", async () => {
-    await expect(deleteAdminUser("admin-1")).rejects.toThrow(/próprio acesso/);
+    const result = await deleteAdminUser("admin-1");
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/próprio acesso/),
+    });
     expect(prisma.user.delete).not.toHaveBeenCalled();
   });
 
   it("counts only admins and blocks removing the last one", async () => {
     vi.mocked(prisma.user.count).mockResolvedValue(1);
 
-    await expect(deleteAdminUser("admin-2")).rejects.toThrow(
-      /último usuário administrador/,
-    );
+    const result = await deleteAdminUser("admin-2");
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/último usuário administrador/),
+    });
     expect(prisma.user.count).toHaveBeenCalledWith({
       where: { role: "admin" },
     });
@@ -106,10 +128,11 @@ describe("deleteAdminUser", () => {
   it("deletes when more than one admin exists", async () => {
     vi.mocked(prisma.user.count).mockResolvedValue(2);
 
-    await deleteAdminUser("admin-2");
+    const result = await deleteAdminUser("admin-2");
 
     expect(prisma.user.delete).toHaveBeenCalledWith({
       where: { id: "admin-2" },
     });
+    expect(result).toEqual({ success: true });
   });
 });

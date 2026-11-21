@@ -14,6 +14,7 @@ vi.mock("@/lib/prisma", () => ({
     $transaction: vi.fn(),
   },
 }));
+
 vi.mock("@/lib/auth-guard", () => ({ requireSession: vi.fn() }));
 vi.mock("./blob.actions", () => ({ deleteBlobImages: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -200,7 +201,11 @@ describe("purgeDrop", () => {
     async (flag) => {
       vi.stubEnv("ALLOW_DESTRUCTIVE_PURGE", flag);
 
-      await expect(purgeDrop("expired-drop")).rejects.toThrow(/desabilitada/);
+      const result = await purgeDrop("expired-drop");
+      expect(result).toMatchObject({
+        success: false,
+        error: expect.stringMatching(/desabilitada/),
+      });
 
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(deleteBlobImages).not.toHaveBeenCalled();
@@ -210,14 +215,20 @@ describe("purgeDrop", () => {
   it("refuses when the drop does not exist", async () => {
     const tx = buildTransaction({ drop: null });
 
-    await expect(purgeDrop("missing-drop")).rejects.toThrow(/não encontrado/);
+    expect(await purgeDrop("missing-drop")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/não encontrado/),
+    });
     expectNothingDeleted(tx);
   });
 
   it("refuses while the sales window is open", async () => {
     const tx = buildTransaction({ drop: openDrop });
 
-    await expect(purgeDrop("open-drop")).rejects.toThrow(/ainda está aberto/);
+    expect(await purgeDrop("open-drop")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/ainda está aberto/),
+    });
     expectNothingDeleted(tx);
   });
 
@@ -226,7 +237,10 @@ describe("purgeDrop", () => {
       drop: { name: "2026.2", endsAt: new Date("2026-11-19T12:00:00Z") },
     });
 
-    await expect(purgeDrop("edge-drop")).rejects.toThrow(/ainda está aberto/);
+    expect(await purgeDrop("edge-drop")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/ainda está aberto/),
+    });
     expectNothingDeleted(tx);
   });
 
@@ -247,7 +261,10 @@ describe("purgeDrop", () => {
       ],
     });
 
-    await expect(purgeDrop("expired-drop")).rejects.toThrow(/pedidos/);
+    expect(await purgeDrop("expired-drop")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/pedidos/),
+    });
     expectNothingDeleted(tx);
   });
 
@@ -258,7 +275,10 @@ describe("purgeDrop", () => {
       ],
     });
 
-    await expect(purgeDrop("expired-drop")).rejects.toThrow(/pedidos/);
+    expect(await purgeDrop("expired-drop")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/pedidos/),
+    });
     expectNothingDeleted(tx);
   });
 
@@ -268,7 +288,10 @@ describe("purgeDrop", () => {
       orders: [{ paymentStatus: "PAID", paymentReviewReason: null }],
     });
 
-    await expect(purgeDrop("expired-drop")).rejects.toThrow(/pedidos/);
+    expect(await purgeDrop("expired-drop")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/pedidos/),
+    });
 
     expect(tx.orderItem.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { OR: [{ dropName: "2026.1" }] } }),
@@ -283,7 +306,8 @@ describe("purgeDrop", () => {
         orders: [{ paymentStatus, paymentReviewReason: null }],
       });
 
-      await purgeDrop("expired-drop");
+      const result = await purgeDrop("expired-drop");
+      expect(result).toEqual({ success: true });
 
       expect(tx.stockReservation.deleteMany).toHaveBeenCalledWith({
         where: { orderId: { in: ["o1"] } },
@@ -331,7 +355,8 @@ describe("purgeDrop", () => {
   it("purges a closed drop that has no orders", async () => {
     const tx = buildTransaction({ orderItems: [], orders: [] });
 
-    await purgeDrop("expired-drop");
+    const result = await purgeDrop("expired-drop");
+    expect(result).toEqual({ success: true });
 
     expect(tx.stockReservation.deleteMany).not.toHaveBeenCalled();
     expect(tx.order.deleteMany).not.toHaveBeenCalled();
@@ -339,5 +364,17 @@ describe("purgeDrop", () => {
     expect(tx.drop.delete).toHaveBeenCalledWith({
       where: { id: "expired-drop" },
     });
+  });
+
+  it("logs unexpected database errors and returns a generic message", async () => {
+    const logSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(prisma.$transaction).mockRejectedValue(new Error("db down"));
+
+    const result = await purgeDrop("expired-drop");
+
+    expect(result.success).toBe(false);
+    expect(result.success === false && result.error).not.toContain("db down");
+    expect(deleteBlobImages).not.toHaveBeenCalled();
+    logSpy.mockRestore();
   });
 });
