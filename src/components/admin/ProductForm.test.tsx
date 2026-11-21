@@ -239,6 +239,35 @@ describe("ProductForm price and availability contract", () => {
     )!;
   }
 
+  it("shows the error returned by the action", async () => {
+    const action = renderForm();
+    action.mockResolvedValueOnce({
+      success: false,
+      error: "Já existe um produto com este link.",
+    });
+    fillRequiredFields("50");
+
+    fireEvent.submit(document.querySelector("form")!);
+
+    expect(
+      await screen.findByText("Já existe um produto com este link."),
+    ).toBeTruthy();
+  });
+
+  it("shows a generic message when the action throws", async () => {
+    const logSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const action = renderForm();
+    action.mockRejectedValueOnce(new Error("masked in production"));
+    fillRequiredFields("50");
+
+    fireEvent.submit(document.querySelector("form")!);
+
+    expect(
+      await screen.findByText("Não foi possível salvar o produto."),
+    ).toBeTruthy();
+    logSpy.mockRestore();
+  });
+
   it("posts the reais input as integer cents and an unchecked box as false", async () => {
     const action = renderForm();
     // A type="number" input always exposes a dot-decimal value ("49,90" typed

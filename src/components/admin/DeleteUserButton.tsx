@@ -11,13 +11,13 @@ export function DeleteUserButton({ userId }: { userId: string }) {
   const handleDelete = () => {
     startTransition(async () => {
       try {
-        await deleteAdminUser(userId);
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Não foi possível remover o usuário.",
-        );
+        const result = await deleteAdminUser(userId);
+        if (!result.success) {
+          setError(result.error);
+          setIsConfirming(false);
+        }
+      } catch {
+        setError("Não foi possível remover o usuário.");
         setIsConfirming(false);
       }
     });

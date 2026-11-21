@@ -24,7 +24,9 @@ type DropOption = {
 };
 
 interface ProductFormProps {
-  action: (formData: FormData) => Promise<void>;
+  action: (
+    formData: FormData,
+  ) => Promise<{ success: false; error: string } | undefined>;
   initialData?: ProductWithVariants;
   drops: DropOption[];
   componentOptions: BundleComponentOption[];
@@ -377,14 +379,13 @@ export function ProductForm({
 
     setIsPending(true);
     try {
-      await action(formData);
+      const result = await action(formData);
+      if (result && !result.success) {
+        setError(result.error);
+      }
     } catch (err) {
       console.error("Erro ao salvar produto:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Não foi possível salvar o produto.",
-      );
+      setError("Não foi possível salvar o produto.");
     } finally {
       setIsPending(false);
     }

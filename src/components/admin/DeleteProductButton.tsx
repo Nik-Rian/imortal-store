@@ -17,7 +17,11 @@ export function DeleteProductButton({ productId }: DeleteProductButtonProps) {
   const handleDelete = () => {
     startTransition(async () => {
       try {
-        await deleteProduct(productId);
+        const result = await deleteProduct(productId);
+        if (!result.success) {
+          alert(result.error);
+          setIsConfirming(false);
+        }
       } catch (error) {
         console.error("Erro ao excluir produto:", error);
         alert("Não foi possível excluir o produto.");

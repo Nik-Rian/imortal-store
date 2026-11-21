@@ -21,9 +21,13 @@ vi.mock("@/lib/prisma", () => ({
     $transaction: vi.fn(),
   },
 }));
+
 vi.mock("@/lib/auth-guard", () => ({ requireSession: vi.fn() }));
+
 vi.mock("@/actions/blob.actions", () => ({ deleteBlobImages: vi.fn() }));
+
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 
 function bundleForm(overrides: Record<string, string> = {}) {
@@ -56,8 +60,22 @@ describe("createProduct (bundles)", () => {
     vi.mocked(prisma.product.findMany).mockResolvedValue([
       { id: "c1", isBundle: true, dropId: "d1" },
     ] as never);
-    await expect(createProduct(bundleForm())).rejects.toThrow(/outro kit/);
+    const result = await createProduct(bundleForm());
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/outro kit/),
+    });
+
     expect(prisma.product.create).not.toHaveBeenCalled();
+  });
+  it("logs an unexpected bundle check failure and returns a generic message", async () => {
+    const logSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(prisma.product.findMany).mockRejectedValue(new Error("db down"));
+    const result = await createProduct(bundleForm());
+    expect(result.success).toBe(false);
+    expect(result.error).not.toContain("db down");
+    expect(prisma.product.create).not.toHaveBeenCalled();
+    logSpy.mockRestore();
   });
 
   it("creates a bundle with stock, size and variant flags forced off", async () => {
@@ -65,9 +83,7 @@ describe("createProduct (bundles)", () => {
       { id: "c1", isBundle: false, dropId: "d1" },
     ] as never);
     vi.mocked(prisma.product.create).mockResolvedValue({} as never);
-
     await createProduct(bundleForm());
-
     expect(prisma.product.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         isBundle: true,
@@ -86,18 +102,19 @@ describe("createProduct (bundles)", () => {
 
 describe("updateProduct (bundles)", () => {
   const current = { images: [], variants: [], sizes: [] };
-
   it("rejects turning a component product into a bundle", async () => {
     vi.mocked(prisma.product.findUnique).mockResolvedValue(current as never);
     vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([
       { bundle: { name: "Kit A", dropId: "d1" } },
     ] as never);
-    await expect(updateProduct("c9", bundleForm())).rejects.toThrow(
-      /já faz parte de um kit/,
-    );
+    const result = await updateProduct("c9", bundleForm());
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/já faz parte de um kit/),
+    });
+
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
-
   it("replaces the component set inside the transaction", async () => {
     vi.mocked(prisma.product.findUnique).mockResolvedValue(current as never);
     vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([]);
@@ -105,12 +122,11 @@ describe("updateProduct (bundles)", () => {
       { id: "c1", isBundle: false, dropId: "d1" },
     ] as never);
     vi.mocked(prisma.$transaction).mockResolvedValue([] as never);
-
     await updateProduct("b1", bundleForm());
-
     expect(prisma.bundleComponent.deleteMany).toHaveBeenCalledWith({
       where: { bundleId: "b1" },
     });
+
     expect(prisma.bundleComponent.createMany).toHaveBeenCalledWith({
       data: [{ bundleId: "b1", componentProductId: "c1", quantity: 2 }],
     });
@@ -125,11 +141,15 @@ describe("deleteProduct (bundles)", () => {
       variants: [],
       componentOf: [{ bundle: { name: "Kit A" } }],
     } as never);
-    await expect(deleteProduct("c1")).rejects.toThrow(/Kit A/);
+    const result = await deleteProduct("c1");
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/Kit A/),
+    });
+
     expect(prisma.product.delete).not.toHaveBeenCalled();
     expect(deleteBlobImages).not.toHaveBeenCalled();
   });
-
   it("deletes a bundle and its images (join rows cascade in the DB)", async () => {
     vi.mocked(prisma.product.findUnique).mockResolvedValue({
       images: ["https://blob/k.png"],
@@ -137,9 +157,8 @@ describe("deleteProduct (bundles)", () => {
       componentOf: [],
     } as never);
     vi.mocked(prisma.product.delete).mockResolvedValue({} as never);
-
-    await deleteProduct("b1");
-
+    const result = await deleteProduct("b1");
+    expect(result).toEqual({ success: true });
     expect(prisma.product.delete).toHaveBeenCalledWith({ where: { id: "b1" } });
     expect(deleteBlobImages).toHaveBeenCalledWith(["https://blob/k.png"]);
   });
@@ -147,6 +166,7 @@ describe("deleteProduct (bundles)", () => {
 
 // Payload shaped like the one the admin form posts: priceCents in cents and an
 // explicit isAvailable flag. An `undefined` override omits the field.
+
 function productForm(overrides: Record<string, string | undefined> = {}) {
   const fields: Record<string, string | undefined> = {
     name: "Camiseta",
@@ -184,12 +204,48 @@ describe("createProduct (price and availability)", () => {
     vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([]);
     vi.mocked(prisma.product.create).mockResolvedValue({} as never);
   });
-
   it("rejects a payload that only carries the legacy price field", async () => {
-    await expect(
-      createProduct(productForm({ priceCents: undefined, price: "49.90" })),
-    ).rejects.toThrow();
+    const result = await createProduct(
+      productForm({ priceCents: undefined, price: "49.90" }),
+    );
+    expect(result.success).toBe(false);
     expect(prisma.product.create).not.toHaveBeenCalled();
+  });
+
+  it("returns a slug conflict message for a unique-constraint error", async () => {
+    vi.mocked(prisma.product.create).mockRejectedValue(
+      Object.assign(new Error("Unique constraint failed"), {
+        code: "P2002",
+        meta: { target: ["slug"] },
+      }),
+    );
+    const result = await createProduct(productForm());
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/Já existe um produto/),
+    });
+  });
+  it("returns a duplicate-entry message for a non-slug unique violation", async () => {
+    vi.mocked(prisma.product.create).mockRejectedValue(
+      Object.assign(new Error("Unique constraint failed"), {
+        code: "P2002",
+        meta: { target: ["productId", "name"] },
+      }),
+    );
+    const result = await createProduct(productForm());
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/item duplicado/),
+    });
+  });
+  it("logs unexpected errors and returns a generic message", async () => {
+    const logSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(prisma.product.create).mockRejectedValue(new Error("db down"));
+    const result = await createProduct(productForm());
+    expect(result.success).toBe(false);
+    expect(result.error).not.toContain("db down");
+    expect(logSpy).toHaveBeenCalled();
+    logSpy.mockRestore();
   });
 
   it("persists priceCents exactly as posted", async () => {
@@ -198,21 +254,18 @@ describe("createProduct (price and availability)", () => {
       data: expect.objectContaining({ priceCents: 4990 }),
     });
   });
-
   it("persists isAvailable=false when the form posts false", async () => {
     await createProduct(productForm({ isAvailable: "false" }));
     expect(prisma.product.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ isAvailable: false }),
     });
   });
-
   it("persists isAvailable=true when the form posts true", async () => {
     await createProduct(productForm({ isAvailable: "true" }));
     expect(prisma.product.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ isAvailable: true }),
     });
   });
-
   it("defaults to available when the field is absent", async () => {
     await createProduct(productForm({ isAvailable: undefined }));
     expect(prisma.product.create).toHaveBeenCalledWith({
@@ -233,17 +286,36 @@ describe("updateProduct (price, availability and page revalidation)", () => {
     vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([]);
     vi.mocked(prisma.$transaction).mockResolvedValue([] as never);
   });
-
   it("rejects a payload that only carries the legacy price field", async () => {
-    await expect(
-      updateProduct(
-        "p1",
-        productForm({ priceCents: undefined, price: "49.90" }),
-      ),
-    ).rejects.toThrow();
+    const result = await updateProduct(
+      "p1",
+      productForm({ priceCents: undefined, price: "49.90" }),
+    );
+    expect(result.success).toBe(false);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it("returns a readable error when the product does not exist", async () => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue(null);
+    const result = await updateProduct("missing", productForm());
+    expect(result).toEqual({
+      success: false,
+      error: "Produto não encontrado.",
+    });
+  });
+  it("returns a slug conflict message for a unique-constraint error", async () => {
+    vi.mocked(prisma.$transaction).mockRejectedValue(
+      Object.assign(new Error("Unique constraint failed"), {
+        code: "P2002",
+        meta: { target: ["slug"] },
+      }),
+    );
+    const result = await updateProduct("p1", productForm());
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/Já existe um produto/),
+    });
+  });
   it("persists priceCents exactly as posted", async () => {
     await updateProduct("p1", productForm({ priceCents: "4990" }));
     expect(updatedProductData().priceCents).toBe(4990);

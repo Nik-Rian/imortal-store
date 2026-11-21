@@ -6,8 +6,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth-guard";
 import { headers } from "next/headers";
+import { APIError } from "better-auth/api";
 
-export async function createAdminUser(formData: FormData) {
+type ActionFailure = { success: false; error: string };
+type ActionResult = { success: true } | ActionFailure;
+
+export async function createAdminUser(
+  formData: FormData,
+): Promise<ActionFailure> {
   await requireSession();
 
   const name = formData.get("name") as string;
@@ -15,30 +21,59 @@ export async function createAdminUser(formData: FormData) {
   const password = formData.get("password") as string;
 
   if (!name || !email || !password) {
-    throw new Error("Missing required fields");
+    return { success: false, error: "Preencha nome, e-mail e senha." };
   }
 
-  await auth.api.createUser({
-    body: { email, password, name, role: "admin" },
-    headers: await headers(),
-  });
+  try {
+    await auth.api.createUser({
+      body: { email, password, name, role: "admin" },
+      headers: await headers(),
+    });
+  } catch (error) {
+    // better-auth reports expected failures (duplicate e-mail, weak password)
+    // as APIError with a user-safe message; anything else is unexpected.
+    if (error instanceof APIError) {
+      return { success: false, error: error.message };
+    }
+    console.error("Erro ao criar usuário administrador:", error);
+    return {
+      success: false,
+      error: "Não foi possível criar o usuário. Tente novamente.",
+    };
+  }
 
   revalidatePath("/admin/usuarios");
   redirect("/admin/usuarios");
 }
 
-export async function deleteAdminUser(userId: string) {
+export async function deleteAdminUser(userId: string): Promise<ActionResult> {
   const session = await requireSession();
 
   if (session.user.id === userId) {
-    throw new Error("Você não pode remover seu próprio acesso.");
+    return {
+      success: false,
+      error: "Você não pode remover seu próprio acesso.",
+    };
   }
 
   const adminCount = await prisma.user.count({ where: { role: "admin" } });
   if (adminCount <= 1) {
-    throw new Error("Não é possível remover o último usuário administrador.");
+    return {
+      success: false,
+      error: "Não é possível remover o último usuário administrador.",
+    };
   }
 
-  await prisma.user.delete({ where: { id: userId } });
+  try {
+    await prisma.user.delete({ where: { id: userId } });
+  } catch (error) {
+    console.error("Erro ao remover usuário administrador:", error);
+    return {
+      success: false,
+      error: "Não foi possível remover o usuário. Tente novamente.",
+    };
+  }
+
   revalidatePath("/admin/usuarios");
+  return { success: true };
 }

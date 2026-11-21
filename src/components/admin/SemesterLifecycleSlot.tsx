@@ -63,12 +63,14 @@ export function SemesterLifecycleSlot({
     setError(null);
     startTransition(async () => {
       try {
-        await purgeDrop(purgeTarget.id);
+        const result = await purgeDrop(purgeTarget.id);
+        if (!result.success) {
+          setError(result.error);
+          return;
+        }
         resetModal();
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Erro ao apagar semestre.",
-        );
+      } catch {
+        setError("Erro ao apagar semestre.");
       }
     });
   };
