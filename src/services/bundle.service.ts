@@ -70,7 +70,9 @@ export async function assertBundleIntegrity(input: {
     throw new BundleIntegrityError("Um kit não pode conter outro kit.");
   }
   if (found.some((p) => p.dropId !== dropId)) {
-    throw new BundleIntegrityError("Os produtos do kit devem pertencer ao mesmo drop do kit.");
+    throw new BundleIntegrityError(
+      "Os produtos do kit devem pertencer ao mesmo drop do kit.",
+    );
   }
 }
 
