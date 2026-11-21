@@ -1,0 +1,209 @@
+[1mdiff --git a/.prettierrc.json b/.prettierrc.json[m
+[1mindex de42adf..09c35dc 100644[m
+[1m--- a/.prettierrc.json[m
+[1m+++ b/.prettierrc.json[m
+[36m@@ -2,6 +2,15 @@[m
+   "semi": true,[m
+   "singleQuote": false,[m
+   "tabWidth": 2,[m
+[32m+[m[32m  "useTabs": false,[m
+   "trailingComma": "all",[m
+[31m-  "printWidth": 80[m
+[32m+[m[32m  "printWidth": 80,[m
+[32m+[m[32m  "endOfLine": "lf",[m
+[32m+[m[32m  "singleAttributePerLine": true,[m
+[32m+[m[32m  "plugins": [[m
+[32m+[m[32m  "@ianvs/prettier-plugin-sort-imports",[m
+[32m+[m[32m  "prettier-plugin-tailwindcss"[m
+[32m+[m[32m],[m
+[32m+[m[32m  "tailwindStylesheet": "./src/app/globals.css",[m
+[32m+[m[32m  "tailwindFunctions": ["cn", "clsx", "cva"][m
+ }[m
+[1mdiff --git a/.vscode/settings.json b/.vscode/settings.json[m
+[1mindex 7e46382..4312335 100644[m
+[1m--- a/.vscode/settings.json[m
+[1m+++ b/.vscode/settings.json[m
+[36m@@ -1,5 +1,8 @@[m
+ {[m
+   "editor.formatOnSave": true,[m
+   "editor.formatOnSaveMode": "file",[m
+[31m-  "editor.defaultFormatter": "esbenp.prettier-vscode"[m
+[32m+[m[32m  "editor.defaultFormatter": "esbenp.prettier-vscode",[m
+[32m+[m[32m  "editor.codeActionsOnSave": {[m
+[32m+[m[32m    "source.fixAll.eslint": "explicit"[m
+[32m+[m[32m  }[m
+ }[m
+[1mdiff --git a/package.json b/package.json[m
+[1mindex 80ddce7..5dfdf8f 100644[m
+[1m--- a/package.json[m
+[1m+++ b/package.json[m
+[36m@@ -7,7 +7,10 @@[m
+     "build": "prisma generate && next build",[m
+     "start": "next start",[m
+     "lint": "eslint .",[m
+[31m-    "test": "vitest run"[m
+[32m+[m[32m    "test": "vitest run",[m
+[32m+[m[32m    "format": "prettier --write .",[m
+[32m+[m[32m    "format:check": "prettier --check .",[m
+[32m+[m[32m    "format:prisma": "prisma format"[m
+   },[m
+   "dependencies": {[m
+     "@hookform/resolvers": "^5.9.1",[m
+[36m@@ -35,6 +38,7 @@[m
+   },[m
+   "devDependencies": {[m
+     "@eslint/compat": "^2.1.0",[m
+[32m+[m[32m    "@ianvs/prettier-plugin-sort-imports": "^4.7.1",[m
+     "@tailwindcss/postcss": "^4.3.3",[m
+     "@testing-library/dom": "^10.4.2",[m
+     "@testing-library/react": "^16.3.3",[m
+[36m@@ -50,6 +54,7 @@[m
+     "eslint-plugin-react": "^7.37.5",[m
+     "jsdom": "^30.1.3",[m
+     "prettier": "3.10.1",[m
+[32m+[m[32m    "prettier-plugin-tailwindcss": "^0.8.1",[m
+     "prisma": "^7.10.0",[m
+     "tailwindcss": "^4.3.3",[m
+     "tsx": "^4.23.12",[m
+[1mdiff --git a/pnpm-lock.yaml b/pnpm-lock.yaml[m
+[1mindex d0c3d23..482e41b 100644[m
+[1m--- a/pnpm-lock.yaml[m
+[1m+++ b/pnpm-lock.yaml[m
+[36m@@ -78,6 +78,9 @@[m [mimporters:[m
+       '@eslint/compat':[m
+         specifier: ^2.1.0[m
+         version: 2.1.0(eslint@10.9.1(jiti@2.7.0)(supports-color@7.2.0))[m
+[32m+[m[32m      '@ianvs/prettier-plugin-sort-imports':[m
+[32m+[m[32m        specifier: ^4.7.1[m
+[32m+[m[32m        version: 4.7.1(prettier@3.10.1)(supports-color@7.2.0)[m
+       '@tailwindcss/postcss':[m
+         specifier: ^4.3.3[m
+         version: 4.3.3[m
+[36m@@ -123,6 +126,9 @@[m [mimporters:[m
+       prettier:[m
+         specifier: 3.10.1[m
+         version: 3.10.1[m
+[32m+[m[32m      prettier-plugin-tailwindcss:[m
+[32m+[m[32m        specifier: ^0.8.1[m
+[32m+[m[32m        version: 0.8.1(@ianvs/prettier-plugin-sort-imports@4.7.1(prettier@3.10.1)(supports-color@7.2.0))(prettier@3.10.1)[m
+       prisma:[m
+         specifier: ^7.10.0[m
+         version: 7.10.0(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@6.0.3)[m
+[36m@@ -770,6 +776,24 @@[m [mpackages:[m
+     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}[m
+     engines: {node: '>=18.18'}[m
+ [m
+[32m+[m[32m  '@ianvs/prettier-plugin-sort-imports@4.7.1':[m
+[32m+[m[32m    resolution: {integrity: sha512-jmTNYGlg95tlsoG3JLCcuC4BrFELJtLirLAkQW/71lXSyOhVt/Xj7xWbbGcuVbNq1gwWgSyMrPjJc9Z30hynVw==}[m
+[32m+[m[32m    peerDependencies:[m
+[32m+[m[32m      '@prettier/plugin-oxc': ^0.0.4 || ^0.1.0[m
+[32m+[m[32m      '@vue/compiler-sfc': 2.7.x || 3.x[m
+[32m+[m[32m      content-tag: ^4.0.0[m
+[32m+[m[32m      prettier: 2 || 3 || ^4.0.0-0[m
+[32m+[m[32m      prettier-plugin-ember-template-tag: ^2.1.0[m
+[32m+[m[32m    peerDependenciesMeta:[m
+[32m+[m[32m      '@prettier/plugin-oxc':[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      '@vue/compiler-sfc':[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      content-tag:[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      prettier-plugin-ember-template-tag:[m
+[32m+[m[32m        optional: true[m
+[32m+[m
+   '@img/colour@1.1.0':[m
+     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}[m
+     engines: {node: '>=18'}[m
+[36m@@ -4485,6 +4509,61 @@[m [mpackages:[m
+     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}[m
+     engines: {node: '>= 0.8.0'}[m
+ [m
+[32m+[m[32m  prettier-plugin-tailwindcss@0.8.1:[m
+[32m+[m[32m    resolution: {integrity: sha512-iaFMYqDsE4ffdDkn5qup0j5f2aCEBFZrdrZnvu9QKTlWx/iGPeQ4HHu7b7fCPMxeo9nwQBiOAh2nSypdFYWJkw==}[m
+[32m+[m[32m    engines: {node: '>=20.19'}[m
+[32m+[m[32m    peerDependencies:[m
+[32m+[m[32m      '@ianvs/prettier-plugin-sort-imports': '*'[m
+[32m+[m[32m      '@prettier/plugin-hermes': '*'[m
+[32m+[m[32m      '@prettier/plugin-oxc': '*'[m
+[32m+[m[32m      '@prettier/plugin-pug': '*'[m
+[32m+[m[32m      '@shopify/prettier-plugin-liquid': '*'[m
+[32m+[m[32m      '@trivago/prettier-plugin-sort-imports': '*'[m
+[32m+[m[32m      '@zackad/prettier-plugin-twig': '*'[m
+[32m+[m[32m      prettier: ^3.0[m
+[32m+[m[32m      prettier-plugin-astro: '*'[m
+[32m+[m[32m      prettier-plugin-css-order: '*'[m
+[32m+[m[32m      prettier-plugin-jsdoc: '*'[m
+[32m+[m[32m      prettier-plugin-marko: '*'[m
+[32m+[m[32m      prettier-plugin-multiline-arrays: '*'[m
+[32m+[m[32m      prettier-plugin-organize-attributes: '*'[m
+[32m+[m[32m      prettier-plugin-organize-imports: '*'[m
+[32m+[m[32m      prettier-plugin-sort-imports: '*'[m
+[32m+[m[32m      prettier-plugin-svelte: '*'[m
+[32m+[m[32m    peerDependenciesMeta:[m
+[32m+[m[32m      '@ianvs/prettier-plugin-sort-imports':[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      '@prettier/plugin-hermes':[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      '@prettier/plugin-oxc':[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      '@prettier/plugin-pug':[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      '@shopify/prettier-plugin-liquid':[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      '@trivago/prettier-plugin-sort-imports':[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      '@zackad/prettier-plugin-twig':[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      prettier-plugin-astro:[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      prettier-plugin-css-order:[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      prettier-plugin-jsdoc:[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      prettier-plugin-marko:[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      prettier-plugin-multiline-arrays:[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      prettier-plugin-organize-attributes:[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      prettier-plugin-organize-imports:[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      prettier-plugin-sort-imports:[m
+[32m+[m[32m        optional: true[m
+[32m+[m[32m      prettier-plugin-svelte:[m
+[32m+[m[32m        optional: true[m
+[32m+[m
+   prettier@3.10.1:[m
+     resolution: {integrity: sha512-70vp3ZUYoPlFbF9uiTdXHUUCGEIp7d4+6p+8DYbkm2jP7x/3i/paXVF6dopSI3zd/CEitrZN1rc4i85xWmmXlg==}[m
+     engines: {node: '>=14'}[m
+[36m@@ -5853,6 +5932,17 @@[m [msnapshots:[m
+ [m
+   '@humanwhocodes/retry@0.4.3': {}[m
+ [m
+[32m+[m[32m  '@ianvs/prettier-plugin-sort-imports@4.7.1(prettier@3.10.1)(supports-color@7.2.0)':[m
+[32m+[m[32m    dependencies:[m
+[32m+[m[32m      '@babel/generator': 7.29.8[m
+[32m+[m[32m      '@babel/parser': 7.29.8[m
+[32m+[m[32m      '@babel/traverse': 7.29.8(supports-color@7.2.0)[m
+[32m+[m[32m      '@babel/types': 7.29.8[m
+[32m+[m[32m      prettier: 3.10.1[m
+[32m+[m[32m      semver: 7.8.5[m
+[32m+[m[32m    transitivePeerDependencies:[m
+[32m+[m[32m      - supports-color[m
+[32m+[m
+   '@img/colour@1.1.0':[m
+     optional: true[m
+ [m
+[36m@@ -9576,6 +9666,12 @@[m [msnapshots:[m
+ [m
+   prelude-ls@1.2.1: {}[m
+ [m
+[32m+[m[32m  prettier-plugin-tailwindcss@0.8.1(@ianvs/prettier-plugin-sort-imports@4.7.1(prettier@3.10.1)(supports-color@7.2.0))(prettier@3.10.1):[m
+[32m+[m[32m    dependencies:[m
+[32m+[m[32m      prettier: 3.10.1[m
+[32m+[m[32m    optionalDependencies:[m
+[32m+[m[32m      '@ianvs/prettier-plugin-sort-imports': 4.7.1(prettier@3.10.1)(supports-color@7.2.0)[m
+[32m+[m
+   prettier@3.10.1: {}[m
+ [m
+   pretty-format@27.5.1:[m
