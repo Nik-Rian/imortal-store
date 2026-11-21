@@ -1,10 +1,10 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import { getProductById } from "@/services/product.service";
 import { updateProduct } from "@/actions/product.actions";
 import { ProductForm } from "@/components/admin/ProductForm";
-import { getDrops } from "@/services/drop.service";
 import { getBundleComponentOptions } from "@/services/bundle.service";
+import { getDrops } from "@/services/drop.service";
+import { getProductById } from "@/services/product.service";
+import Link from "next/link";
+import { notFound } from "next/navigation";
 
 interface EditProductPageProps {
   params: Promise<{ id: string }>;
@@ -25,11 +25,11 @@ export default async function EditProductPage({
   const updateProductWithId = updateProduct.bind(null, product.id);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Editar Produto</h1>
-          <p className="text-zinc-500 mt-1">
+          <p className="mt-1 text-zinc-500">
             Altere as informações de {product.name}.
           </p>
         </div>

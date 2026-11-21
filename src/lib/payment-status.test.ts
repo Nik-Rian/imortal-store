@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
 import type {
   OrderStatus,
   PaymentReviewReason,
   PaymentStatus,
 } from "@/generated/prisma/client";
+import { describe, expect, it } from "vitest";
 import { resolveFulfillmentStatus, resolvePaymentSync } from "./payment-status";
 
 describe("resolveFulfillmentStatus", () => {

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { getMercadoPagoOrder } from "@/services/mercadopago.service";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 
 // route.ts reads the secret at module load, so it must be set before ./route is imported.

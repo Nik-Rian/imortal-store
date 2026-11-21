@@ -1,5 +1,5 @@
-import { getAdminDrops } from "@/services/drop.service";
 import { SemesterLifecycleSlot } from "@/components/admin/SemesterLifecycleSlot";
+import { getAdminDrops } from "@/services/drop.service";
 
 export default async function AdminDashboardPage() {
   const drops = await getAdminDrops();
@@ -16,7 +16,10 @@ export default async function AdminDashboardPage() {
         </p>
       </div>
 
-      <SemesterLifecycleSlot drops={drops} purgeEnabled={purgeEnabled} />
+      <SemesterLifecycleSlot
+        drops={drops}
+        purgeEnabled={purgeEnabled}
+      />
     </div>
   );
 }

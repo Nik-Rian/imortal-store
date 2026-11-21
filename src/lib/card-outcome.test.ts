@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PaymentRejectedError, describeCardFailure } from "./card-outcome";
+import { describeCardFailure, PaymentRejectedError } from "./card-outcome";
 
 describe("describeCardFailure", () => {
   it.each([

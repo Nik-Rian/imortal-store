@@ -1,12 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createOrder, updateOrderStatus } from "./order.actions";
+import { describeCardFailure, PaymentRejectedError } from "@/lib/card-outcome";
 import { prisma } from "@/lib/prisma";
 import {
   createCardOrder,
   createPixOrder,
 } from "@/services/mercadopago.service";
 import { checkProductAvailability } from "@/services/product.service";
-import { PaymentRejectedError, describeCardFailure } from "@/lib/card-outcome";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createOrder, updateOrderStatus } from "./order.actions";
 
 // Mock das dependências
 vi.mock("@/lib/prisma", () => ({

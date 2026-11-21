@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
 import { createAdminUser } from "@/actions/user.actions";
+import { useActionState } from "react";
 
 interface CreateAdminFormState {
   error: string | null;
@@ -34,17 +34,23 @@ export function CreateAdminForm() {
   );
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form
+      action={formAction}
+      className="space-y-4"
+    >
       {state.error && (
         <p
           role="alert"
-          className="text-sm text-red-600 bg-red-50 rounded-md px-3 py-2"
+          className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600"
         >
           {state.error}
         </p>
       )}
       <div className="space-y-1">
-        <label htmlFor="name" className="text-sm font-medium text-zinc-700">
+        <label
+          htmlFor="name"
+          className="text-sm font-medium text-zinc-700"
+        >
           Nome
         </label>
         <input
@@ -56,7 +62,10 @@ export function CreateAdminForm() {
         />
       </div>
       <div className="space-y-1">
-        <label htmlFor="email" className="text-sm font-medium text-zinc-700">
+        <label
+          htmlFor="email"
+          className="text-sm font-medium text-zinc-700"
+        >
           E-mail
         </label>
         <input
@@ -69,7 +78,10 @@ export function CreateAdminForm() {
         />
       </div>
       <div className="space-y-1">
-        <label htmlFor="password" className="text-sm font-medium text-zinc-700">
+        <label
+          htmlFor="password"
+          className="text-sm font-medium text-zinc-700"
+        >
           Senha temporária
         </label>
         <input
@@ -84,7 +96,7 @@ export function CreateAdminForm() {
       <button
         type="submit"
         disabled={isPending}
-        className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2 transition-colors disabled:opacity-50"
+        className="inline-flex h-10 items-center justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 transition-colors hover:bg-zinc-900/90 disabled:opacity-50"
       >
         {isPending ? "Criando..." : "Criar Usuário"}
       </button>

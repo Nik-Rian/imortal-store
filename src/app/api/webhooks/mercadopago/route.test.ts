@@ -1,6 +1,6 @@
-import { describe, expect, test, vi } from "vitest";
 import { PaymentStatus } from "@/generated/prisma/client";
 import { mapPaymentStatus } from "@/lib/payment-status";
+import { describe, expect, test, vi } from "vitest";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {},

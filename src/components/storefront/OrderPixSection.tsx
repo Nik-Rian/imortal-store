@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Check, Copy } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 interface OrderPixSectionProps {
   status: string;
@@ -44,8 +44,8 @@ export function OrderPixSection({
   if (status !== "PENDING") return null;
 
   return (
-    <div className="mt-6 border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl p-6">
-      <div className="text-center max-w-md mx-auto space-y-4">
+    <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/50 p-6 dark:border-amber-900/50 dark:bg-amber-950/20">
+      <div className="mx-auto max-w-md space-y-4 text-center">
         <h3 className="text-lg font-extrabold text-amber-900 dark:text-amber-200">
           Pagamento via Pix
         </h3>
@@ -56,12 +56,12 @@ export function OrderPixSection({
 
         {/* QR Code Image Display */}
         {qrCodeBase64 && (
-          <div className="flex justify-center my-4">
-            <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-sm">
+          <div className="my-4 flex justify-center">
+            <div className="rounded-xl border border-amber-200 bg-white p-3 shadow-sm">
               <img
                 src={`data:image/png;base64,${qrCodeBase64}`}
                 alt="Pix QR Code"
-                className="w-52 h-52 object-contain"
+                className="h-52 w-52 object-contain"
               />
             </div>
           </div>
@@ -78,20 +78,20 @@ export function OrderPixSection({
                 type="text"
                 readOnly
                 value={qrCode}
-                className="w-full text-xs font-mono bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-md px-3 py-2 text-zinc-600 dark:text-zinc-300 truncate focus:outline-none"
+                className="w-full truncate rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs text-zinc-600 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
               />
               <button
                 type="button"
                 onClick={handleCopy}
-                className="inline-flex items-center gap-1.5 shrink-0 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-md transition-colors shadow-sm"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-700"
               >
                 {copied ? (
                   <>
-                    <Check className="w-4 h-4" /> Copiado!
+                    <Check className="h-4 w-4" /> Copiado!
                   </>
                 ) : (
                   <>
-                    <Copy className="w-4 h-4" /> Copiar
+                    <Copy className="h-4 w-4" /> Copiar
                   </>
                 )}
               </button>
@@ -99,8 +99,8 @@ export function OrderPixSection({
           </div>
         )}
 
-        <div className="pt-2 flex items-center justify-center gap-2 text-xs text-amber-700 dark:text-amber-400 animate-pulse">
-          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+        <div className="flex animate-pulse items-center justify-center gap-2 pt-2 text-xs text-amber-700 dark:text-amber-400">
+          <span className="h-2 w-2 rounded-full bg-amber-500"></span>
           Aguardando confirmação do pagamento em tempo real...
         </div>
       </div>

@@ -1,6 +1,18 @@
 "use client";
 
 import {
+  capInstallments,
+  type InstallmentOption,
+} from "@/lib/card-installments";
+import {
+  CardNumber,
+  createCardToken,
+  ExpirationDate,
+  getInstallments,
+  getPaymentMethods,
+  SecurityCode,
+} from "@mercadopago/sdk-react";
+import {
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -8,18 +20,6 @@ import {
   useState,
   type Ref,
 } from "react";
-import {
-  CardNumber,
-  ExpirationDate,
-  SecurityCode,
-  createCardToken,
-  getInstallments,
-  getPaymentMethods,
-} from "@mercadopago/sdk-react";
-import {
-  capInstallments,
-  type InstallmentOption,
-} from "@/lib/card-installments";
 
 /** Exactly the shape `createOrder` accepts as `card`. No raw card data. */
 export interface CardTokenResult {
@@ -167,9 +167,12 @@ export function CardPaymentFields({
   useImperativeHandle(ref, () => ({ tokenize }));
 
   return (
-    <div className="space-y-4 rounded-lg border border-zinc-200 dark:border-zinc-800 p-4">
+    <div className="space-y-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
       <div>
-        <label htmlFor="card-holder" className={labelClass}>
+        <label
+          htmlFor="card-holder"
+          className={labelClass}
+        >
           Nome impresso no cartão
         </label>
         <input
@@ -223,14 +226,20 @@ export function CardPaymentFields({
         <div>
           <span className={labelClass}>Código de segurança</span>
           <div className={fieldBoxClass}>
-            <SecurityCode placeholder="CVV" style={fieldStyle} />
+            <SecurityCode
+              placeholder="CVV"
+              style={fieldStyle}
+            />
           </div>
         </div>
       </div>
 
       {card?.paymentTypeId === "credit_card" && (
         <div>
-          <label htmlFor="card-installments" className={labelClass}>
+          <label
+            htmlFor="card-installments"
+            className={labelClass}
+          >
             Parcelas
           </label>
           <select
@@ -240,7 +249,10 @@ export function CardPaymentFields({
             className={inputClass}
           >
             {options.map((option) => (
-              <option key={option.installments} value={option.installments}>
+              <option
+                key={option.installments}
+                value={option.installments}
+              >
                 {option.label}
               </option>
             ))}

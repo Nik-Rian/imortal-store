@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { prisma } from "@/lib/prisma";
 import { deleteBlobImages } from "@/actions/blob.actions";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createProduct, deleteProduct, updateProduct } from "./product.actions";
 
 vi.mock("@/lib/prisma", () => ({

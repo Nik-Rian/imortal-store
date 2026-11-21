@@ -16,112 +16,112 @@ model Drop {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products  Product[]
+  products Product[]
 
   @@index([startsAt])
   @@index([endsAt])
 }
 
 model Product {
-  id                  String   @id @default(uuid())
-  name                String
-  slug                String   @unique
-  description         String
-  priceCents          Int
-  images              String[]
-  isAvailable         Boolean  @default(true)
-  sortOrder           Int      @default(0)
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String
+  priceCents  Int
+  images      String[]
+  isAvailable Boolean  @default(true)
+  sortOrder   Int      @default(0)
 
   // Configuration flags
-  controlStock        Boolean  @default(false)
-  hasSizes            Boolean  @default(false)
-  hasVariants         Boolean  @default(false)
-  showVariantsInStore Boolean  @default(true)
-  isBundle            Boolean  @default(false)
+  controlStock        Boolean @default(false)
+  hasSizes            Boolean @default(false)
+  hasVariants         Boolean @default(false)
+  showVariantsInStore Boolean @default(true)
+  isBundle            Boolean @default(false)
 
-  dropId              String
-  drop                Drop     @relation(fields: [dropId], references: [id], onDelete: Restrict)
+  dropId String
+  drop   Drop   @relation(fields: [dropId], references: [id], onDelete: Restrict)
 
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  sizes               ProductSize[]
-  variants            ProductVariant[]
-  orderItems          OrderItem[]
-  stockItems          StockItem[]
-  components          BundleComponent[] @relation("BundleComponents")
-  componentOf         BundleComponent[] @relation("ComponentProduct")
+  sizes       ProductSize[]
+  variants    ProductVariant[]
+  orderItems  OrderItem[]
+  stockItems  StockItem[]
+  components  BundleComponent[] @relation("BundleComponents")
+  componentOf BundleComponent[] @relation("ComponentProduct")
 
   @@index([dropId])
 }
 
 model ProductSize {
-  id          String   @id @default(uuid())
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   size        String
-  isAvailable Boolean  @default(true)
-  sortOrder   Int      @default(0)
+  isAvailable Boolean @default(true)
+  sortOrder   Int     @default(0)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  stockItems  StockItem[]
+  stockItems StockItem[]
 
   @@unique([productId, size])
 }
 
 model ProductVariant {
-  id          String   @id @default(uuid())
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   name        String
   image       String?
-  isAvailable Boolean  @default(true)
-  sortOrder   Int      @default(0)
+  isAvailable Boolean @default(true)
+  sortOrder   Int     @default(0)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  stockItems  StockItem[]
+  stockItems StockItem[]
 
   @@unique([productId, name])
 }
 
 model BundleComponent {
-  id                 String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  bundleId           String
-  bundle             Product  @relation("BundleComponents", fields: [bundleId], references: [id], onDelete: Cascade)
+  bundleId String
+  bundle   Product @relation("BundleComponents", fields: [bundleId], references: [id], onDelete: Cascade)
 
   componentProductId String
-  componentProduct   Product  @relation("ComponentProduct", fields: [componentProductId], references: [id], onDelete: Restrict)
+  componentProduct   Product @relation("ComponentProduct", fields: [componentProductId], references: [id], onDelete: Restrict)
 
-  quantity           Int      @default(1)
+  quantity Int @default(1)
 
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([bundleId, componentProductId])
   @@index([componentProductId])
-} 
+}
 
 model StockItem {
-  id          String   @id @default(uuid())
-  productId   String
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  variantId   String?
-  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
-  sizeId      String?
-  size        ProductSize?    @relation(fields: [sizeId], references: [id], onDelete: Cascade)
+  sizeId String?
+  size   ProductSize? @relation(fields: [sizeId], references: [id], onDelete: Cascade)
 
-  stockKey    String   @unique // deterministic: productId#variantId#sizeId
-  onHand      Int      @default(0)
-  reserved    Int      @default(0)
+  stockKey String @unique // deterministic: productId#variantId#sizeId
+  onHand   Int    @default(0)
+  reserved Int    @default(0)
 
   reservations StockReservation[]
 
@@ -137,15 +137,15 @@ enum ReservationStatus {
 }
 
 model StockReservation {
-  id          String   @id @default(uuid())
+  id          String            @id @default(uuid())
   orderId     String
-  order       Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  order       Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
   stockItemId String
-  stockItem   StockItem @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  stockItem   StockItem         @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
   quantity    Int
   status      ReservationStatus @default(RESERVED)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   @@unique([orderId, stockItemId])
   @@index([orderId])
@@ -185,52 +185,52 @@ enum PaymentMethod {
 }
 
 model Order {
-  id              String      @id @default(cuid())
-  accessToken     String      @unique
-  customerName    String
-  customerPhone   String?
-  customerEmail   String?
-  status          OrderStatus @default(PENDING)
-  paymentStatus        PaymentStatus @default(PENDING)
+  id                   String               @id @default(cuid())
+  accessToken          String               @unique
+  customerName         String
+  customerPhone        String?
+  customerEmail        String?
+  status               OrderStatus          @default(PENDING)
+  paymentStatus        PaymentStatus        @default(PENDING)
   providerStatus       String?
   providerStatusDetail String?
   paidAmount           Int?
   lastPaymentSync      DateTime?
   paymentReviewReason  PaymentReviewReason?
-  paymentMethod        PaymentMethod @default(PIX)
+  paymentMethod        PaymentMethod        @default(PIX)
   installments         Int?
-  totalPriceCents Int
-  cancelableUntil DateTime
-  mpPaymentId     String?
-  mpOrderId       String?
-  pixQrCode       String?
-  pixQrCodeBase64 String?
-  idempotencyKey  String?     @unique
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  items           OrderItem[]
-  stockReservations StockReservation[]
+  totalPriceCents      Int
+  cancelableUntil      DateTime
+  mpPaymentId          String?
+  mpOrderId            String?
+  pixQrCode            String?
+  pixQrCodeBase64      String?
+  idempotencyKey       String?              @unique
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  items                OrderItem[]
+  stockReservations    StockReservation[]
 }
 
 model OrderItem {
-  id             String          @id @default(uuid())
+  id String @id @default(uuid())
 
-  orderId        String
-  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  productId      String?
-  product        Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
-  productName    String
-  dropName       String
-  variantName    String?
-  sizeLabel      String?
+  productName String
+  dropName    String
+  variantName String?
+  sizeLabel   String?
 
   unitPriceCents Int
   quantity       Int
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([productId])
@@ -286,7 +286,7 @@ model Account {
   password              String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
-  issuer String?
+  issuer                String?
 
   @@index([userId])
   @@map("account")
@@ -305,8 +305,8 @@ model Verification {
 }
 
 model RateLimit {
-  id          String   @id
-  key         String   @unique
+  id          String @id
+  key         String @unique
   count       Int
   lastRequest Float
 

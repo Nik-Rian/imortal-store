@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
+import { describe, expect, it, vi } from "vitest";
 import { getUsers } from "./user.service";
 
 vi.mock("react", () => ({ cache: <T>(fn: T) => fn }));

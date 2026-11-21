@@ -1,22 +1,22 @@
 "use client";
 
-import { useState, ChangeEvent } from "react";
-import { slugify } from "@/lib/utils";
-import { ProductWithVariants, BundleComponentOption } from "@/types";
+import { deleteBlobImages, uploadProductImage } from "@/actions/blob.actions";
 import {
-  productSchema,
-  applyBundleRules,
-  ALLOWED_SIZES,
-  AllowedSize,
-} from "@/lib/validations/product.schema";
-import { uploadProductImage, deleteBlobImages } from "@/actions/blob.actions";
-import {
-  MAX_IMAGE_BYTES,
   IMAGE_SIZE_ERROR,
   IMAGE_TYPE_ERROR,
   isAllowedImageType,
+  MAX_IMAGE_BYTES,
 } from "@/lib/media";
+import { slugify } from "@/lib/utils";
+import {
+  ALLOWED_SIZES,
+  AllowedSize,
+  applyBundleRules,
+  productSchema,
+} from "@/lib/validations/product.schema";
+import { BundleComponentOption, ProductWithVariants } from "@/types";
 import { ImagePlus, Loader2, Trash2, X } from "lucide-react";
+import { ChangeEvent, useState } from "react";
 
 type DropOption = {
   id: string;
@@ -394,22 +394,26 @@ export function ProductForm({
   return (
     <form
       action={clientAction}
-      className="space-y-6 bg-white p-6 border rounded-md shadow-sm"
+      className="space-y-6 rounded-md border bg-white p-6 shadow-sm"
     >
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 rounded-md px-3 py-2 animate-in fade-in duration-200">
+        <p className="animate-in rounded-md bg-red-50 px-3 py-2 text-sm text-red-600 duration-200 fade-in">
           {error}
         </p>
       )}
 
-      <input type="hidden" name="slug" value={currentSlug} />
+      <input
+        type="hidden"
+        name="slug"
+        value={currentSlug}
+      />
 
       {/* Configurations Toggle Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Availability */}
-        <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
+        <div className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 p-4">
           <div className="space-y-0.5">
-            <label className="text-sm font-medium text-zinc-900 cursor-pointer">
+            <label className="cursor-pointer text-sm font-medium text-zinc-900">
               Disponível na loja
             </label>
             <p className="text-xs text-zinc-500">Exibe o produto p/ venda.</p>
@@ -420,16 +424,16 @@ export function ProductForm({
             checked={isAvailable}
             onChange={(e) => setIsAvailable(e.target.checked)}
             disabled={isPending}
-            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+            className="h-4 w-4 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
           />
         </div>
 
         {/* Bundle */}
-        <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
+        <div className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 p-4">
           <div className="space-y-0.5">
             <label
               htmlFor="isBundle"
-              className="text-sm font-medium text-zinc-900 cursor-pointer"
+              className="cursor-pointer text-sm font-medium text-zinc-900"
             >
               Produto Kit
             </label>
@@ -445,16 +449,16 @@ export function ProductForm({
             checked={isBundle}
             onChange={(e) => setIsBundle(e.target.checked)}
             disabled={isPending || isUsedAsComponent}
-            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+            className="h-4 w-4 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
           />
         </div>
 
         {!isBundle && (
           <>
             {/* Control Stock */}
-            <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
+            <div className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 p-4">
               <div className="space-y-0.5">
-                <label className="text-sm font-medium text-zinc-900 cursor-pointer">
+                <label className="cursor-pointer text-sm font-medium text-zinc-900">
                   Controlar Estoque
                 </label>
                 <p className="text-xs text-zinc-500">
@@ -466,14 +470,14 @@ export function ProductForm({
                 checked={controlStock}
                 onChange={(e) => setControlStock(e.target.checked)}
                 disabled={isPending}
-                className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+                className="h-4 w-4 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
               />
             </div>
 
             {/* Has Sizes */}
-            <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
+            <div className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 p-4">
               <div className="space-y-0.5">
-                <label className="text-sm font-medium text-zinc-900 cursor-pointer">
+                <label className="cursor-pointer text-sm font-medium text-zinc-900">
                   Possui Tamanhos
                 </label>
                 <p className="text-xs text-zinc-500">
@@ -485,14 +489,14 @@ export function ProductForm({
                 checked={hasSizes}
                 onChange={(e) => setHasSizes(e.target.checked)}
                 disabled={isPending}
-                className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+                className="h-4 w-4 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
               />
             </div>
 
             {/* Has Variants */}
-            <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
+            <div className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 p-4">
               <div className="space-y-0.5">
-                <label className="text-sm font-medium text-zinc-900 cursor-pointer">
+                <label className="cursor-pointer text-sm font-medium text-zinc-900">
                   Possui Variantes
                 </label>
                 <p className="text-xs text-zinc-500">
@@ -504,14 +508,14 @@ export function ProductForm({
                 checked={hasVariants}
                 onChange={(e) => setHasVariants(e.target.checked)}
                 disabled={isPending}
-                className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+                className="h-4 w-4 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
               />
             </div>
 
             {/* Show Variants in Store */}
-            <div className="flex items-center justify-between p-4 bg-zinc-50 border border-zinc-200 rounded-md">
+            <div className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 p-4">
               <div className="space-y-0.5">
-                <label className="text-sm font-medium text-zinc-900 cursor-pointer">
+                <label className="cursor-pointer text-sm font-medium text-zinc-900">
                   Exibir Variantes
                 </label>
                 <p className="text-xs text-zinc-500">
@@ -523,7 +527,7 @@ export function ProductForm({
                 checked={showVariantsInStore}
                 onChange={(e) => setShowVariantsInStore(e.target.checked)}
                 disabled={isPending}
-                className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+                className="h-4 w-4 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
               />
             </div>
           </>
@@ -532,7 +536,10 @@ export function ProductForm({
 
       {/* Drop Selection */}
       <div className="space-y-2">
-        <label htmlFor="dropId" className="text-sm font-medium text-zinc-900">
+        <label
+          htmlFor="dropId"
+          className="text-sm font-medium text-zinc-900"
+        >
           Drop
         </label>
         <select
@@ -541,13 +548,16 @@ export function ProductForm({
           value={selectedDropId}
           onChange={(e) => handleDropChange(e.target.value)}
           disabled={isPending || drops.length === 0 || isUsedAsComponent}
-          className="w-full flex h-10 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
+          className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
         >
           {drops.length === 0 ? (
             <option value="">Nenhum Drop cadastrado</option>
           ) : (
             drops.map((drop) => (
-              <option key={drop.id} value={drop.id}>
+              <option
+                key={drop.id}
+                value={drop.id}
+              >
                 {drop.name}
               </option>
             ))
@@ -563,7 +573,10 @@ export function ProductForm({
 
       {/* Product Name */}
       <div className="space-y-2">
-        <label htmlFor="name" className="text-sm font-medium text-zinc-900">
+        <label
+          htmlFor="name"
+          className="text-sm font-medium text-zinc-900"
+        >
           Nome do Produto
         </label>
         <input
@@ -573,12 +586,12 @@ export function ProductForm({
           value={name}
           onChange={handleNameChange}
           disabled={isPending}
-          className="w-full flex h-10 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
+          className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
         />
         {!isEditMode ? (
-          <p className="text-xs text-zinc-500 mt-1">
+          <p className="mt-1 text-xs text-zinc-500">
             Link permanente:{" "}
-            <span className="font-mono bg-zinc-50 text-zinc-700 px-1 py-0.5 rounded">
+            <span className="rounded bg-zinc-50 px-1 py-0.5 font-mono text-zinc-700">
               {currentSlug || "..."}
             </span>
           </p>
@@ -586,7 +599,7 @@ export function ProductForm({
           <div className="mt-2 flex flex-col gap-1">
             <p className="text-xs text-zinc-500">
               Link anterior:{" "}
-              <span className="font-mono bg-zinc-100 text-zinc-700 px-1 py-0.5 rounded">
+              <span className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-zinc-700">
                 {originalSlug}
               </span>
             </p>
@@ -599,34 +612,34 @@ export function ProductForm({
         <label className="text-sm font-medium text-zinc-900">
           {isBundle ? "Foto Principal do Kit" : "Fotos do Produto"}
         </label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {images.map((url, idx) => (
             <div
               key={url}
-              className="relative aspect-square border rounded-md overflow-hidden group bg-zinc-100"
+              className="group relative aspect-square overflow-hidden rounded-md border bg-zinc-100"
             >
               <img
                 src={url}
                 alt={`Foto ${idx + 1}`}
-                className="w-full h-full object-cover"
+                className="h-full w-full object-cover"
               />
               <button
                 type="button"
                 onClick={() => handleRemoveImage(idx)}
                 disabled={isPending || isUploading}
-                className="absolute top-1 right-1 bg-black/70 text-white rounded-full p-1 opacity-90 hover:bg-black transition-opacity"
+                className="absolute top-1 right-1 rounded-full bg-black/70 p-1 text-white opacity-90 transition-opacity hover:bg-black"
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
           ))}
-          <label className="border-2 border-dashed border-zinc-300 hover:border-zinc-500 rounded-md aspect-square flex flex-col items-center justify-center cursor-pointer bg-zinc-50 hover:bg-zinc-100 text-center">
+          <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-zinc-300 bg-zinc-50 text-center hover:border-zinc-500 hover:bg-zinc-100">
             {isUploading ? (
-              <Loader2 className="w-6 h-6 animate-spin text-zinc-500" />
+              <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
             ) : (
               <>
-                <ImagePlus className="w-6 h-6 text-zinc-400 mb-1" />
-                <span className="text-xs text-zinc-600 font-medium">
+                <ImagePlus className="mb-1 h-6 w-6 text-zinc-400" />
+                <span className="text-xs font-medium text-zinc-600">
                   Adicionar Foto
                 </span>
               </>
@@ -657,18 +670,21 @@ export function ProductForm({
           rows={4}
           defaultValue={initialData?.description ?? ""}
           disabled={isPending}
-          className="w-full flex rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
+          className="flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
         />
       </div>
 
       {/* Price */}
       <div className="space-y-2">
-        <label htmlFor="price" className="text-sm font-medium text-zinc-900">
+        <label
+          htmlFor="price"
+          className="text-sm font-medium text-zinc-900"
+        >
           Preço (R$)
         </label>
         <div className="relative">
-          <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
-            <span className="text-zinc-500 text-sm">R$</span>
+          <div className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
+            <span className="text-sm text-zinc-500">R$</span>
           </div>
           <input
             type="number"
@@ -679,7 +695,7 @@ export function ProductForm({
             onChange={(e) => setPriceInput(e.target.value)}
             disabled={isPending}
             style={{ paddingLeft: "2.5rem" }}
-            className="w-full block h-10 rounded-md border border-zinc-200 bg-white pr-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
+            className="block h-10 w-full rounded-md border border-zinc-200 bg-white py-2 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
           />
         </div>
       </div>
@@ -688,7 +704,7 @@ export function ProductForm({
         <>
           {/* Sizes Selection */}
           <div
-            className={`space-y-3 pt-4 border-t border-zinc-100 ${!hasSizes ? "opacity-50 pointer-events-none" : ""}`}
+            className={`space-y-3 border-t border-zinc-100 pt-4 ${!hasSizes ? "pointer-events-none opacity-50" : ""}`}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -704,7 +720,7 @@ export function ProductForm({
                 type="button"
                 onClick={handleAddStandardShirtSizes}
                 disabled={isPending}
-                className="text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1.5 rounded transition-colors"
+                className="rounded bg-orange-50 px-2.5 py-1.5 text-xs font-semibold text-orange-600 transition-colors hover:bg-orange-100 hover:text-orange-700"
               >
                 Selecionar Todos (P ao XGG)
               </button>
@@ -720,10 +736,10 @@ export function ProductForm({
                     type="button"
                     onClick={() => handleToggleSize(size, index)}
                     disabled={isPending}
-                    className={`flex items-center justify-center w-12 h-12 text-sm font-bold rounded-md border transition-all ${
+                    className={`flex h-12 w-12 items-center justify-center rounded-md border text-sm font-bold transition-all ${
                       isSelected
-                        ? "bg-zinc-900 text-white border-zinc-900 shadow-sm"
-                        : "bg-zinc-50 text-zinc-400 border-zinc-200 hover:bg-zinc-100 hover:text-zinc-600"
+                        ? "border-zinc-900 bg-zinc-900 text-white shadow-sm"
+                        : "border-zinc-200 bg-zinc-50 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
                     }`}
                   >
                     {size}
@@ -735,7 +751,7 @@ export function ProductForm({
 
           {/* Variants Selection */}
           <div
-            className={`space-y-3 pt-4 border-t border-zinc-100 ${!hasVariants ? "opacity-50 pointer-events-none" : ""}`}
+            className={`space-y-3 border-t border-zinc-100 pt-4 ${!hasVariants ? "pointer-events-none opacity-50" : ""}`}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -751,18 +767,18 @@ export function ProductForm({
                 type="button"
                 onClick={handleAddVariant}
                 disabled={isPending}
-                className="text-xs font-semibold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 px-2.5 py-1.5 rounded transition-colors"
+                className="rounded bg-zinc-100 px-2.5 py-1.5 text-xs font-semibold text-zinc-600 transition-colors hover:bg-zinc-200 hover:text-zinc-900"
               >
                 Adicionar Variante
               </button>
             </div>
 
             {variants.length > 0 && (
-              <div className="space-y-2 mt-2">
+              <div className="mt-2 space-y-2">
                 {variants.map((variant, index) => (
                   <div
                     key={index}
-                    className="flex items-center justify-between bg-zinc-50 border border-zinc-200 px-3 py-2 rounded-md gap-4"
+                    className="flex items-center justify-between gap-4 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2"
                   >
                     <div className="relative h-12 w-12 shrink-0">
                       {variant.image ? (
@@ -776,14 +792,14 @@ export function ProductForm({
                             type="button"
                             onClick={() => handleRemoveVariantImage(index)}
                             disabled={isPending || isUploading}
-                            className="absolute -top-1 -right-1 bg-black/70 text-white rounded-full p-0.5 hover:bg-black"
+                            className="absolute -top-1 -right-1 rounded-full bg-black/70 p-0.5 text-white hover:bg-black"
                           >
-                            <X className="w-3 h-3" />
+                            <X className="h-3 w-3" />
                           </button>
                         </>
                       ) : (
                         <label className="flex h-12 w-12 cursor-pointer items-center justify-center rounded border-2 border-dashed border-zinc-300 bg-white hover:border-zinc-500">
-                          <ImagePlus className="w-4 h-4 text-zinc-400" />
+                          <ImagePlus className="h-4 w-4 text-zinc-400" />
                           <input
                             type="file"
                             accept="image/jpeg,image/png,image/webp"
@@ -802,7 +818,7 @@ export function ProductForm({
                         onChange={(e) =>
                           handleVariantNameChange(index, e.target.value)
                         }
-                        className="w-full flex h-8 rounded-md border border-zinc-200 bg-white px-3 py-1 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-900"
+                        className="flex h-8 w-full rounded-md border border-zinc-200 bg-white px-3 py-1 text-xs focus-visible:ring-1 focus-visible:ring-zinc-900 focus-visible:outline-none"
                       />
                     </div>
                     <div className="flex items-center gap-1">
@@ -812,7 +828,7 @@ export function ProductForm({
                         disabled={isPending || isUploading}
                         className="p-1 text-red-600 hover:text-red-800 disabled:opacity-30"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -825,7 +841,7 @@ export function ProductForm({
 
       {/* Bundle Components */}
       {isBundle && (
-        <div className="space-y-3 pt-4 border-t border-zinc-100">
+        <div className="space-y-3 border-t border-zinc-100 pt-4">
           <div>
             <label
               htmlFor="bundleComponentPicker"
@@ -843,7 +859,7 @@ export function ProductForm({
             value=""
             onChange={(e) => handleAddComponent(e.target.value)}
             disabled={isPending || availableComponentOptions.length === 0}
-            className="w-full flex h-10 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50"
+            className="flex h-10 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
           >
             <option value="">
               {availableComponentOptions.length === 0
@@ -851,7 +867,10 @@ export function ProductForm({
                 : "Adicionar produto ao kit..."}
             </option>
             {availableComponentOptions.map((option) => (
-              <option key={option.id} value={option.id}>
+              <option
+                key={option.id}
+                value={option.id}
+              >
                 {option.name}
               </option>
             ))}
@@ -866,7 +885,7 @@ export function ProductForm({
                 return (
                   <div
                     key={component.componentProductId}
-                    className="flex items-center justify-between bg-zinc-50 border border-zinc-200 px-3 py-2 rounded-md gap-4"
+                    className="flex items-center justify-between gap-4 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2"
                   >
                     <span className="flex-1 text-sm text-zinc-900">
                       {label}
@@ -884,7 +903,7 @@ export function ProductForm({
                         )
                       }
                       disabled={isPending}
-                      className="w-20 h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-900"
+                      className="h-8 w-20 rounded-md border border-zinc-200 bg-white px-2 text-sm focus-visible:ring-1 focus-visible:ring-zinc-900 focus-visible:outline-none"
                     />
                     <button
                       type="button"
@@ -895,7 +914,7 @@ export function ProductForm({
                       disabled={isPending}
                       className="p-1 text-red-600 hover:text-red-800 disabled:opacity-30"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 );
@@ -905,11 +924,11 @@ export function ProductForm({
         </div>
       )}
 
-      <div className="pt-4 flex justify-end">
+      <div className="flex justify-end pt-4">
         <button
           type="submit"
           disabled={isPending || isUploading || drops.length === 0}
-          className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-900/90 h-10 px-4 py-2 transition-colors disabled:opacity-50 cursor-pointer"
+          className="inline-flex h-10 cursor-pointer items-center justify-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-50 transition-colors hover:bg-zinc-900/90 disabled:opacity-50"
         >
           {isPending
             ? "Salvando..."

@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-import { createRef } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createCardToken,
   getInstallments,
   getPaymentMethods,
 } from "@mercadopago/sdk-react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { createRef } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CardPaymentFields,
   type CardPaymentFieldsHandle,
@@ -64,7 +64,12 @@ describe("CardPaymentFields", () => {
 
   it("returns only the token and card metadata when tokenizing", async () => {
     const ref = createRef<CardPaymentFieldsHandle>();
-    render(<CardPaymentFields amountCents={5000} ref={ref} />);
+    render(
+      <CardPaymentFields
+        amountCents={5000}
+        ref={ref}
+      />,
+    );
     fireEvent.change(screen.getByLabelText("Nome impresso no cartão"), {
       target: { value: "APRO" },
     });
@@ -90,7 +95,12 @@ describe("CardPaymentFields", () => {
 
   it("treats debit cards as a single payment", async () => {
     const ref = createRef<CardPaymentFieldsHandle>();
-    render(<CardPaymentFields amountCents={5000} ref={ref} />);
+    render(
+      <CardPaymentFields
+        amountCents={5000}
+        ref={ref}
+      />,
+    );
     fireEvent.change(screen.getByLabelText("Nome impresso no cartão"), {
       target: { value: "APRO" },
     });
@@ -106,7 +116,12 @@ describe("CardPaymentFields", () => {
 
   it("blocks tokenization for an unrecognized card", async () => {
     const ref = createRef<CardPaymentFieldsHandle>();
-    render(<CardPaymentFields amountCents={5000} ref={ref} />);
+    render(
+      <CardPaymentFields
+        amountCents={5000}
+        ref={ref}
+      />,
+    );
     fireEvent.change(screen.getByLabelText("Nome impresso no cartão"), {
       target: { value: "APRO" },
     });

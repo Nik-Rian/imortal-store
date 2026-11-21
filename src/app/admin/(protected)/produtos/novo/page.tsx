@@ -1,19 +1,19 @@
-import Link from "next/link";
-import { ProductForm } from "@/components/admin/ProductForm";
 import { createProduct } from "@/actions/product.actions";
-import { getDrops } from "@/services/drop.service";
+import { ProductForm } from "@/components/admin/ProductForm";
 import { getBundleComponentOptions } from "@/services/bundle.service";
+import { getDrops } from "@/services/drop.service";
+import Link from "next/link";
 
 export default async function NewProductPage() {
   const drops = await getDrops();
   const componentOptions = await getBundleComponentOptions();
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Novo Produto</h1>
-          <p className="text-zinc-500 mt-1">
+          <p className="mt-1 text-zinc-500">
             Adicione um novo item ao catálogo.
           </p>
         </div>

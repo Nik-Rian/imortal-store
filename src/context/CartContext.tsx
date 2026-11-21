@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useSyncExternalStore } from "react";
-import { CartItem, CartContextType } from "../types/cart";
+import { CartContextType, CartItem } from "../types/cart";
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 const STORAGE_KEY = "imortal-store-cart";
