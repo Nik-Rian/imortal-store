@@ -6,12 +6,16 @@ import { POST } from "./route";
 vi.mock("@/lib/prisma", () => ({
   prisma: { order: { findFirst: vi.fn(), updateMany: vi.fn() } },
 }));
-vi.mock("@/services/mercadopago.service", () => ({
+
+vi.mock("@/services/mercadopago.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/mercadopago.service")>()),
   getMercadoPagoOrder: vi.fn(),
 }));
+
 vi.mock("@/lib/mercadopago", () => ({
   verifyMercadoPagoSignature: vi.fn(() => true),
 }));
+
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const mpOrder = (overrides: Record<string, unknown> = {}) => ({

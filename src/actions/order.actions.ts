@@ -13,6 +13,7 @@ import {
 import {
   createCardOrder,
   createPixOrder,
+  MercadoPagoTimeoutError,
 } from "@/services/mercadopago.service";
 import {
   checkProductAvailability,
@@ -25,6 +26,9 @@ import { revalidatePath } from "next/cache";
 // may only export async functions.
 const ORDER_CREATION_FAILURE_MESSAGE =
   "Não foi possível processar o pedido agora. Tente novamente em instantes.";
+
+const PROVIDER_TIMEOUT_FAILURE_MESSAGE =
+  "O serviço de pagamento demorou para responder. Aguarde um momento e tente novamente.";
 
 interface OrderItemData {
   productId: string;
@@ -357,6 +361,21 @@ export async function createOrder(payload: CreateOrderInput) {
         paymentRejected: true,
       };
     }
+
+    if (error instanceof MercadoPagoTimeoutError) {
+      // The provider may or may not have created the order. The retry reuses
+      // the stored idempotency key, so the credentials are returned.
+      console.warn("[createOrder] Payment provider timed out", {
+        orderId: orderIdForRetry,
+      });
+      return {
+        success: false,
+        error: PROVIDER_TIMEOUT_FAILURE_MESSAGE,
+        orderId: orderIdForRetry,
+        accessToken: accessTokenForRetry,
+      };
+    }
+
     console.error("Error creating order:", error);
     return {
       success: false,

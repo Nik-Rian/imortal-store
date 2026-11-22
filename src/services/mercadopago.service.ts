@@ -5,6 +5,23 @@ import { MAX_CARD_INSTALLMENTS } from "@/lib/validations/checkout.schema";
 const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN;
 const MP_BASE_URL = "https://api.mercadopago.com";
 
+/** Upper bound for a single Mercado Pago request, including reading its response body. */
+export const PROVIDER_REQUEST_TIMEOUT_MS = 15_000;
+
+/**
+ * Pix payment lifetime as an ISO 8601 duration. Sent explicitly because the
+ * provider default is 24 hours and the account-level setting cannot be verified.
+ */
+export const PIX_EXPIRATION_TIME = "PT30M";
+
+/** Raised when a provider request exceeds PROVIDER_REQUEST_TIMEOUT_MS. The provider-side outcome is unknown. */
+export class MercadoPagoTimeoutError extends Error {
+  constructor() {
+    super("Mercado Pago request timed out.");
+    this.name = "MercadoPagoTimeoutError";
+  }
+}
+
 export interface CreatePixPaymentInput {
   orderId: string;
   idempotencyKey?: string;
@@ -105,76 +122,119 @@ function buildPayer(input: PayerInput) {
   };
 }
 
-/** The provider echoes the single-use card token back in error bodies. */
-function redactCardTokens(value: unknown): unknown {
+// Provider error bodies can echo the request, so card secrets and the payer's
+// personal data must never reach the logs. Whole objects (identification,
+// phone, cardholder) are redacted instead of their inner fields.
+const REDACTED_LOG_KEYS = new Set([
+  "token",
+  "security_code",
+  "identification",
+  "email",
+  "phone",
+  "first_name",
+  "last_name",
+  "name",
+  "cardholder",
+]);
+
+function redactSensitiveFields(value: unknown): unknown {
   return JSON.parse(
-    JSON.stringify(value, (key, v) => (key === "token" ? "[redacted]" : v)),
+    JSON.stringify(value, (key, v) =>
+      REDACTED_LOG_KEYS.has(key) ? "[redacted]" : v,
+    ),
   );
 }
 
 /**
+ * Runs a provider request with an abort signal that fires after
+ * PROVIDER_REQUEST_TIMEOUT_MS. The timer stays active until `run` settles, so
+ * `run` must read the response body before returning.
+ */
+async function withProviderTimeout<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    PROVIDER_REQUEST_TIMEOUT_MS,
+  );
+  try {
+    return await run(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) throw new MercadoPagoTimeoutError();
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * POSTs to /v1/orders and returns the parsed response. The request body is
- * never logged (it can carry a card token); only the provider's error
- * response is.
+ * never logged (it can carry a card token or payer data); only the provider's
+ * error response is, with sensitive fields redacted.
  */
 async function postOrder(body: unknown, idempotencyKey: string) {
-  const response = await fetch(`${MP_BASE_URL}/v1/orders`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
-      "X-Idempotency-Key": idempotencyKey,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    // util.inspect avoids Node's default console depth limit, which was
-    // hiding nested arrays/objects as "[Object]" in prior logs.
-    console.error(
-      "Mercado Pago /v1/orders rejected request:",
-      response.status,
-      inspect(redactCardTokens(errorData), { depth: null }),
-    );
-    // MP uses different error shapes depending on the failure:
-    // - "cause": schema/validation errors (e.g. required_properties, property_value)
-    // - "errors": order created but a transaction failed (payment-level rejection)
-    type MPCause = { code?: string; description?: string };
-    type MPTransactionError = {
-      code?: string;
-      detail?: string;
-      message?: string;
-    };
-    const causeMessage = Array.isArray(errorData.cause)
-      ? (errorData.cause as MPCause[])
-          .map((c) => `${c.code ? `[${c.code}] ` : ""}${c.description ?? ""}`)
-          .join("; ")
-      : null;
-    const transactionErrorMessage = Array.isArray(errorData.errors)
-      ? (errorData.errors as MPTransactionError[])
-          .map(
-            (e) =>
-              `${e.code ? `[${e.code}] ` : ""}${e.detail ?? e.message ?? ""}`,
-          )
-          .join("; ")
-      : null;
-    const errorMessage =
-      causeMessage ||
-      transactionErrorMessage ||
-      errorData.message ||
-      errorData.error ||
-      response.statusText;
-    if (response.status === 402) {
-      // Payment-level refusal. The failed provider order and its payment come
-      // back in errorData.data; the reason is on the payment, not the order.
-      throw new PaymentRejectedError(
-        `Mercado Pago API Error: ${errorMessage}`,
-        errorData.data?.transactions?.payments?.[0]?.status_detail ?? undefined,
+  return withProviderTimeout(async (signal) => {
+    const response = await fetch(`${MP_BASE_URL}/v1/orders`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
+        "X-Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      // util.inspect avoids Node's default console depth limit, which was
+      // hiding nested arrays/objects as "[Object]" in prior logs.
+      console.error(
+        "Mercado Pago /v1/orders rejected request:",
+        response.status,
+        inspect(redactSensitiveFields(errorData), { depth: null }),
       );
+      // MP uses different error shapes depending on the failure:
+      // - "cause": schema/validation errors (e.g. required_properties, property_value)
+      // - "errors": order created but a transaction failed (payment-level rejection)
+      type MPCause = { code?: string; description?: string };
+      type MPTransactionError = {
+        code?: string;
+        detail?: string;
+        message?: string;
+      };
+      const causeMessage = Array.isArray(errorData.cause)
+        ? (errorData.cause as MPCause[])
+            .map((c) => `${c.code ? `[${c.code}] ` : ""}${c.description ?? ""}`)
+            .join("; ")
+        : null;
+      const transactionErrorMessage = Array.isArray(errorData.errors)
+        ? (errorData.errors as MPTransactionError[])
+            .map(
+              (e) =>
+                `${e.code ? `[${e.code}] ` : ""}${e.detail ?? e.message ?? ""}`,
+            )
+            .join("; ")
+        : null;
+      const errorMessage =
+        causeMessage ||
+        transactionErrorMessage ||
+        errorData.message ||
+        errorData.error ||
+        response.statusText;
+      if (response.status === 402) {
+        // Payment-level refusal. The failed provider order and its payment come
+        // back in errorData.data; the reason is on the payment, not the order.
+        throw new PaymentRejectedError(
+          `Mercado Pago API Error: ${errorMessage}`,
+          errorData.data?.transactions?.payments?.[0]?.status_detail ??
+            undefined,
+        );
+      }
+      throw new Error(`Mercado Pago API Error: ${errorMessage}`);
     }
-    throw new Error(`Mercado Pago API Error: ${errorMessage}`);
-  }
-  return response.json();
+    return response.json();
+  });
 }
 
 /*
@@ -199,6 +259,7 @@ export async function createPixOrder(
         payments: [
           {
             amount: input.amount.toFixed(2),
+            expiration_time: PIX_EXPIRATION_TIME,
             payment_method: {
               id: "pix",
               type: "bank_transfer",
@@ -285,8 +346,15 @@ export async function createCardOrder(
   };
 }
 
+const MERCADO_PAGO_ORDER_ID_PATTERN = /^ORD[A-Z0-9]{1,61}$/;
+
+/** True when the value has the shape of an Orders API id (not, for example, a chargeback id). */
+export function isMercadoPagoOrderId(value: unknown): value is string {
+  return typeof value === "string" && MERCADO_PAGO_ORDER_ID_PATTERN.test(value);
+}
+
 function validateMercadoPagoOrderId(orderId: string): string {
-  if (typeof orderId !== "string" || !/^ORD[A-Z0-9]{1,61}$/.test(orderId)) {
+  if (!isMercadoPagoOrderId(orderId)) {
     throw new Error("Invalid Mercado Pago order ID.");
   }
 
@@ -310,19 +378,24 @@ export async function getMercadoPagoOrder(
     MP_BASE_URL,
   );
 
-  const response = await fetch(orderUrl, {
-    headers: {
-      Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
-    },
-    redirect: "error",
+  const data = await withProviderTimeout(async (signal) => {
+    const response = await fetch(orderUrl, {
+      headers: {
+        Authorization: `Bearer ${MP_ACCESS_TOKEN}`,
+      },
+      redirect: "error",
+      signal,
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw new Error(`Failed to fetch order ${orderId} from Mercado Pago.`);
+    }
+
+    return response.json();
   });
 
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    throw new Error(`Failed to fetch order ${orderId} from Mercado Pago.`);
-  }
-
-  const data = await response.json();
+  if (data === null) return null;
 
   return {
     orderId: String(data.id),

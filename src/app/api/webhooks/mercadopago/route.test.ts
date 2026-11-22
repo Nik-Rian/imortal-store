@@ -1,10 +1,24 @@
 import { PaymentStatus } from "@/generated/prisma/client";
 import { mapPaymentStatus } from "@/lib/payment-status";
-import { describe, expect, test, vi } from "vitest";
+import {
+  getMercadoPagoOrder,
+  MercadoPagoTimeoutError,
+} from "@/services/mercadopago.service";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { POST } from "./route";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {},
 }));
+
+vi.mock("@/services/mercadopago.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/mercadopago.service")>()),
+  getMercadoPagoOrder: vi.fn(),
+}));
+vi.mock("@/lib/mercadopago", () => ({
+  verifyMercadoPagoSignature: vi.fn(() => true),
+}));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 describe("Webhook Status Transitions", () => {
   test.each([
@@ -69,6 +83,59 @@ describe("Webhook Status Transitions", () => {
       const result = mapPaymentStatus(mpStatus, mpStatusDetail);
 
       expect(result).toBe(expectedStatus);
+    },
+  );
+});
+
+describe("Webhook resource id handling", () => {
+  const request = (query: string) =>
+    new Request(`http://localhost/api/webhooks/mercadopago?${query}`, {
+      method: "POST",
+      body: "{}",
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test.each(["chargebacks", "order", "order.charged_back"])(
+    "acknowledges topic %s with a non-order id without calling the provider",
+    async (topic) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const res = await POST(request(`topic=${topic}&data.id=123456789`));
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ received: true, ignored: true });
+      expect(getMercadoPagoOrder).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(expect.any(String), {
+        topic,
+        resourceId: "123456789",
+      });
+    },
+  );
+
+  test.each([
+    [
+      "a provider error",
+      () => new Error("Failed to fetch order ORD1ABC from Mercado Pago."),
+    ],
+    ["a provider timeout", () => new MercadoPagoTimeoutError()],
+  ])(
+    "answers 500 so the provider retries after %s for a valid order id",
+    async (_label, makeError) => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.mocked(getMercadoPagoOrder).mockRejectedValueOnce(makeError());
+
+      const res = await POST(request("topic=order&data.id=ORD1ABC"));
+
+      expect(res.status).toBe(500);
+      expect(getMercadoPagoOrder).toHaveBeenCalledWith("ORD1ABC");
+      expect(error).toHaveBeenCalled();
     },
   );
 });

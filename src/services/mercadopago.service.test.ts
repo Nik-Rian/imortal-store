@@ -46,7 +46,24 @@ function mockFetch(
 const sentBody = (fetchMock: ReturnType<typeof vi.fn>) =>
   JSON.parse(fetchMock.mock.calls[0][1].body as string);
 
+// A fetch that never answers by itself and rejects once its signal aborts.
+function mockStalledFetch() {
+  const fetchMock = vi.fn(
+    (_url: unknown, init: { signal: AbortSignal }) =>
+      new Promise<never>((_resolve, reject) => {
+        init.signal.addEventListener("abort", () =>
+          reject(new DOMException("This operation was aborted", "AbortError")),
+        );
+      }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+type Service = Awaited<ReturnType<typeof loadService>>;
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -91,6 +108,7 @@ describe("createPixOrder", () => {
         payments: [
           {
             amount: "50.00",
+            expiration_time: "PT30M",
             payment_method: { id: "pix", type: "bank_transfer" },
           },
         ],
@@ -103,6 +121,61 @@ describe("createPixOrder", () => {
       qrCodeBase64: "b64",
       status: "action_required",
     });
+  });
+
+  it("expires the Pix payment after 30 minutes", async () => {
+    const fetchMock = mockFetch({
+      id: "ORD1",
+      status: "action_required",
+      transactions: { payments: [{ id: "PAY1", payment_method: {} }] },
+    });
+    const { createPixOrder, PIX_EXPIRATION_TIME } = await loadService();
+    await createPixOrder(payer);
+
+    expect(PIX_EXPIRATION_TIME).toBe("PT30M");
+    expect(sentBody(fetchMock).transactions.payments[0].expiration_time).toBe(
+      "PT30M",
+    );
+  });
+
+  it("redacts payer identification, e-mail, phone, name and card secrets from the logged provider error", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockFetch(
+      {
+        message: "invalid_payer",
+        data: {
+          payer: {
+            email: payer.email,
+            first_name: "Maria",
+            last_name: "Silva",
+            identification: { type: "CPF", number: payer.cpf },
+            phone: { area_code: "11", number: "999999999" },
+          },
+          transactions: {
+            payments: [
+              { payment_method: { token: TOKEN, security_code: "9071" } },
+            ],
+          },
+        },
+      },
+      { ok: false, status: 400 },
+    );
+    const { createPixOrder } = await loadService();
+    await createPixOrder(payer).catch(() => undefined);
+
+    const logged = JSON.stringify(errorSpy.mock.calls);
+    expect(logged).toContain("[redacted]");
+    for (const secret of [
+      payer.cpf,
+      payer.email,
+      "999999999",
+      "Maria",
+      "Silva",
+      TOKEN,
+      "9071",
+    ]) {
+      expect(logged).not.toContain(secret);
+    }
   });
 });
 
@@ -228,5 +301,141 @@ describe("createCardOrder", () => {
         "Mercado Pago API Error: [failed] The following transactions failed",
     });
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(TOKEN);
+  });
+});
+
+describe("provider timeout", () => {
+  it.each<[string, (service: Service) => Promise<unknown>]>([
+    ["createPixOrder", (s) => s.createPixOrder(payer)],
+    ["createCardOrder", (s) => s.createCardOrder(cardInput)],
+    ["getMercadoPagoOrder", (s) => s.getMercadoPagoOrder("ORD1ABC")],
+  ])(
+    "aborts %s at the limit and raises the timeout error",
+    async (_name, call) => {
+      const fetchMock = mockStalledFetch();
+      const service = await loadService();
+      vi.useFakeTimers();
+
+      const outcome = call(service).catch((e: unknown) => e);
+      const { signal } = fetchMock.mock.calls[0][1];
+
+      await vi.advanceTimersByTimeAsync(
+        service.PROVIDER_REQUEST_TIMEOUT_MS - 1,
+      );
+      expect(signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signal.aborted).toBe(true);
+      expect(await outcome).toBeInstanceOf(service.MercadoPagoTimeoutError);
+    },
+  );
+
+  it("exports a 15 second limit", async () => {
+    const { PROVIDER_REQUEST_TIMEOUT_MS } = await loadService();
+    expect(PROVIDER_REQUEST_TIMEOUT_MS).toBe(15_000);
+  });
+});
+
+describe("isMercadoPagoOrderId", () => {
+  it("accepts Orders API ids and rejects other identifiers", async () => {
+    const { isMercadoPagoOrderId } = await loadService();
+    expect(isMercadoPagoOrderId("ORD01JQ4S4KY8HWQ6NA5PXB65B3D3")).toBe(true);
+    expect(isMercadoPagoOrderId("123456789")).toBe(false);
+    expect(isMercadoPagoOrderId("ord123")).toBe(false);
+    expect(isMercadoPagoOrderId(123)).toBe(false);
+  });
+});
+
+describe("getMercadoPagoOrder", () => {
+  it("fetches the order with the bearer token, a signal and redirects refused, and maps the result", async () => {
+    const fetchMock = mockFetch(
+      {
+        id: "ORD1ABC",
+        status: "processed",
+        status_detail: "accredited",
+        total_amount: "50.00",
+        total_paid_amount: "50.00",
+        external_reference: "order-1",
+        transactions: {
+          payments: [
+            {
+              id: "PAY1",
+              status: "processed",
+              status_detail: "accredited",
+              payment_method: { qr_code: "qr", qr_code_base64: "b64" },
+            },
+          ],
+        },
+      },
+      { status: 200 },
+    );
+    const { getMercadoPagoOrder } = await loadService();
+    const result = await getMercadoPagoOrder("ORD1ABC");
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      "https://api.mercadopago.com/v1/orders/ORD1ABC",
+    );
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      headers: { Authorization: "Bearer test-access-token" },
+      redirect: "error",
+    });
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+    expect(result).toEqual({
+      orderId: "ORD1ABC",
+      status: "processed",
+      status_detail: "accredited",
+      totalAmount: 50,
+      totalPaidAmount: 50,
+      externalReference: "order-1",
+      payments: [
+        {
+          paymentId: "PAY1",
+          status: "processed",
+          statusDetail: "accredited",
+          qrCode: "qr",
+          qrCodeBase64: "b64",
+        },
+      ],
+    });
+  });
+
+  it.each([
+    "order-1",
+    "ord123",
+    "ORD",
+    "ORD-1",
+    `ORD${"A".repeat(62)}`,
+    "../ORD1",
+  ])("rejects the invalid id %j before calling the provider", async (id) => {
+    const fetchMock = mockFetch({});
+    const { getMercadoPagoOrder } = await loadService();
+    await expect(getMercadoPagoOrder(id)).rejects.toThrow(
+      "Invalid Mercado Pago order ID.",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the provider answers 404", async () => {
+    mockFetch({}, { ok: false, status: 404 });
+    const { getMercadoPagoOrder } = await loadService();
+    await expect(getMercadoPagoOrder("ORD1ABC")).resolves.toBeNull();
+  });
+
+  it("throws on any other non-OK status", async () => {
+    mockFetch({}, { ok: false, status: 500 });
+    const { getMercadoPagoOrder } = await loadService();
+    await expect(getMercadoPagoOrder("ORD1ABC")).rejects.toThrow(
+      /Failed to fetch order ORD1ABC/,
+    );
+  });
+
+  it("surfaces a refused redirect as a rejection", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
+    vi.stubGlobal("fetch", fetchMock);
+    const { getMercadoPagoOrder } = await loadService();
+
+    await expect(getMercadoPagoOrder("ORD1ABC")).rejects.toBeInstanceOf(
+      TypeError,
+    );
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: "error" });
   });
 });
