@@ -4,24 +4,18 @@ import { getStorefrontDrop } from "@/services/drop.service";
 import { getProducts } from "@/services/product.service";
 import Link from "next/link";
 
-// Time-based ISR fallback: revalidate static shell every 1 hour (3600 seconds)
-export const revalidate = 3600;
+
+// Rendered on every request so prices, availability and the closed-sales
+// state always reflect the database.
+export const dynamic = "force-dynamic";
 
 export default async function LojaPage() {
-  const [dropResult, products] = await Promise.all([
-    getStorefrontDrop()
-      .then((drop) => ({ drop, available: true }))
-      .catch((error: unknown) => {
-        console.error("[LojaPage] Failed to load storefront drop.", error);
-
-        return { drop: null, available: false };
-      }),
+  const [drop, products] = await Promise.all([
+    getStorefrontDrop(),
     getProducts(),
   ]);
 
-  const { drop, available } = dropResult;
-
-  if (available && !drop) {
+  if (!drop) {
     return (
       <div className="flex min-h-[70vh] items-center justify-center bg-zinc-50 px-6 text-zinc-900">
         <div className="w-full max-w-xl border-4 border-black bg-white p-8 text-center shadow-[10px_10px_0px_#f97316]">
@@ -40,7 +34,7 @@ export default async function LojaPage() {
     );
   }
 
-  const isSalesClosed = drop ? drop.endsAt < new Date() : false;
+  const isSalesClosed = drop.endsAt < new Date();
 
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-900">

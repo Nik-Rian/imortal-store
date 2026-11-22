@@ -1,22 +1,13 @@
 "use client";
 
 import { deleteBlobImages, uploadProductImage } from "@/actions/blob.actions";
-import {
-  IMAGE_SIZE_ERROR,
-  IMAGE_TYPE_ERROR,
-  isAllowedImageType,
-  MAX_IMAGE_BYTES,
-} from "@/lib/media";
+import { IMAGE_SIZE_ERROR, IMAGE_TYPE_ERROR, isAllowedImageType, MAX_IMAGE_BYTES } from "@/lib/media";
 import { slugify } from "@/lib/utils";
-import {
-  ALLOWED_SIZES,
-  AllowedSize,
-  applyBundleRules,
-  productSchema,
-} from "@/lib/validations/product.schema";
+import { ALLOWED_SIZES, AllowedSize, applyBundleRules, productSchema } from "@/lib/validations/product.schema";
 import { BundleComponentOption, ProductWithVariants } from "@/types";
 import { ImagePlus, Loader2, Trash2, X } from "lucide-react";
 import { ChangeEvent, useState } from "react";
+
 
 type DropOption = {
   id: string;
@@ -49,7 +40,12 @@ export function ProductForm({
   );
 
   const originalSlug = initialData?.slug ?? "";
-  const currentSlug = slugify(name);
+  const [slugInput, setSlugInput] = useState(originalSlug);
+  // In edit mode the stored slug is kept unless the admin edits the slug field,
+  // so renaming a product never breaks links that were already shared.
+  const currentSlug = isEditMode
+    ? slugify(slugInput) || originalSlug
+    : slugify(name);
 
   const initialPriceDisplay = initialData
     ? (initialData.priceCents / 100).toFixed(2)
@@ -596,12 +592,24 @@ export function ProductForm({
             </span>
           </p>
         ) : (
-          <div className="mt-2 flex flex-col gap-1">
+          <div className="mt-2 space-y-1">
+            <label
+              htmlFor="slug"
+              className="text-xs font-medium text-zinc-700"
+            >
+              Link permanente
+            </label>
+            <input
+              type="text"
+              id="slug"
+              value={slugInput}
+              onChange={(e) => setSlugInput(e.target.value)}
+              disabled={isPending}
+              className="flex h-9 w-full rounded-md border border-zinc-200 bg-white px-3 py-1 font-mono text-xs focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:outline-none disabled:opacity-50"
+            />
             <p className="text-xs text-zinc-500">
-              Link anterior:{" "}
-              <span className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-zinc-700">
-                {originalSlug}
-              </span>
+              Alterar o nome não muda o link. Edite este campo apenas para
+              trocar o link; links já compartilhados deixam de funcionar.
             </p>
           </div>
         )}
