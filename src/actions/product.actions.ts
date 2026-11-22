@@ -3,11 +3,16 @@
 import { deleteBlobImages } from "@/actions/blob.actions";
 import { requireSession } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
-import { applyBundleRules, productSchema } from "@/lib/validations/product.schema";
-import { assertBundleIntegrity, BundleIntegrityError } from "@/services/bundle.service";
+import {
+  applyBundleRules,
+  productSchema,
+} from "@/lib/validations/product.schema";
+import {
+  assertBundleIntegrity,
+  BundleIntegrityError,
+} from "@/services/bundle.service";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-
 
 type ActionFailure = { success: false; error: string };
 type ActionResult = { success: true } | ActionFailure;
@@ -112,7 +117,7 @@ export async function createProduct(
   let componentsInput: unknown = [];
   try {
     if (rawComponents) componentsInput = JSON.parse(rawComponents);
-  } catch { }
+  } catch {}
 
   const validationResult = productSchema.safeParse({
     name: formData.get("name"),
@@ -269,7 +274,7 @@ export async function updateProduct(
   let componentsInput: unknown = [];
   try {
     if (rawComponents) componentsInput = JSON.parse(rawComponents);
-  } catch { }
+  } catch {}
 
   // A missing or blank slug keeps the stored one, so links that were already
   // shared keep working when a product is saved without a deliberate change.

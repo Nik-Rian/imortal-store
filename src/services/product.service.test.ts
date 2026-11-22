@@ -2,8 +2,12 @@ import { prisma } from "@/lib/prisma";
 import { buildStockKey } from "@/lib/stock-key";
 import { getStorefrontDrop } from "@/services/drop.service";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { checkProductAvailability, getProductById, getProductBySlug, getProducts } from "./product.service";
-
+import {
+  checkProductAvailability,
+  getProductById,
+  getProductBySlug,
+  getProducts,
+} from "./product.service";
 
 vi.mock("react", () => ({ cache: <T>(fn: T) => fn }));
 
@@ -15,8 +19,6 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/services/drop.service", () => ({ getStorefrontDrop: vi.fn() }));
 
-const day = 86_400_000;
-
 function makeProduct(overrides: Record<string, unknown> = {}) {
   return {
     id: "p1",
@@ -24,10 +26,7 @@ function makeProduct(overrides: Record<string, unknown> = {}) {
     controlStock: false,
     hasSizes: false,
     hasVariants: false,
-    drop: {
-      startsAt: new Date(Date.now() - day),
-      endsAt: new Date(Date.now() + day),
-    },
+    drop: { status: "ACTIVE" },
     sizes: [
       { id: "s1", isAvailable: true },
       { id: "s2", isAvailable: false },
@@ -60,6 +59,7 @@ describe("checkProductAvailability", () => {
     async (flags) => {
       const variantId = flags.hasVariants ? "v1" : undefined;
       const sizeId = flags.hasSizes ? "s1" : undefined;
+
       mockProduct(
         makeProduct({
           ...flags,
@@ -74,11 +74,20 @@ describe("checkProductAvailability", () => {
             : [],
         }),
       );
+
       expect(
         await checkProductAvailability("p1", variantId, sizeId, 1),
       ).toEqual({ available: true });
     },
   );
+
+  it("rejects a product whose drop is concluded", async () => {
+    mockProduct(makeProduct({ drop: { status: "CONCLUDED" } }));
+    expect(await checkProductAvailability("p1")).toEqual({
+      available: false,
+      reason: "DROP_ENDED",
+    });
+  });
 
   it("requires a size when the product has sizes", async () => {
     mockProduct(makeProduct({ hasSizes: true }));
@@ -165,6 +174,15 @@ describe("catalogue reads", () => {
   it("getProductBySlug returns null when no product matches", async () => {
     vi.mocked(prisma.product.findFirst).mockResolvedValue(null);
     await expect(getProductBySlug("missing")).resolves.toBeNull();
+  });
+
+  it("returns no catalogue and no product page when no drop is active", async () => {
+    vi.mocked(getStorefrontDrop).mockResolvedValue(null);
+
+    await expect(getProducts()).resolves.toEqual([]);
+    await expect(getProductBySlug("camiseta")).resolves.toBeNull();
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+    expect(prisma.product.findFirst).not.toHaveBeenCalled();
   });
 
   it("getProductById propagates database errors", async () => {

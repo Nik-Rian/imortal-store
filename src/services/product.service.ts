@@ -3,7 +3,6 @@ import { buildStockKey } from "@/lib/stock-key";
 import { getStorefrontDrop } from "@/services/drop.service";
 import { cache } from "react";
 
-
 export interface GetProductsOptions {
   activeOnly?: boolean;
 }
@@ -99,7 +98,6 @@ export async function checkProductAvailability(
   sizeId?: string,
   requestedQuantity: number = 1,
 ): Promise<AvailabilityCheckResult> {
-  const now = new Date();
   const product = await prisma.product.findUnique({
     where: { id: productId },
     include: {
@@ -109,10 +107,13 @@ export async function checkProductAvailability(
       stockItems: true,
     },
   });
+
   if (!product) return { available: false, reason: "NOT_FOUND" };
-  if (product.drop.startsAt > now || product.drop.endsAt < now) {
+
+  if (product.drop.status !== "ACTIVE") {
     return { available: false, reason: "DROP_ENDED" };
   }
+
   if (!product.isAvailable) {
     return { available: false, reason: "PRODUCT_UNAVAILABLE" };
   }
@@ -128,8 +129,10 @@ export async function checkProductAvailability(
       return { available: false, reason: "VARIANT_UNAVAILABLE" };
     }
   }
+
   if (usesSizes) {
     const size = product.sizes.find((s) => s.id === sizeId);
+
     if (!size || !size.isAvailable) {
       return { available: false, reason: "SIZE_UNAVAILABLE" };
     }

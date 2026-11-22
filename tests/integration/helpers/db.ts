@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-// Requires the generated client (`pnpm exec prisma generate`); src/generated/prisma is gitignored.
-import { PrismaClient } from "@/generated/prisma/client";
+import { PrismaClient, type DropStatus } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 export function getTestDatabaseUrl(): string {
@@ -84,10 +83,12 @@ export async function truncateAllTables(): Promise<void> {
 type DropOverrides = Partial<{
   name: string;
   slug: string;
-  startsAt: Date;
-  endsAt: Date;
+  status: DropStatus;
 }>;
 
+// Defaults to CONCLUDED because the database allows a single ACTIVE drop and
+// createProduct() creates a drop implicitly. Tests that need an active drop
+// must pass status: "ACTIVE" and create at most one at a time.
 export async function createDrop(overrides: DropOverrides = {}) {
   const suffix = randomUUID();
 
@@ -95,8 +96,7 @@ export async function createDrop(overrides: DropOverrides = {}) {
     data: {
       name: `Test Drop ${suffix}`,
       slug: `test-drop-${suffix}`,
-      startsAt: new Date(),
-      endsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      status: "CONCLUDED",
       ...overrides,
     },
   });

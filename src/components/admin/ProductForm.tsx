@@ -1,13 +1,22 @@
 "use client";
 
 import { deleteBlobImages, uploadProductImage } from "@/actions/blob.actions";
-import { IMAGE_SIZE_ERROR, IMAGE_TYPE_ERROR, isAllowedImageType, MAX_IMAGE_BYTES } from "@/lib/media";
+import {
+  IMAGE_SIZE_ERROR,
+  IMAGE_TYPE_ERROR,
+  isAllowedImageType,
+  MAX_IMAGE_BYTES,
+} from "@/lib/media";
 import { slugify } from "@/lib/utils";
-import { ALLOWED_SIZES, AllowedSize, applyBundleRules, productSchema } from "@/lib/validations/product.schema";
+import {
+  ALLOWED_SIZES,
+  AllowedSize,
+  applyBundleRules,
+  productSchema,
+} from "@/lib/validations/product.schema";
 import { BundleComponentOption, ProductWithVariants } from "@/types";
 import { ImagePlus, Loader2, Trash2, X } from "lucide-react";
 import { ChangeEvent, useState } from "react";
-
 
 type DropOption = {
   id: string;

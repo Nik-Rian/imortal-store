@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/context/CartContext";
+import type { DropStatus } from "@/generated/prisma/client";
 import { getProductImage } from "@/lib/media";
 import { Minus, Plus, ShoppingBag } from "lucide-react";
 import Image from "next/image";
@@ -34,8 +35,7 @@ interface AddToCartButtonProps {
     sizes?: Size[];
     variants?: Variant[];
     drop?: {
-      startsAt: Date | string;
-      endsAt: Date | string;
+      status: DropStatus;
     } | null;
   };
 }
@@ -44,12 +44,8 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
   const { addItem } = useCart();
   const [quantity, setQuantity] = useState(1);
 
-  // Check drop activity window
-  const now = new Date();
-  const isDropActive = product.drop
-    ? new Date(product.drop.startsAt) <= now &&
-      new Date(product.drop.endsAt) >= now
-    : true;
+  // Sales are open only while the drop is active; the status comes from the server.
+  const isDropActive = product.drop ? product.drop.status === "ACTIVE" : true;
 
   // Check overall stock/availability
   const hasSizes = Boolean(
