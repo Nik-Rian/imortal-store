@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "format:prisma": "prisma format"
@@ -59,7 +60,7 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.12",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.0"
+    "vitest": "^5.1.1"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
