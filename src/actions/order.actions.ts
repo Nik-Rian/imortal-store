@@ -388,7 +388,8 @@ export async function createOrder(payload: CreateOrderInput) {
 
 /**
  * Moves an order through the fulfillment lifecycle only
- * (PENDING -> READY_FOR_PICKUP -> COMPLETED). Payment status is owned by the
+ * (PENDING -> PREPARING -> READY_FOR_PICKUP -> COMPLETED, with a direct
+ * PENDING -> READY_FOR_PICKUP shortcut). Payment status is owned by the
  * Mercado Pago webhook and is never changed here.
  */
 export async function updateOrderStatus(
@@ -412,7 +413,7 @@ export async function updateOrderStatus(
   const result = await prisma.order.updateMany({
     where: {
       id: orderId,
-      status: rule.from,
+      status: { in: [...rule.from] },
       ...(rule.requiredPayment ? { paymentStatus: rule.requiredPayment } : {}),
     },
     data: { status: newStatus },
@@ -431,18 +432,21 @@ export async function updateOrderStatus(
 }
 
 /**
- * Mass updates all currently "PAID" orders to "READY_FOR_PICKUP".
+ * Mass updates every paid order that is not yet ready (PENDING or PREPARING)
+ * to "READY_FOR_PICKUP" and returns how many orders were changed.
  */
 export async function markAllPaidAsReady() {
   await requireSession();
 
-  await prisma.order.updateMany({
+  const result = await prisma.order.updateMany({
     where: {
       paymentStatus: "PAID",
-      status: "PENDING",
+      status: { in: ["PENDING", "PREPARING"] },
     },
     data: { status: "READY_FOR_PICKUP" },
   });
 
   revalidatePath("/admin/pedidos");
+
+  return { updatedCount: result.count };
 }

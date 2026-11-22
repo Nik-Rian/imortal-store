@@ -168,6 +168,7 @@ enum PaymentStatus {
 
 enum OrderStatus {
   PENDING
+  PREPARING
   READY_FOR_PICKUP
   COMPLETED
   CANCELED

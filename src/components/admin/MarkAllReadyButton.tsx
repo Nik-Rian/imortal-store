@@ -16,11 +16,18 @@ export function MarkAllReadyButton({ hasPaidOrders }: MarkAllReadyButtonProps) {
   const handleMarkAll = () => {
     if (
       confirm(
-        "Tem certeza que deseja marcar TODOS os pedidos 'Pagos' como 'Prontos para Retirada'?",
+        "Tem certeza que deseja marcar TODOS os pedidos pagos, aguardando preparo ou em preparo, como 'Prontos para Retirada'?",
       )
     ) {
       startTransition(async () => {
-        await markAllPaidAsReady();
+        const { updatedCount } = await markAllPaidAsReady();
+        // alert() is used instead of component state: after the refresh the
+        // button unmounts (no paid orders left), so inline text would vanish.
+        alert(
+          updatedCount === 0
+            ? "Nenhum pedido foi atualizado."
+            : `${updatedCount} pedido(s) marcado(s) como pronto(s) para retirada.`,
+        );
       });
     }
   };

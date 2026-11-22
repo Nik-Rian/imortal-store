@@ -7,7 +7,7 @@ export const getAdminOrders = cache(async (filter: "all" | "valid" = "all") => {
       filter === "valid"
         ? {
             paymentStatus: "PAID",
-            status: { in: ["PENDING", "READY_FOR_PICKUP"] },
+            status: { in: ["PENDING", "PREPARING", "READY_FOR_PICKUP"] },
           }
         : undefined,
     orderBy: { createdAt: "desc" },
