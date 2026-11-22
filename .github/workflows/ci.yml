@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -11,6 +13,21 @@ jobs:
   validate:
     name: Typecheck, Lint & Prisma Validate
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: imortal_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d imortal_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout repository
@@ -44,6 +61,21 @@ jobs:
         run: pnpm test
         env:
           DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+
+      - name: Apply migrations to test database
+        run: pnpm exec prisma migrate deploy
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/imortal_test"
+
+      - name: Check migration drift against schema
+        run: pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/imortal_test"
+
+      - name: Run integration tests
+        run: pnpm test:integration
+        env:
+          TEST_DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/imortal_test"
 
       - name: Build application
         run: pnpm run build
