@@ -1,28 +1,20 @@
 "use client";
 
 import { createDrop, purgeDrop } from "@/actions/drop.actions";
-import { CloseDropButton } from "@/components/admin/CloseDropButton";
+import type { DropStatus } from "@/generated/prisma/client";
 import { useState, useTransition } from "react";
 
 interface AdminDropItem {
   id: string;
   name: string;
-  startsAt: Date | string;
-  endsAt: Date | string;
+  status: DropStatus;
   productCount: number;
-  isClosed: boolean;
 }
 
 interface SemesterLifecycleSlotProps {
   drops: AdminDropItem[];
   purgeEnabled: boolean;
 }
-
-// Fixed time zone so server and client render the same date text.
-const formatDate = (value: Date | string) =>
-  new Date(value).toLocaleDateString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-  });
 
 const REQUIRED_PHRASE =
   "Estou ciente dos riscos e quero deletar o banco de dados";
@@ -40,7 +32,7 @@ export function SemesterLifecycleSlot({
   const [typedText, setTypedText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const hasOpenDrop = drops.some((drop) => !drop.isClosed);
+  const hasActiveDrop = drops.some((drop) => drop.status === "ACTIVE");
 
   const handleCreateDrop = () => {
     setError(null);
@@ -91,15 +83,15 @@ export function SemesterLifecycleSlot({
             Gerenciamento do Semestre
           </h2>
           <p className="mt-1 text-sm text-zinc-500">
-            {hasOpenDrop
-              ? "Há um semestre aberto. Encerre as vendas dele para poder iniciar outro."
-              : "Nenhum semestre aberto no momento. Inicie um novo semestre para abrir o catálogo."}
+            {hasActiveDrop
+              ? "Há um semestre ativo. Conclua-o para poder iniciar outro."
+              : "Nenhum semestre ativo no momento. Inicie um novo semestre para abrir o catálogo."}
           </p>
         </div>
         <button
           type="button"
           onClick={handleCreateDrop}
-          disabled={isPending || hasOpenDrop}
+          disabled={isPending || hasActiveDrop}
           className="inline-flex cursor-pointer items-center justify-center rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-zinc-50 transition-colors hover:bg-zinc-800 disabled:opacity-50"
         >
           Iniciar Novo Semestre
@@ -124,25 +116,20 @@ export function SemesterLifecycleSlot({
                   </span>
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                      drop.isClosed
+                      drop.status === "CONCLUDED"
                         ? "bg-zinc-100 text-zinc-600"
                         : "bg-emerald-100 text-emerald-800"
                     }`}
                   >
-                    {drop.isClosed ? "Encerrado" : "Em andamento"}
+                    {drop.status === "CONCLUDED" ? "Concluído" : "Ativo"}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-zinc-500">
-                  {drop.productCount} produto(s) · {formatDate(drop.startsAt)} a{" "}
-                  {formatDate(drop.endsAt)}
+                  {drop.productCount} produto(s)
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <CloseDropButton
-                  dropId={drop.id}
-                  isClosed={drop.isClosed}
-                />
-                {purgeEnabled && drop.isClosed && (
+                {purgeEnabled && drop.status === "CONCLUDED" && (
                   <button
                     type="button"
                     disabled={isPending}

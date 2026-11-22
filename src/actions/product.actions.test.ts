@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createProduct, deleteProduct, updateProduct } from "./product.actions";
 
-
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     product: {

@@ -8,27 +8,6 @@ import { deleteBlobImages } from "./blob.actions";
 
 type ActionResult = { success: true } | { success: false; error: string };
 
-/**
- * Instantly closes sales for an open drop by setting its endsAt date to now.
- * Closing an already-closed drop is a no-op, so a stale click never moves
- * its endsAt forward.
- */
-export async function closeDropSales(dropId: string) {
-  await requireSession();
-
-  const now = new Date();
-
-  await prisma.drop.updateMany({
-    where: { id: dropId, endsAt: { gte: now } },
-    data: { endsAt: now },
-  });
-
-  revalidatePath("/");
-  revalidatePath("/produto/[slug]", "page");
-  revalidatePath("/admin");
-  revalidatePath("/admin/produtos");
-}
-
 function isUniqueConstraintError(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -57,14 +36,14 @@ export async function createDrop(): Promise<
   const name = `${year}.${semester}`;
   const slug = `${year}-${semester}`;
 
-  const openDrop = await prisma.drop.findFirst({
-    where: { endsAt: { gte: now } },
+  const activeDrop = await prisma.drop.findFirst({
+    where: { status: "ACTIVE" },
     select: { name: true },
   });
-  if (openDrop) {
+  if (activeDrop) {
     return {
       success: false,
-      error: `O semestre ${openDrop.name} ainda está aberto. Encerre as vendas dele antes de iniciar outro.`,
+      error: `O semestre ${activeDrop.name} ainda está ativo. Conclua-o antes de iniciar outro.`,
     };
   }
 
@@ -76,15 +55,13 @@ export async function createDrop(): Promise<
     return { success: false, error: dropConflictError(name) };
   }
 
-  const endsAt = new Date(now);
-  endsAt.setMonth(endsAt.getMonth() + 6);
-
   try {
     await prisma.drop.create({
-      data: { name, slug, startsAt: now, endsAt },
+      data: { name, slug },
     });
   } catch (error) {
-    // Lost a race against another create between the check and the insert.
+    // Lost a race against another create between the checks and the insert:
+    // the name or the single-active-drop unique index rejected the row.
     if (isUniqueConstraintError(error)) {
       return { success: false, error: dropConflictError(name) };
     }
@@ -141,15 +118,15 @@ export async function purgeDrop(dropId: string): Promise<ActionResult> {
     outcome = await prisma.$transaction(async (tx): Promise<ActionResult> => {
       const drop = await tx.drop.findUnique({
         where: { id: dropId },
-        select: { name: true, endsAt: true },
+        select: { name: true, status: true },
       });
       if (!drop) {
         return { success: false, error: "Semestre não encontrado." };
       }
-      if (drop.endsAt >= new Date()) {
+      if (drop.status !== "CONCLUDED") {
         return {
           success: false,
-          error: `O semestre ${drop.name} ainda está aberto. Encerre as vendas dele antes de apagá-lo.`,
+          error: `O semestre ${drop.name} ainda não foi concluído. Conclua-o antes de apagá-lo.`,
         };
       }
 

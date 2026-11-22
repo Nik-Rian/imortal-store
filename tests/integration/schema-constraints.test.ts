@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
 import {
+  createDrop,
   createOrder,
   createProduct,
   createStockItem,
@@ -229,5 +230,29 @@ describe("Order idempotencyKey", () => {
     );
 
     expect(await prisma.order.count()).toBe(3);
+  });
+});
+
+describe("Drop single active status", () => {
+  test("rejects a second active drop but allows any number of concluded drops", async () => {
+    await createDrop({ status: "CONCLUDED" });
+    await createDrop({ status: "CONCLUDED" });
+    await createDrop({ status: "ACTIVE" });
+
+    await expectUniqueViolation(createDrop({ status: "ACTIVE" }));
+
+    expect(await prisma.drop.count({ where: { status: "ACTIVE" } })).toBe(1);
+    expect(await prisma.drop.count({ where: { status: "CONCLUDED" } })).toBe(2);
+  });
+
+  test("lets only one of two concurrent active drops succeed", async () => {
+    const results = await Promise.allSettled([
+      createDrop({ status: "ACTIVE" }),
+      createDrop({ status: "ACTIVE" }),
+    ]);
+
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+    expect(await prisma.drop.count({ where: { status: "ACTIVE" } })).toBe(1);
   });
 });

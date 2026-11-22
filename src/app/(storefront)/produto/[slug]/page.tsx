@@ -7,7 +7,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-
 // Rendered on every request so price and availability edits are visible
 // immediately.
 export const dynamic = "force-dynamic";

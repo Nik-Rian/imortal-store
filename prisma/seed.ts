@@ -60,8 +60,7 @@ async function main() {
     data: {
       name: "Initial Drop",
       slug: "initial-drop",
-      startsAt: new Date(),
-      endsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+      status: "ACTIVE",
     },
   });
 

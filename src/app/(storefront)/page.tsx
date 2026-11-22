@@ -4,7 +4,6 @@ import { getStorefrontDrop } from "@/services/drop.service";
 import { getProducts } from "@/services/product.service";
 import Link from "next/link";
 
-
 // Rendered on every request so prices, availability and the closed-sales
 // state always reflect the database.
 export const dynamic = "force-dynamic";
@@ -34,7 +33,9 @@ export default async function LojaPage() {
     );
   }
 
-  const isSalesClosed = drop.endsAt < new Date();
+  // Sales read as closed once every listing of the active drop is closed.
+  const isSalesClosed =
+    products.length > 0 && products.every((product) => !product.isAvailable);
 
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-900">

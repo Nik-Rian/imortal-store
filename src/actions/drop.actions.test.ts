@@ -2,21 +2,22 @@ import { requireSession } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteBlobImages } from "./blob.actions";
-import { closeDropSales, createDrop, purgeDrop } from "./drop.actions";
+import { createDrop, purgeDrop } from "./drop.actions";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     drop: {
       findFirst: vi.fn(),
       create: vi.fn(),
-      updateMany: vi.fn(),
     },
     $transaction: vi.fn(),
   },
 }));
 
 vi.mock("@/lib/auth-guard", () => ({ requireSession: vi.fn() }));
+
 vi.mock("./blob.actions", () => ({ deleteBlobImages: vi.fn() }));
+
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 beforeEach(() => {
@@ -29,7 +30,7 @@ afterEach(() => {
 });
 
 describe("createDrop", () => {
-  it("refuses while an open drop exists", async () => {
+  it("refuses while an active drop exists", async () => {
     vi.mocked(prisma.drop.findFirst).mockResolvedValueOnce({
       name: "2026.2",
     } as never);
@@ -38,10 +39,10 @@ describe("createDrop", () => {
 
     expect(result).toMatchObject({ success: false });
     expect(result.success === false && result.error).toMatch(
-      /ainda está aberto/,
+      /ainda está ativo/,
     );
     expect(prisma.drop.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { endsAt: { gte: expect.any(Date) } } }),
+      expect.objectContaining({ where: { status: "ACTIVE" } }),
     );
     expect(prisma.drop.create).not.toHaveBeenCalled();
   });
@@ -85,7 +86,7 @@ describe("createDrop", () => {
 
     expect(result).toEqual({ success: true });
     expect(prisma.drop.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ name: "2026.2", slug: "2026-2" }),
+      data: { name: "2026.2", slug: "2026-2" },
     });
   });
 
@@ -97,28 +98,9 @@ describe("createDrop", () => {
   });
 });
 
-describe("closeDropSales", () => {
-  it("only updates a drop that is still open", async () => {
-    vi.mocked(prisma.drop.updateMany).mockResolvedValue({ count: 1 });
-
-    await closeDropSales("drop-1");
-
-    expect(prisma.drop.updateMany).toHaveBeenCalledWith({
-      where: { id: "drop-1", endsAt: { gte: expect.any(Date) } },
-      data: { endsAt: expect.any(Date) },
-    });
-  });
-});
-
 describe("purgeDrop", () => {
-  const closedDrop = {
-    name: "2026.1",
-    endsAt: new Date("2026-06-30T00:00:00Z"),
-  };
-  const openDrop = {
-    name: "2026.2",
-    endsAt: new Date("2026-12-31T00:00:00Z"),
-  };
+  const closedDrop = { name: "2026.1", status: "CONCLUDED" };
+  const openDrop = { name: "2026.2", status: "ACTIVE" };
 
   type PurgeOrder = {
     paymentStatus: string;
@@ -192,8 +174,6 @@ describe("purgeDrop", () => {
 
   beforeEach(() => {
     vi.stubEnv("ALLOW_DESTRUCTIVE_PURGE", "true");
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-11-19T12:00:00Z"));
   });
 
   it.each([undefined, "false", "1"])(
@@ -222,24 +202,12 @@ describe("purgeDrop", () => {
     expectNothingDeleted(tx);
   });
 
-  it("refuses while the sales window is open", async () => {
+  it("refuses while the drop is active", async () => {
     const tx = buildTransaction({ drop: openDrop });
 
     expect(await purgeDrop("open-drop")).toMatchObject({
       success: false,
-      error: expect.stringMatching(/ainda está aberto/),
-    });
-    expectNothingDeleted(tx);
-  });
-
-  it("refuses when the sales window ends exactly now", async () => {
-    const tx = buildTransaction({
-      drop: { name: "2026.2", endsAt: new Date("2026-11-19T12:00:00Z") },
-    });
-
-    expect(await purgeDrop("edge-drop")).toMatchObject({
-      success: false,
-      error: expect.stringMatching(/ainda está aberto/),
+      error: expect.stringMatching(/não foi concluído/),
     });
     expectNothingDeleted(tx);
   });
