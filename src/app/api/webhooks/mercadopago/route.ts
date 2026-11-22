@@ -3,6 +3,7 @@ import { resolvePaymentSync } from "@/lib/payment-status";
 import { prisma } from "@/lib/prisma";
 import {
   getMercadoPagoOrder,
+  isMercadoPagoOrderId,
   MercadoPagoOrderDetails,
   MercadoPagoPaymentDetails,
 } from "@/services/mercadopago.service";
@@ -116,14 +117,28 @@ export async function POST(req: Request) {
       });
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
+
     // Process order logic
     const isOrderEvent =
       topic === "order" ||
       topic === "chargebacks" ||
       topic === "order.charged_back" ||
       body.action === "order.charged_back";
+
     if (isOrderEvent) {
-      const mpOrder = await getMercadoPagoOrder(String(resourceId));
+      const orderResourceId = String(resourceId);
+
+      if (!isMercadoPagoOrderId(orderResourceId)) {
+        // Identifiers such as a chargeback id cannot be fetched as orders. A
+        // non-2xx answer would only make the provider redeliver the same notice.
+        console.warn(
+          "Mercado Pago Webhook: ignoring notification with a non-order resource id",
+          { topic, resourceId: orderResourceId },
+        );
+        return NextResponse.json({ received: true, ignored: true });
+      }
+      const mpOrder = await getMercadoPagoOrder(orderResourceId);
+
       //console.log("MP Order Payload:", JSON.stringify(mpOrder, null, 2));
       if (!mpOrder) {
         return NextResponse.json({ received: true });

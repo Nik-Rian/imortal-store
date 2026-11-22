@@ -1,8 +1,10 @@
+import { inspect } from "node:util";
 import { describeCardFailure, PaymentRejectedError } from "@/lib/card-outcome";
 import { prisma } from "@/lib/prisma";
 import {
   createCardOrder,
   createPixOrder,
+  MercadoPagoTimeoutError,
 } from "@/services/mercadopago.service";
 import { checkProductAvailability } from "@/services/product.service";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -31,7 +33,8 @@ vi.mock("@/services/product.service", () => ({
   checkProductAvailability: vi.fn(),
 }));
 
-vi.mock("@/services/mercadopago.service", () => ({
+vi.mock("@/services/mercadopago.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/mercadopago.service")>()),
   createPixOrder: vi.fn(),
   createCardOrder: vi.fn(),
 }));
@@ -171,6 +174,9 @@ describe("createOrder retry and duplicate protection", () => {
 
   const SAFE_ORDER_FAILURE_MESSAGE =
     "Não foi possível processar o pedido agora. Tente novamente em instantes.";
+
+  const PROVIDER_TIMEOUT_MESSAGE =
+    "O serviço de pagamento demorou para responder. Aguarde um momento e tente novamente.";
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -325,6 +331,77 @@ describe("createOrder retry and duplicate protection", () => {
       failure,
     );
   });
+
+  it("reports a provider timeout with a specific message, keeps the retry credentials and retries with the same idempotency key", async () => {
+    vi.mocked(prisma.order.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(prisma.order.create).mockResolvedValue(storedOrder() as never);
+    vi.mocked(createPixOrder).mockRejectedValueOnce(
+      new MercadoPagoTimeoutError(),
+    );
+
+    const first = await createOrder({ ...payload, attemptKey: "key-1" });
+
+    expect(first).toMatchObject({
+      success: false,
+      error: PROVIDER_TIMEOUT_MESSAGE,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(first.error).not.toBe(SAFE_ORDER_FAILURE_MESSAGE);
+    expect(first).not.toHaveProperty("paymentRejected");
+
+    vi.mocked(prisma.order.findUnique).mockResolvedValue(
+      storedOrder() as never,
+    );
+    const second = await createOrder({
+      ...payload,
+      attemptKey: "key-1",
+      orderId: first.orderId,
+      accessToken: first.accessToken,
+    });
+
+    expect(second).toMatchObject({ success: true, orderId: "order-1" });
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
+    expect(createPixOrder).toHaveBeenCalledTimes(2);
+    for (const [input] of vi.mocked(createPixOrder).mock.calls) {
+      expect(input).toMatchObject({ idempotencyKey: "key-1" });
+    }
+  });
+
+  it.each([
+    ["a provider timeout", () => new MercadoPagoTimeoutError()],
+    [
+      "a generic provider error",
+      () => new Error("Mercado Pago API Error: boom"),
+    ],
+    [
+      "a refused payment",
+      () =>
+        new PaymentRejectedError(
+          "Mercado Pago API Error: refused",
+          "rejected_by_issuer",
+        ),
+    ],
+  ])(
+    "never writes the CPF or e-mail to the logs after %s",
+    async (_label, makeError) => {
+      vi.mocked(prisma.order.findFirst).mockResolvedValueOnce(null);
+      vi.mocked(prisma.order.create).mockResolvedValue(storedOrder() as never);
+      vi.mocked(createPixOrder).mockRejectedValueOnce(makeError());
+
+      await createOrder({ ...payload, attemptKey: "key-1" });
+
+      const logged = inspect(
+        [
+          vi.mocked(console.error).mock.calls,
+          vi.mocked(console.warn).mock.calls,
+        ],
+        { depth: null },
+      );
+      expect(logged).not.toContain("52998224725");
+      expect(logged).not.toContain("maria@example.com");
+    },
+  );
 
   it("hides a database error raised after the order exists and keeps the retry credentials", async () => {
     const failure = new Error("db down");
@@ -773,8 +850,26 @@ describe("createOrder card payments", () => {
     expect(prisma.order.updateMany).not.toHaveBeenCalled();
   });
 
+  it("treats a card provider timeout as retryable, not as a refusal", async () => {
+    vi.mocked(createCardOrder).mockRejectedValueOnce(
+      new MercadoPagoTimeoutError(),
+    );
+    const result = await createOrder({ ...cardPayload, attemptKey: "key-1" });
+    expect(result).toMatchObject({
+      success: false,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(result.error).toMatch(/demorou/);
+    expect(result).not.toHaveProperty("paymentRejected");
+    expect(prisma.order.update).not.toHaveBeenCalled();
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
   it("still creates a Pix charge when no payment method is given", async () => {
     const { paymentMethod: _method, card: _card, ...pixPayload } = cardPayload;
+    void _method;
+    void _card;
     const result = await createOrder({ ...pixPayload, attemptKey: "key-1" });
     expect(result.success).toBe(true);
     expect(createPixOrder).toHaveBeenCalledTimes(1);

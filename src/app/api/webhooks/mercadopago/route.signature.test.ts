@@ -13,9 +13,12 @@ const SECRET = vi.hoisted(() => {
 vi.mock("@/lib/prisma", () => ({
   prisma: { order: { findFirst: vi.fn(), updateMany: vi.fn() } },
 }));
-vi.mock("@/services/mercadopago.service", () => ({
+
+vi.mock("@/services/mercadopago.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/mercadopago.service")>()),
   getMercadoPagoOrder: vi.fn(),
 }));
+
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const ORDER_ID = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
