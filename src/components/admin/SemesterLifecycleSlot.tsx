@@ -1,6 +1,7 @@
 "use client";
 
 import { createDrop, purgeDrop } from "@/actions/drop.actions";
+import { CloseAllListingsButton } from "@/components/admin/CloseAllListingsButton";
 import type { DropStatus } from "@/generated/prisma/client";
 import { useState, useTransition } from "react";
 
@@ -32,7 +33,8 @@ export function SemesterLifecycleSlot({
   const [typedText, setTypedText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const hasActiveDrop = drops.some((drop) => drop.status === "ACTIVE");
+  const activeDrop = drops.find((drop) => drop.status === "ACTIVE");
+  const hasActiveDrop = activeDrop !== undefined;
 
   const handleCreateDrop = () => {
     setError(null);
@@ -100,6 +102,13 @@ export function SemesterLifecycleSlot({
 
       {error && (
         <p className="rounded-md bg-red-50 p-2 text-xs text-red-600">{error}</p>
+      )}
+
+      {activeDrop && (
+        <CloseAllListingsButton
+          dropId={activeDrop.id}
+          dropName={activeDrop.name}
+        />
       )}
 
       {drops.length > 0 && (

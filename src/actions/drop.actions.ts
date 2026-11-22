@@ -250,3 +250,61 @@ export async function purgeDrop(dropId: string): Promise<ActionResult> {
 
   return { success: true };
 }
+
+type CloseAllListingsResult =
+  { success: true; count: number } | { success: false; error: string };
+
+/**
+ * Closes sales for every listing (products and bundles) of the active drop
+ * with a single UPDATE and returns how many listings were open. Only
+ * `Product.isAvailable` is written: orders, payments, stock and the drop
+ * itself are never touched. There is deliberately no bulk reopen.
+ */
+export async function closeAllListings(
+  dropId: string,
+): Promise<CloseAllListingsResult> {
+  await requireSession();
+
+  if (!dropId) {
+    return { success: false, error: "ID do drop não fornecido." };
+  }
+
+  let count: number;
+
+  try {
+    const drop = await prisma.drop.findUnique({
+      where: { id: dropId },
+      select: { name: true, status: true },
+    });
+    if (!drop) {
+      return { success: false, error: "Semestre não encontrado." };
+    }
+    if (drop.status !== "ACTIVE") {
+      return {
+        success: false,
+        error: `O semestre ${drop.name} não está ativo. Só é possível fechar as vendas do semestre ativo.`,
+      };
+    }
+
+    // The status filter repeats the check above so the write itself can never
+    // reach a drop that was concluded in the meantime.
+    const result = await prisma.product.updateMany({
+      where: { dropId, isAvailable: true, drop: { status: "ACTIVE" } },
+      data: { isAvailable: false },
+    });
+    count = result.count;
+  } catch (error) {
+    console.error("Erro ao fechar as vendas do semestre:", error);
+    return {
+      success: false,
+      error: "Não foi possível fechar as vendas. Tente novamente.",
+    };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/produto/[slug]", "page");
+  revalidatePath("/admin");
+  revalidatePath("/admin/produtos");
+
+  return { success: true, count };
+}

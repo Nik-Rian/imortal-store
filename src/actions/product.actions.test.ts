@@ -1,8 +1,14 @@
 import { deleteBlobImages } from "@/actions/blob.actions";
+import { requireSession } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createProduct, deleteProduct, updateProduct } from "./product.actions";
+import {
+  createProduct,
+  deleteProduct,
+  setProductAvailability,
+  updateProduct,
+} from "./product.actions";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -379,5 +385,73 @@ describe("updateProduct (slug)", () => {
     expect(updatedProductData().slug).toBe("camiseta-nova");
     expect(revalidatePath).toHaveBeenCalledWith("/produto/camiseta-nova");
     expect(revalidatePath).toHaveBeenCalledWith("/produto/camiseta-antiga");
+  });
+});
+
+describe("setProductAvailability", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue({
+      slug: "camiseta",
+    } as never);
+    vi.mocked(prisma.product.update).mockResolvedValue({} as never);
+  });
+
+  it.each([true, false])(
+    "writes only isAvailable=%s and revalidates the storefront and admin list",
+    async (value) => {
+      const result = await setProductAvailability("p1", value);
+
+      expect(result).toEqual({ success: true });
+      expect(prisma.product.update).toHaveBeenCalledWith({
+        where: { id: "p1" },
+        data: { isAvailable: value },
+      });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(revalidatePath).toHaveBeenCalledWith("/");
+      expect(revalidatePath).toHaveBeenCalledWith("/produto/camiseta");
+      expect(revalidatePath).toHaveBeenCalledWith("/admin/produtos");
+    },
+  );
+
+  it("rejects unauthenticated calls before touching the database", async () => {
+    vi.mocked(requireSession).mockRejectedValue(new Error("Não autorizado."));
+
+    await expect(setProductAvailability("p1", false)).rejects.toThrow(
+      "Não autorizado.",
+    );
+    expect(prisma.product.findUnique).not.toHaveBeenCalled();
+    expect(prisma.product.update).not.toHaveBeenCalled();
+  });
+
+  it("returns a readable error when the product does not exist", async () => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue(null);
+
+    const result = await setProductAvailability("missing", false);
+
+    expect(result).toEqual({
+      success: false,
+      error: "Produto não encontrado.",
+    });
+    expect(prisma.product.update).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-boolean availability value", async () => {
+    const result = await setProductAvailability("p1", "false" as never);
+
+    expect(result.success).toBe(false);
+    expect(prisma.product.update).not.toHaveBeenCalled();
+  });
+
+  it("logs unexpected database errors and returns a generic message", async () => {
+    const logSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(prisma.product.update).mockRejectedValue(new Error("db down"));
+
+    const result = await setProductAvailability("p1", false);
+
+    expect(result.success).toBe(false);
+    expect(result.success === false && result.error).not.toContain("db down");
+    expect(revalidatePath).not.toHaveBeenCalled();
+    logSpy.mockRestore();
   });
 });

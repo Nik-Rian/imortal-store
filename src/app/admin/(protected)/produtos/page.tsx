@@ -1,5 +1,5 @@
-// src/app/admin/(protected)/produtos/page.tsx
 import { DeleteProductButton } from "@/components/admin/DeleteProductButton";
+import { ListingAvailabilityToggle } from "@/components/admin/ListingAvailabilityToggle";
 import { formatPrice } from "@/lib/utils";
 import { getProducts } from "@/services/product.service";
 import Link from "next/link";
@@ -30,6 +30,7 @@ export default async function AdminProductsPage() {
               <th className="px-4 py-3">Drop</th>
               <th className="px-4 py-3">Slug</th>
               <th className="px-4 py-3">Preço</th>
+              <th className="px-4 py-3">Vendas</th>
               <th className="px-4 py-3 text-right">Ações</th>
             </tr>
           </thead>
@@ -37,7 +38,7 @@ export default async function AdminProductsPage() {
             {products.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-8 text-center text-zinc-500"
                 >
                   Nenhum produto encontrado.
@@ -60,6 +61,13 @@ export default async function AdminProductsPage() {
                   <td className="px-4 py-3">{product.slug}</td>
                   <td className="px-4 py-3">
                     {formatPrice(product.priceCents)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <ListingAvailabilityToggle
+                      productId={product.id}
+                      productName={product.name}
+                      isAvailable={product.isAvailable}
+                    />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex h-5 items-center justify-end gap-4">
