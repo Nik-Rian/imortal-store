@@ -3,7 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteBlobImages } from "./blob.actions";
-import { closeAllListings, createDrop, purgeDrop } from "./drop.actions";
+import {
+  closeAllListings,
+  concludeDrop,
+  createDrop,
+  fetchDropConclusionSummary,
+  purgeDrop,
+} from "./drop.actions";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -15,8 +21,14 @@ vi.mock("@/lib/prisma", () => ({
       updateMany: vi.fn(),
       delete: vi.fn(),
     },
-    product: { updateMany: vi.fn() },
-    order: { update: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
+    product: { findMany: vi.fn(), updateMany: vi.fn() },
+    orderItem: { findMany: vi.fn() },
+    order: {
+      findMany: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      deleteMany: vi.fn(),
+    },
     stockItem: { update: vi.fn(), updateMany: vi.fn() },
     stockReservation: { update: vi.fn(), updateMany: vi.fn() },
     $transaction: vi.fn(),
@@ -463,5 +475,311 @@ describe("closeAllListings", () => {
     expect(result.success === false && result.error).not.toContain("db down");
     expect(revalidatePath).not.toHaveBeenCalled();
     logSpy.mockRestore();
+  });
+});
+
+const makeOrder = (id: string, paymentStatus: string, status: string) => ({
+  id,
+  customerName: "Ana",
+  paymentStatus,
+  status,
+});
+
+describe("concludeDrop", () => {
+  const input = (
+    overrides: Partial<{
+      confirmName: string;
+      acknowledgeUnfulfilled: boolean;
+    }> = {},
+  ) => ({ confirmName: "2026.2", acknowledgeUnfulfilled: false, ...overrides });
+
+  function buildConcludeTransaction({
+    drop = { name: "2026.2", status: "ACTIVE" },
+    products = [{ id: "p1" }],
+    orderItems = [{ orderId: "o1" }],
+    orders = [],
+    concludedCount = 1,
+  }: {
+    drop?: { name: string; status: string } | null;
+    products?: { id: string }[];
+    orderItems?: { orderId: string }[];
+    orders?: ReturnType<typeof makeOrder>[];
+    concludedCount?: number;
+  } = {}) {
+    const tx = {
+      drop: {
+        findUnique: vi.fn().mockResolvedValue(drop),
+        updateMany: vi.fn().mockResolvedValue({ count: concludedCount }),
+      },
+      product: {
+        findMany: vi.fn().mockResolvedValue(products),
+        updateMany: vi.fn().mockResolvedValue({ count: 3 }),
+      },
+      orderItem: { findMany: vi.fn().mockResolvedValue(orderItems) },
+      order: { findMany: vi.fn().mockResolvedValue(orders) },
+    };
+    vi.mocked(prisma.$transaction).mockImplementation(((
+      callback: (client: typeof tx) => unknown,
+    ) => callback(tx)) as never);
+    return tx;
+  }
+
+  function expectNothingConcluded(
+    tx: ReturnType<typeof buildConcludeTransaction>,
+  ) {
+    expect(tx.drop.updateMany).not.toHaveBeenCalled();
+    expect(tx.product.updateMany).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  }
+
+  it("refuses while any order is blocking and lists the counts", async () => {
+    const tx = buildConcludeTransaction({
+      orders: [
+        makeOrder("o1", "PENDING", "PENDING"),
+        makeOrder("o2", "PENDING", "PENDING"),
+        makeOrder("o3", "IN_REVIEW", "PENDING"),
+        makeOrder("o4", "PAID", "CANCELED"),
+      ],
+    });
+
+    const result = await concludeDrop("d1", input());
+
+    expect(result.success).toBe(false);
+    const message = result.success === false ? result.error : "";
+    expect(message).toMatch(/Pagamento pendente: 2/);
+    expect(message).toMatch(/Pagamento em análise: 1/);
+    expect(message).toMatch(/Pagamento recebido após cancelamento: 1/);
+    expectNothingConcluded(tx);
+  });
+
+  it("still refuses blocking orders when the acknowledgement is given", async () => {
+    const tx = buildConcludeTransaction({
+      orders: [makeOrder("o1", "CHARGEBACK_IN_REVIEW", "COMPLETED")],
+    });
+
+    const result = await concludeDrop(
+      "d1",
+      input({ acknowledgeUnfulfilled: true }),
+    );
+
+    expect(result.success).toBe(false);
+    expectNothingConcluded(tx);
+  });
+
+  it("requires the acknowledgement for paid orders awaiting pickup", async () => {
+    const tx = buildConcludeTransaction({
+      orders: [makeOrder("o1", "PAID", "PREPARING")],
+    });
+
+    expect(await concludeDrop("d1", input())).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/ciente/),
+    });
+    expectNothingConcluded(tx);
+  });
+
+  it("concludes with the acknowledgement, in one transaction", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-12-20T12:00:00Z"));
+    const tx = buildConcludeTransaction({
+      orders: [makeOrder("o1", "PARTIALLY_REFUNDED", "READY_FOR_PICKUP")],
+    });
+
+    const result = await concludeDrop(
+      "d1",
+      input({ acknowledgeUnfulfilled: true }),
+    );
+
+    expect(result).toEqual({ success: true });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(tx.drop.updateMany).toHaveBeenCalledWith({
+      where: { id: "d1", status: "ACTIVE" },
+      data: {
+        status: "CONCLUDED",
+        concludedAt: new Date("2026-12-20T12:00:00Z"),
+      },
+    });
+    expect(tx.product.updateMany).toHaveBeenCalledWith({
+      where: { dropId: "d1", isAvailable: true },
+      data: { isAvailable: false },
+    });
+    expect(prisma.drop.updateMany).not.toHaveBeenCalled();
+    expect(prisma.product.updateMany).not.toHaveBeenCalled();
+    expect(revalidatePath).toHaveBeenCalledWith("/");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/produtos");
+  });
+
+  it("concludes without acknowledgement when nothing is unresolved", async () => {
+    const tx = buildConcludeTransaction({
+      orders: [
+        makeOrder("o1", "PAID", "COMPLETED"),
+        makeOrder("o2", "FAILED", "CANCELED"),
+      ],
+    });
+
+    expect(await concludeDrop("d1", input())).toEqual({ success: true });
+    expect(tx.drop.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.product.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("concludes a drop that has no orders", async () => {
+    const tx = buildConcludeTransaction({ orderItems: [] });
+
+    expect(await concludeDrop("d1", input())).toEqual({ success: true });
+    expect(tx.order.findMany).not.toHaveBeenCalled();
+  });
+
+  it.each(["2026.1", "2026.2 ", " 2026.2", ""])(
+    "refuses the typed name %j and writes nothing",
+    async (confirmName) => {
+      const tx = buildConcludeTransaction();
+
+      expect(await concludeDrop("d1", input({ confirmName }))).toMatchObject({
+        success: false,
+        error: expect.stringMatching(/nome digitado/),
+      });
+      expectNothingConcluded(tx);
+    },
+  );
+
+  it("attributes orders by product link and by the dropName snapshot", async () => {
+    const tx = buildConcludeTransaction({
+      orderItems: [{ orderId: "o1" }, { orderId: "o1" }],
+    });
+
+    await concludeDrop("d1", input());
+
+    expect(tx.orderItem.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          OR: [{ productId: { in: ["p1"] } }, { dropName: "2026.2" }],
+        },
+      }),
+    );
+    expect(tx.order.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ["o1"] } } }),
+    );
+  });
+
+  it("still finds orders through the snapshot when no product remains", async () => {
+    const tx = buildConcludeTransaction({
+      products: [],
+      orders: [makeOrder("o1", "PENDING", "PENDING")],
+    });
+
+    const result = await concludeDrop("d1", input());
+
+    expect(tx.orderItem.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { OR: [{ dropName: "2026.2" }] } }),
+    );
+    expect(result.success).toBe(false);
+    expectNothingConcluded(tx);
+  });
+
+  it("refuses when the drop does not exist", async () => {
+    const tx = buildConcludeTransaction({ drop: null });
+
+    expect(await concludeDrop("missing", input())).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/não encontrado/),
+    });
+    expectNothingConcluded(tx);
+  });
+
+  it("refuses a drop that is not active", async () => {
+    const tx = buildConcludeTransaction({
+      drop: { name: "2026.2", status: "CONCLUDED" },
+    });
+
+    expect(await concludeDrop("d1", input())).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/não está ativo/),
+    });
+    expectNothingConcluded(tx);
+  });
+
+  it("does not close listings when a concurrent conclusion won the race", async () => {
+    const tx = buildConcludeTransaction({ concludedCount: 0 });
+
+    expect(await concludeDrop("d1", input())).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/não está ativo/),
+    });
+    expect(tx.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses a missing drop id", async () => {
+    expect(await concludeDrop("", input())).toMatchObject({ success: false });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects unauthenticated calls before touching the database", async () => {
+    vi.mocked(requireSession).mockRejectedValue(new Error("Não autorizado."));
+
+    await expect(concludeDrop("d1", input())).rejects.toThrow(
+      "Não autorizado.",
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("logs unexpected database errors and returns a generic message", async () => {
+    const logSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(prisma.$transaction).mockRejectedValue(new Error("db down"));
+
+    const result = await concludeDrop("d1", input());
+
+    expect(result.success).toBe(false);
+    expect(result.success === false && result.error).not.toContain("db down");
+    expect(revalidatePath).not.toHaveBeenCalled();
+    logSpy.mockRestore();
+  });
+});
+
+describe("fetchDropConclusionSummary", () => {
+  it("returns counts, per-reason totals and a capped sample", async () => {
+    const blockingOrders = Array.from({ length: 7 }, (_, i) =>
+      makeOrder(`b${i + 1}`, "PENDING", "PENDING"),
+    );
+    const orders = [...blockingOrders, makeOrder("a1", "PAID", "PREPARING")];
+    vi.mocked(prisma.drop.findUnique).mockResolvedValue({
+      name: "2026.2",
+      status: "ACTIVE",
+    } as never);
+    vi.mocked(prisma.product.findMany).mockResolvedValue([
+      { id: "p1" },
+    ] as never);
+    vi.mocked(prisma.orderItem.findMany).mockResolvedValue(
+      orders.map((o) => ({ orderId: o.id })) as never,
+    );
+    vi.mocked(prisma.order.findMany).mockResolvedValue(orders as never);
+
+    const result = await fetchDropConclusionSummary("d1");
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.summary.blockingCount).toBe(7);
+    expect(result.summary.blockingByReason.PAYMENT_PENDING).toBe(7);
+    expect(result.summary.blockingSample).toHaveLength(5);
+    expect(result.summary.acknowledgeableCount).toBe(1);
+    expect(result.summary.acknowledgeableSample).toHaveLength(1);
+  });
+
+  it("refuses when the drop does not exist", async () => {
+    vi.mocked(prisma.drop.findUnique).mockResolvedValue(null);
+
+    expect(await fetchDropConclusionSummary("missing")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/não encontrado/),
+    });
+  });
+
+  it("rejects unauthenticated calls before touching the database", async () => {
+    vi.mocked(requireSession).mockRejectedValue(new Error("Não autorizado."));
+
+    await expect(fetchDropConclusionSummary("d1")).rejects.toThrow(
+      "Não autorizado.",
+    );
+    expect(prisma.drop.findUnique).not.toHaveBeenCalled();
   });
 });

@@ -2,7 +2,15 @@
 
 import type { PaymentStatus } from "@/generated/prisma/client";
 import { requireSession } from "@/lib/auth-guard";
+import {
+  BLOCKING_REASON_LABELS,
+  type BlockingReason,
+} from "@/lib/drop-conclusion";
 import { prisma } from "@/lib/prisma";
+import {
+  getDropConclusionSummary,
+  type DropConclusionSummary,
+} from "@/services/drop.service";
 import { revalidatePath } from "next/cache";
 import { deleteBlobImages } from "./blob.actions";
 
@@ -307,4 +315,134 @@ export async function closeAllListings(
   revalidatePath("/admin/produtos");
 
   return { success: true, count };
+}
+
+function describeBlockingOrders(summary: DropConclusionSummary): string {
+  const parts = (
+    Object.entries(summary.blockingByReason) as [BlockingReason, number][]
+  )
+    .filter(([, count]) => count > 0)
+    .map(([reason, count]) => `${BLOCKING_REASON_LABELS[reason]}: ${count}`);
+
+  return `O semestre ${summary.dropName} possui pedidos com pagamento não resolvido (${parts.join("; ")}). Resolva-os antes de concluir.`;
+}
+
+/**
+ * Concludes the active drop. The checks run inside the same transaction as
+ * the writes, so the verdict and the change see the same data. Refusals are
+ * returned as { success: false, error } rather than thrown. Orders, payments
+ * and stock are never written: only the drop status and listing availability.
+ */
+export async function concludeDrop(
+  dropId: string,
+  {
+    confirmName,
+    acknowledgeUnfulfilled,
+  }: { confirmName: string; acknowledgeUnfulfilled: boolean },
+): Promise<ActionResult> {
+  await requireSession();
+
+  if (!dropId) {
+    return { success: false, error: "ID do drop não fornecido." };
+  }
+
+  let outcome: ActionResult;
+
+  try {
+    outcome = await prisma.$transaction(async (tx): Promise<ActionResult> => {
+      const summary = await getDropConclusionSummary(dropId, tx);
+      if (!summary) {
+        return { success: false, error: "Semestre não encontrado." };
+      }
+      if (summary.dropStatus !== "ACTIVE") {
+        return {
+          success: false,
+          error: `O semestre ${summary.dropName} não está ativo. Só é possível concluir o semestre ativo.`,
+        };
+      }
+      if (confirmName !== summary.dropName) {
+        return {
+          success: false,
+          error: "O nome digitado não corresponde ao nome do semestre.",
+        };
+      }
+      if (summary.blockingCount > 0) {
+        return { success: false, error: describeBlockingOrders(summary) };
+      }
+      if (summary.acknowledgeableCount > 0 && acknowledgeUnfulfilled !== true) {
+        return {
+          success: false,
+          error: `O semestre ${summary.dropName} possui ${summary.acknowledgeableCount} pedido(s) pago(s) ainda não retirado(s). Marque a confirmação de que está ciente para concluir.`,
+        };
+      }
+
+      // The status filter makes a concurrent conclusion a no-op instead of a
+      // second write.
+      const concluded = await tx.drop.updateMany({
+        where: { id: dropId, status: "ACTIVE" },
+        data: { status: "CONCLUDED", concludedAt: new Date() },
+      });
+      if (concluded.count === 0) {
+        return {
+          success: false,
+          error: `O semestre ${summary.dropName} não está ativo. Só é possível concluir o semestre ativo.`,
+        };
+      }
+
+      await tx.product.updateMany({
+        where: { dropId, isAvailable: true },
+        data: { isAvailable: false },
+      });
+
+      return { success: true };
+    });
+  } catch (error) {
+    console.error("Erro ao concluir semestre:", error);
+    return {
+      success: false,
+      error: "Não foi possível concluir o semestre. Tente novamente.",
+    };
+  }
+
+  if (!outcome.success) {
+    return outcome;
+  }
+
+  revalidatePath("/");
+  revalidatePath("/produto/[slug]", "page");
+  revalidatePath("/admin");
+  revalidatePath("/admin/produtos");
+
+  return { success: true };
+}
+
+/**
+ * Read-only data for the conclusion panel. Requires an admin session because
+ * it exposes customer names.
+ */
+export async function fetchDropConclusionSummary(
+  dropId: string,
+): Promise<
+  | { success: true; summary: DropConclusionSummary }
+  | { success: false; error: string }
+> {
+  await requireSession();
+
+  if (!dropId) {
+    return { success: false, error: "ID do drop não fornecido." };
+  }
+
+  try {
+    const summary = await getDropConclusionSummary(dropId);
+    if (!summary) {
+      return { success: false, error: "Semestre não encontrado." };
+    }
+    return { success: true, summary };
+  } catch (error) {
+    console.error("Erro ao carregar o resumo do semestre:", error);
+    return {
+      success: false,
+      error: "Não foi possível carregar o resumo do semestre.",
+    };
+  }
 }
