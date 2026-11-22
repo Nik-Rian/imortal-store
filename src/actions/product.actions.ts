@@ -531,3 +531,46 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
 
   return { success: true };
 }
+
+/**
+ * Opens or closes sales of a single listing. Writes only `isAvailable`, so
+ * the rest of the product (and any order that references it) stays untouched.
+ */
+export async function setProductAvailability(
+  productId: string,
+  isAvailable: boolean,
+): Promise<ActionResult> {
+  await requireSession();
+
+  if (!productId || typeof isAvailable !== "boolean") {
+    return { success: false, error: "Dados do produto inválidos." };
+  }
+
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { slug: true },
+  });
+
+  if (!product) {
+    return { success: false, error: "Produto não encontrado." };
+  }
+
+  try {
+    await prisma.product.update({
+      where: { id: productId },
+      data: { isAvailable },
+    });
+  } catch (error: unknown) {
+    console.error("Erro ao alterar a disponibilidade do produto:", error);
+    return {
+      success: false,
+      error: "Não foi possível alterar a disponibilidade. Tente novamente.",
+    };
+  }
+
+  revalidatePath("/");
+  revalidatePath(`/produto/${product.slug}`);
+  revalidatePath("/admin/produtos");
+
+  return { success: true };
+}

@@ -1,15 +1,24 @@
 import { requireSession } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteBlobImages } from "./blob.actions";
-import { createDrop, purgeDrop } from "./drop.actions";
+import { closeAllListings, createDrop, purgeDrop } from "./drop.actions";
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     drop: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
     },
+    product: { updateMany: vi.fn() },
+    order: { update: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
+    stockItem: { update: vi.fn(), updateMany: vi.fn() },
+    stockReservation: { update: vi.fn(), updateMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -343,6 +352,116 @@ describe("purgeDrop", () => {
     expect(result.success).toBe(false);
     expect(result.success === false && result.error).not.toContain("db down");
     expect(deleteBlobImages).not.toHaveBeenCalled();
+    logSpy.mockRestore();
+  });
+});
+
+describe("closeAllListings", () => {
+  function expectNoWritesOutsideProducts() {
+    for (const write of [
+      prisma.drop.create,
+      prisma.drop.update,
+      prisma.drop.updateMany,
+      prisma.drop.delete,
+      prisma.order.update,
+      prisma.order.updateMany,
+      prisma.order.deleteMany,
+      prisma.stockItem.update,
+      prisma.stockItem.updateMany,
+      prisma.stockReservation.update,
+      prisma.stockReservation.updateMany,
+      prisma.$transaction,
+    ]) {
+      expect(write).not.toHaveBeenCalled();
+    }
+  }
+
+  beforeEach(() => {
+    vi.mocked(prisma.drop.findUnique).mockResolvedValue({
+      name: "2026.2",
+      status: "ACTIVE",
+    } as never);
+    vi.mocked(prisma.product.updateMany).mockResolvedValue({
+      count: 3,
+    } as never);
+  });
+
+  it("closes only the open listings of the active drop in one statement", async () => {
+    const result = await closeAllListings("d1");
+
+    expect(result).toEqual({ success: true, count: 3 });
+    expect(prisma.product.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.product.updateMany).toHaveBeenCalledWith({
+      where: { dropId: "d1", isAvailable: true, drop: { status: "ACTIVE" } },
+      data: { isAvailable: false },
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/");
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/produtos");
+  });
+
+  it("performs no order, payment, stock or drop write", async () => {
+    await closeAllListings("d1");
+
+    expectNoWritesOutsideProducts();
+  });
+
+  it("reports zero when no listing was open", async () => {
+    vi.mocked(prisma.product.updateMany).mockResolvedValue({
+      count: 0,
+    } as never);
+
+    expect(await closeAllListings("d1")).toEqual({ success: true, count: 0 });
+  });
+
+  it("refuses when the drop does not exist", async () => {
+    vi.mocked(prisma.drop.findUnique).mockResolvedValue(null);
+
+    expect(await closeAllListings("missing")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/não encontrado/),
+    });
+    expect(prisma.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses a drop that is not the active one", async () => {
+    vi.mocked(prisma.drop.findUnique).mockResolvedValue({
+      name: "2026.1",
+      status: "CONCLUDED",
+    } as never);
+
+    expect(await closeAllListings("old")).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/não está ativo/),
+    });
+    expect(prisma.product.updateMany).not.toHaveBeenCalled();
+    expectNoWritesOutsideProducts();
+  });
+
+  it("refuses a missing drop id", async () => {
+    expect(await closeAllListings("")).toMatchObject({ success: false });
+    expect(prisma.drop.findUnique).not.toHaveBeenCalled();
+    expect(prisma.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects unauthenticated calls before touching the database", async () => {
+    vi.mocked(requireSession).mockRejectedValue(new Error("Não autorizado."));
+
+    await expect(closeAllListings("d1")).rejects.toThrow("Não autorizado.");
+    expect(prisma.drop.findUnique).not.toHaveBeenCalled();
+    expect(prisma.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("logs unexpected database errors and returns a generic message", async () => {
+    const logSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(prisma.product.updateMany).mockRejectedValue(
+      new Error("db down"),
+    );
+
+    const result = await closeAllListings("d1");
+
+    expect(result.success).toBe(false);
+    expect(result.success === false && result.error).not.toContain("db down");
+    expect(revalidatePath).not.toHaveBeenCalled();
     logSpy.mockRestore();
   });
 });
