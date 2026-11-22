@@ -2,6 +2,7 @@
 
 import { createDrop, purgeDrop } from "@/actions/drop.actions";
 import { CloseAllListingsButton } from "@/components/admin/CloseAllListingsButton";
+import { ConcludeDropPanel } from "@/components/admin/ConcludeDropPanel";
 import type { DropStatus } from "@/generated/prisma/client";
 import { useState, useTransition } from "react";
 
@@ -105,10 +106,16 @@ export function SemesterLifecycleSlot({
       )}
 
       {activeDrop && (
-        <CloseAllListingsButton
-          dropId={activeDrop.id}
-          dropName={activeDrop.name}
-        />
+        <>
+          <CloseAllListingsButton
+            dropId={activeDrop.id}
+            dropName={activeDrop.name}
+          />
+          <ConcludeDropPanel
+            dropId={activeDrop.id}
+            dropName={activeDrop.name}
+          />
+        </>
       )}
 
       {drops.length > 0 && (
