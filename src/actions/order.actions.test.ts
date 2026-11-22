@@ -1,4 +1,5 @@
 import { inspect } from "node:util";
+import { requireSession } from "@/lib/auth-guard";
 import { describeCardFailure, PaymentRejectedError } from "@/lib/card-outcome";
 import { prisma } from "@/lib/prisma";
 import {
@@ -7,8 +8,13 @@ import {
   MercadoPagoTimeoutError,
 } from "@/services/mercadopago.service";
 import { checkProductAvailability } from "@/services/product.service";
+import { revalidatePath } from "next/cache";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createOrder, updateOrderStatus } from "./order.actions";
+import {
+  createOrder,
+  markAllPaidAsReady,
+  updateOrderStatus,
+} from "./order.actions";
 
 // Mock das dependências
 vi.mock("@/lib/prisma", () => ({
@@ -630,12 +636,30 @@ describe("updateOrderStatus", () => {
     },
   );
 
-  it("requires PENDING and PAID in the UPDATE itself to mark ready", async () => {
+  it("requires a PENDING and PAID order in the UPDATE itself to start preparing", async () => {
+    const result = await updateOrderStatus("order-1", "PREPARING");
+
+    expect(result).toEqual({ success: true });
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "order-1",
+        status: { in: ["PENDING"] },
+        paymentStatus: "PAID",
+      },
+      data: { status: "PREPARING" },
+    });
+  });
+
+  it("accepts PENDING or PREPARING plus PAID in the UPDATE itself to mark ready", async () => {
     const result = await updateOrderStatus("order-1", "READY_FOR_PICKUP");
 
     expect(result).toEqual({ success: true });
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
-      where: { id: "order-1", status: "PENDING", paymentStatus: "PAID" },
+      where: {
+        id: "order-1",
+        status: { in: ["PENDING", "PREPARING"] },
+        paymentStatus: "PAID",
+      },
       data: { status: "READY_FOR_PICKUP" },
     });
   });
@@ -645,20 +669,61 @@ describe("updateOrderStatus", () => {
 
     expect(result).toEqual({ success: true });
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
-      where: { id: "order-1", status: "READY_FOR_PICKUP" },
+      where: { id: "order-1", status: { in: ["READY_FOR_PICKUP"] } },
       data: { status: "COMPLETED" },
     });
   });
 
-  it("reports an order that is not in the required state, such as an unpaid one", async () => {
+  it("reports a refused move to PREPARING with the same message", async () => {
     vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 0 });
 
-    const result = await updateOrderStatus("order-1", "READY_FOR_PICKUP");
+    const result = await updateOrderStatus("order-1", "PREPARING");
 
     expect(result).toEqual({
       success: false,
       error: "Pedido não está elegível para esta transição.",
     });
+  });
+});
+
+describe("markAllPaidAsReady", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 3 });
+  });
+
+  it("moves paid PENDING and PREPARING orders to READY_FOR_PICKUP and returns the count", async () => {
+    const result = await markAllPaidAsReady();
+
+    expect(result).toEqual({ updatedCount: 3 });
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: {
+        paymentStatus: "PAID",
+        status: { in: ["PENDING", "PREPARING"] },
+      },
+      data: { status: "READY_FOR_PICKUP" },
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/admin/pedidos");
+  });
+
+  it("only targets paid orders, leaving unpaid ones untouched", async () => {
+    await markAllPaidAsReady();
+
+    const [{ where }] = vi.mocked(prisma.order.updateMany).mock.calls[0];
+    expect(where).toMatchObject({ paymentStatus: "PAID" });
+  });
+
+  it("returns zero when no order is eligible", async () => {
+    vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 0 });
+
+    await expect(markAllPaidAsReady()).resolves.toEqual({ updatedCount: 0 });
+  });
+
+  it("does not touch the database without a session", async () => {
+    vi.mocked(requireSession).mockRejectedValue(new Error("Unauthorized"));
+
+    await expect(markAllPaidAsReady()).rejects.toThrow("Unauthorized");
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
   });
 });
 

@@ -1,6 +1,7 @@
 import { OrderStatus, PaymentStatus } from "@/generated/prisma/client";
 import { describe, expect, it } from "vitest";
 import {
+  availableAdminTransitions,
   canAdminTransition,
   getAdminTransitionRule,
   nextAdminStatus,
@@ -14,6 +15,8 @@ describe("canAdminTransition", () => {
     // Offered steps
     ["PENDING", "PAID", "READY_FOR_PICKUP", true],
     ["READY_FOR_PICKUP", "PAID", "COMPLETED", true],
+    ["PENDING", "PAID", "PREPARING", true],
+    ["PREPARING", "PAID", "READY_FOR_PICKUP", true],
     // Closing a ready order stays possible after a refund or chargeback
     ["READY_FOR_PICKUP", "REFUNDED", "COMPLETED", true],
     ["READY_FOR_PICKUP", "CHARGEBACK_LOST", "COMPLETED", true],
@@ -26,6 +29,16 @@ describe("canAdminTransition", () => {
     ["COMPLETED", "PAID", "READY_FOR_PICKUP", false],
     ["PENDING", "PAID", "COMPLETED", false],
     ["PENDING", "PAID", "CANCELED", false],
+    // Preparing needs payment and cannot be skipped backwards or forwards
+    ["PENDING", "PENDING", "PREPARING", false],
+    ["PENDING", "IN_REVIEW", "PREPARING", false],
+    ["PREPARING", "REFUNDED", "READY_FOR_PICKUP", false],
+    ["PREPARING", "PAID", "COMPLETED", false],
+    ["PREPARING", "PAID", "PREPARING", false],
+    ["PREPARING", "PAID", "PENDING", false],
+    ["READY_FOR_PICKUP", "PAID", "PREPARING", false],
+    ["COMPLETED", "PAID", "PREPARING", false],
+    ["CANCELED", "PAID", "PREPARING", false],
     // A canceled order is never resurrected by an admin
     ["CANCELED", "PAID", "READY_FOR_PICKUP", false],
   ] as const)("%s / %s -> %s: %s", (current, payment, target, expected) => {
@@ -46,7 +59,9 @@ describe("canAdminTransition", () => {
 
     expect(allowed.sort()).toEqual(
       [
+        "PENDING/PAID->PREPARING",
         "PENDING/PAID->READY_FOR_PICKUP",
+        "PREPARING/PAID->READY_FOR_PICKUP",
         ...paymentStatuses.map((p) => `READY_FOR_PICKUP/${p}->COMPLETED`),
       ].sort(),
     );
@@ -69,8 +84,9 @@ describe("canAdminTransition", () => {
 });
 
 describe("nextAdminStatus", () => {
-  it("offers the step the buttons show", () => {
-    expect(nextAdminStatus("PENDING", "PAID")).toBe("READY_FOR_PICKUP");
+  it("offers the first step the buttons show", () => {
+    expect(nextAdminStatus("PENDING", "PAID")).toBe("PREPARING");
+    expect(nextAdminStatus("PREPARING", "PAID")).toBe("READY_FOR_PICKUP");
     expect(nextAdminStatus("READY_FOR_PICKUP", "PAID")).toBe("COMPLETED");
     expect(nextAdminStatus("PENDING", "PENDING")).toBeNull();
     expect(nextAdminStatus("COMPLETED", "PAID")).toBeNull();
@@ -82,6 +98,45 @@ describe("nextAdminStatus", () => {
       for (const payment of paymentStatuses) {
         const next = nextAdminStatus(current, payment);
         if (next) expect(canAdminTransition(current, payment, next)).toBe(true);
+      }
+    }
+  });
+});
+
+describe("availableAdminTransitions", () => {
+  it("offers preparing and the ready shortcut for a paid pending order", () => {
+    expect(availableAdminTransitions("PENDING", "PAID")).toEqual([
+      "PREPARING",
+      "READY_FOR_PICKUP",
+    ]);
+  });
+
+  it("offers one step for the other orders that can progress", () => {
+    expect(availableAdminTransitions("PREPARING", "PAID")).toEqual([
+      "READY_FOR_PICKUP",
+    ]);
+    expect(availableAdminTransitions("READY_FOR_PICKUP", "PAID")).toEqual([
+      "COMPLETED",
+    ]);
+  });
+
+  it("offers nothing for unpaid, finished or canceled orders", () => {
+    expect(availableAdminTransitions("PENDING", "PENDING")).toEqual([]);
+    expect(availableAdminTransitions("PREPARING", "REFUNDED")).toEqual([]);
+    expect(availableAdminTransitions("COMPLETED", "PAID")).toEqual([]);
+    expect(availableAdminTransitions("CANCELED", "PAID")).toEqual([]);
+  });
+
+  it("matches canAdminTransition for every combination", () => {
+    for (const current of orderStatuses) {
+      for (const payment of paymentStatuses) {
+        for (const target of orderStatuses) {
+          expect(
+            availableAdminTransitions(current, payment).includes(
+              target as never,
+            ),
+          ).toBe(canAdminTransition(current, payment, target));
+        }
       }
     }
   });

@@ -44,6 +44,7 @@ const PAYMENT_BADGES: Record<
 
 const FULFILLMENT_LABELS: Record<OrderStatus, string> = {
   PENDING: "Aguardando preparo",
+  PREPARING: "Em preparo",
   READY_FOR_PICKUP: "Pronto p/ retirada",
   COMPLETED: "Retirado",
   CANCELED: "Cancelado",
@@ -66,7 +67,9 @@ export default async function AdminOrdersPage({
 
   const orders = await getAdminOrders(filter);
   const hasPaidOrders = orders.some(
-    (o) => o.paymentStatus === "PAID" && o.status === "PENDING",
+    (o) =>
+      o.paymentStatus === "PAID" &&
+      (o.status === "PENDING" || o.status === "PREPARING"),
   );
 
   return (
@@ -154,6 +157,7 @@ export default async function AdminOrdersPage({
                   className={`break-inside-avoid transition-colors hover:bg-zinc-50 print:hover:bg-transparent ${
                     order.paymentStatus === "PAID" &&
                     (order.status === "PENDING" ||
+                      order.status === "PREPARING" ||
                       order.status === "READY_FOR_PICKUP")
                       ? ""
                       : "print:hidden"

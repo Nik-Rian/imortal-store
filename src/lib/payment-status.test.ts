@@ -28,6 +28,18 @@ describe("resolveFulfillmentStatus", () => {
   });
 
   it.each([
+    "PARTIALLY_REFUNDED",
+    "REFUNDED",
+    "CHARGEBACK_IN_REVIEW",
+    "CHARGEBACK_LOST",
+  ] as const)(
+    "keeps PREPARING unchanged when payment becomes %s",
+    (payment) => {
+      expect(resolveFulfillmentStatus("PREPARING", payment)).toBe("PREPARING");
+    },
+  );
+
+  it.each([
     "FAILED",
     "CANCELED",
     "EXPIRED",
@@ -224,6 +236,26 @@ describe("resolvePaymentSync (local status x provider status)", () => {
       undefined,
       "REFUNDED",
       "CANCELED",
+      true,
+    ],
+    [
+      "refund keeps PREPARING",
+      "PAID",
+      "PREPARING",
+      "refunded",
+      undefined,
+      "REFUNDED",
+      "PREPARING",
+      true,
+    ],
+    [
+      "chargeback opened keeps PREPARING",
+      "PAID",
+      "PREPARING",
+      "charged_back",
+      "in_process",
+      "CHARGEBACK_IN_REVIEW",
+      "PREPARING",
       true,
     ],
     [
