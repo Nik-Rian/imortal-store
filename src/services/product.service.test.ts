@@ -1,12 +1,19 @@
 import { prisma } from "@/lib/prisma";
 import { buildStockKey } from "@/lib/stock-key";
+import { getStorefrontDrop } from "@/services/drop.service";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { checkProductAvailability } from "./product.service";
+import { checkProductAvailability, getProductById, getProductBySlug, getProducts } from "./product.service";
+
 
 vi.mock("react", () => ({ cache: <T>(fn: T) => fn }));
+
 vi.mock("@/lib/prisma", () => ({
-  prisma: { product: { findUnique: vi.fn() } },
+  prisma: {
+    product: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+  },
 }));
+
+vi.mock("@/services/drop.service", () => ({ getStorefrontDrop: vi.fn() }));
 
 const day = 86_400_000;
 
@@ -126,5 +133,47 @@ describe("checkProductAvailability", () => {
     expect(
       (await checkProductAvailability("p1", undefined, "s1", 1)).available,
     ).toBe(true);
+  });
+});
+
+describe("catalogue reads", () => {
+  const databaseError = new Error("connection refused");
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getStorefrontDrop).mockResolvedValue({ id: "d1" } as never);
+  });
+
+  it("getProducts propagates database errors", async () => {
+    vi.mocked(prisma.product.findMany).mockRejectedValue(databaseError);
+    await expect(getProducts()).rejects.toThrow("connection refused");
+  });
+
+  it("getProducts propagates a failure to load the storefront drop", async () => {
+    vi.mocked(getStorefrontDrop).mockRejectedValue(databaseError);
+    await expect(getProducts()).rejects.toThrow("connection refused");
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+  });
+
+  it("getProductBySlug propagates database errors", async () => {
+    vi.mocked(prisma.product.findFirst).mockRejectedValue(databaseError);
+    await expect(getProductBySlug("camiseta")).rejects.toThrow(
+      "connection refused",
+    );
+  });
+
+  it("getProductBySlug returns null when no product matches", async () => {
+    vi.mocked(prisma.product.findFirst).mockResolvedValue(null);
+    await expect(getProductBySlug("missing")).resolves.toBeNull();
+  });
+
+  it("getProductById propagates database errors", async () => {
+    vi.mocked(prisma.product.findUnique).mockRejectedValue(databaseError);
+    await expect(getProductById("p1")).rejects.toThrow("connection refused");
+  });
+
+  it("getProductById returns null when the product does not exist", async () => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue(null);
+    await expect(getProductById("missing")).resolves.toBeNull();
   });
 });

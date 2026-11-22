@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createProduct, deleteProduct, updateProduct } from "./product.actions";
 
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     product: {
@@ -193,7 +194,7 @@ function productForm(overrides: Record<string, string | undefined> = {}) {
 
 function updatedProductData() {
   const call = vi.mocked(prisma.product.update).mock.calls[0] as unknown as [
-    { data: { priceCents?: number; isAvailable?: boolean } },
+    { data: { priceCents?: number; isAvailable?: boolean; slug?: string } },
   ];
   return call[0].data;
 }
@@ -346,6 +347,38 @@ describe("updateProduct (price, availability and page revalidation)", () => {
     } as never);
     await updateProduct("p1", productForm({ slug: "camiseta" }));
     expect(revalidatePath).toHaveBeenCalledWith("/produto/camiseta");
+    expect(revalidatePath).toHaveBeenCalledWith("/produto/camiseta-antiga");
+  });
+});
+
+describe("updateProduct (slug)", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue({
+      slug: "camiseta-antiga",
+      images: [],
+      variants: [],
+      sizes: [],
+    } as never);
+    vi.mocked(prisma.product.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.$transaction).mockResolvedValue([] as never);
+  });
+
+  it("keeps the stored slug when the slug field is absent", async () => {
+    await updateProduct("p1", productForm({ slug: undefined }));
+    expect(updatedProductData().slug).toBe("camiseta-antiga");
+    expect(revalidatePath).toHaveBeenCalledWith("/produto/camiseta-antiga");
+  });
+
+  it("keeps the stored slug when the slug field is blank", async () => {
+    await updateProduct("p1", productForm({ slug: "" }));
+    expect(updatedProductData().slug).toBe("camiseta-antiga");
+  });
+
+  it("stores the posted slug when it was changed deliberately", async () => {
+    await updateProduct("p1", productForm({ slug: "camiseta-nova" }));
+    expect(updatedProductData().slug).toBe("camiseta-nova");
+    expect(revalidatePath).toHaveBeenCalledWith("/produto/camiseta-nova");
     expect(revalidatePath).toHaveBeenCalledWith("/produto/camiseta-antiga");
   });
 });

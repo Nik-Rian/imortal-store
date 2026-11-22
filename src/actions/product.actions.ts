@@ -3,16 +3,11 @@
 import { deleteBlobImages } from "@/actions/blob.actions";
 import { requireSession } from "@/lib/auth-guard";
 import { prisma } from "@/lib/prisma";
-import {
-  applyBundleRules,
-  productSchema,
-} from "@/lib/validations/product.schema";
-import {
-  assertBundleIntegrity,
-  BundleIntegrityError,
-} from "@/services/bundle.service";
+import { applyBundleRules, productSchema } from "@/lib/validations/product.schema";
+import { assertBundleIntegrity, BundleIntegrityError } from "@/services/bundle.service";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+
 
 type ActionFailure = { success: false; error: string };
 type ActionResult = { success: true } | ActionFailure;
@@ -117,7 +112,7 @@ export async function createProduct(
   let componentsInput: unknown = [];
   try {
     if (rawComponents) componentsInput = JSON.parse(rawComponents);
-  } catch {}
+  } catch { }
 
   const validationResult = productSchema.safeParse({
     name: formData.get("name"),
@@ -222,6 +217,15 @@ export async function updateProduct(
 ): Promise<ActionFailure> {
   await requireSession();
 
+  const currentProduct = await prisma.product.findUnique({
+    where: { id },
+    include: { variants: true, sizes: true },
+  });
+
+  if (!currentProduct) {
+    return { success: false, error: "Produto não encontrado." };
+  }
+
   const rawPrice = formData.get("priceCents") as string | null;
 
   const rawSizes = formData.get("sizes") as string;
@@ -265,11 +269,19 @@ export async function updateProduct(
   let componentsInput: unknown = [];
   try {
     if (rawComponents) componentsInput = JSON.parse(rawComponents);
-  } catch {}
+  } catch { }
+
+  // A missing or blank slug keeps the stored one, so links that were already
+  // shared keep working when a product is saved without a deliberate change.
+  const postedSlug = formData.get("slug");
+  const slugInput =
+    typeof postedSlug === "string" && postedSlug.trim() !== ""
+      ? postedSlug
+      : currentProduct.slug;
 
   const validationResult = productSchema.safeParse({
     name: formData.get("name"),
-    slug: formData.get("slug"),
+    slug: slugInput,
     description: formData.get("description"),
     dropId: formData.get("dropId"),
     priceCents: rawPrice ? parseInt(rawPrice, 10) : NaN,
@@ -297,15 +309,6 @@ export async function updateProduct(
   const { name, slug, description, dropId, priceCents, sizes, variants } =
     input;
   const newImages = formData.getAll("images") as string[];
-
-  const currentProduct = await prisma.product.findUnique({
-    where: { id },
-    include: { variants: true, sizes: true },
-  });
-
-  if (!currentProduct) {
-    return { success: false, error: "Produto não encontrado." };
-  }
 
   const integrityError = await getBundleIntegrityError({
     productId: id,

@@ -7,8 +7,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-// Time-based ISR fallback: revalidate product details every 1 hour (3600 seconds)
-export const revalidate = 3600;
+
+// Rendered on every request so price and availability edits are visible
+// immediately.
+export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ slug: string }>;

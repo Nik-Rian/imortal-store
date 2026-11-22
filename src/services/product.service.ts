@@ -3,81 +3,44 @@ import { buildStockKey } from "@/lib/stock-key";
 import { getStorefrontDrop } from "@/services/drop.service";
 import { cache } from "react";
 
+
 export interface GetProductsOptions {
   activeOnly?: boolean;
 }
 
+// Database errors are intentionally not caught in the read functions below:
+// they must reach the error boundary and must never be cached as an empty
+// result. A missing record is still reported as null (or an empty list when
+// there is no storefront drop).
 export const getProducts = cache(async (options: GetProductsOptions = {}) => {
   const { activeOnly = true } = options;
 
-  try {
-    // activeOnly is the storefront view (BD-01): only the products of the drop
-    // the storefront presents, whether its sales window is open or closed.
-    const storefrontDrop = activeOnly ? await getStorefrontDrop() : null;
-    if (activeOnly && !storefrontDrop) return [];
+  // activeOnly is the storefront view: only the products of the drop
+  // the storefront presents, whether its sales window is open or closed.
+  const storefrontDrop = activeOnly ? await getStorefrontDrop() : null;
+  if (activeOnly && !storefrontDrop) return [];
 
-    return await prisma.product.findMany({
-      where: storefrontDrop ? { dropId: storefrontDrop.id } : undefined,
-      include: {
-        drop: true,
-      },
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-    });
-  } catch (error) {
-    console.warn(
-      "[getProducts] Database connection failed. Returning fallback empty list.",
-      error,
-    );
-    return [];
-  }
+  return prisma.product.findMany({
+    where: storefrontDrop ? { dropId: storefrontDrop.id } : undefined,
+    include: {
+      drop: true,
+    },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+  });
 });
 
 export const getProductBySlug = cache(
   async (slug: string, options: GetProductsOptions = {}) => {
     const { activeOnly = true } = options;
 
-    try {
-      const storefrontDrop = activeOnly ? await getStorefrontDrop() : null;
-      if (activeOnly && !storefrontDrop) return null;
+    const storefrontDrop = activeOnly ? await getStorefrontDrop() : null;
+    if (activeOnly && !storefrontDrop) return null;
 
-      return await prisma.product.findFirst({
-        where: {
-          slug,
-          ...(storefrontDrop ? { dropId: storefrontDrop.id } : {}),
-        },
-        include: {
-          drop: true,
-          sizes: {
-            orderBy: { sortOrder: "asc" },
-          },
-          variants: {
-            orderBy: { sortOrder: "asc" },
-          },
-          components: {
-            orderBy: { componentProduct: { name: "asc" } },
-            select: {
-              quantity: true,
-              componentProduct: {
-                select: { id: true, name: true, images: true },
-              },
-            },
-          },
-        },
-      });
-    } catch (error) {
-      console.warn(
-        `[getProductBySlug] Database connection failed for slug '${slug}'. Returning null.`,
-        error,
-      );
-      return null;
-    }
-  },
-);
-
-export const getProductById = cache(async (id: string) => {
-  try {
-    return await prisma.product.findUnique({
-      where: { id },
+    return prisma.product.findFirst({
+      where: {
+        slug,
+        ...(storefrontDrop ? { dropId: storefrontDrop.id } : {}),
+      },
       include: {
         drop: true,
         sizes: {
@@ -88,17 +51,35 @@ export const getProductById = cache(async (id: string) => {
         },
         components: {
           orderBy: { componentProduct: { name: "asc" } },
+          select: {
+            quantity: true,
+            componentProduct: {
+              select: { id: true, name: true, images: true },
+            },
+          },
         },
-        _count: { select: { componentOf: true } },
       },
     });
-  } catch (error) {
-    console.warn(
-      `[getProductById] Database connection failed for id '${id}'. Returning null.`,
-      error,
-    );
-    return null;
-  }
+  },
+);
+
+export const getProductById = cache(async (id: string) => {
+  return prisma.product.findUnique({
+    where: { id },
+    include: {
+      drop: true,
+      sizes: {
+        orderBy: { sortOrder: "asc" },
+      },
+      variants: {
+        orderBy: { sortOrder: "asc" },
+      },
+      components: {
+        orderBy: { componentProduct: { name: "asc" } },
+      },
+      _count: { select: { componentOf: true } },
+    },
+  });
 });
 
 export interface AvailabilityCheckResult {
