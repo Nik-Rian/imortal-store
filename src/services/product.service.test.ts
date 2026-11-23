@@ -69,6 +69,7 @@ describe("checkProductAvailability", () => {
                   stockKey: buildStockKey("p1", variantId, sizeId),
                   onHand: 3,
                   reserved: 0,
+                  isAvailable: true,
                 },
               ]
             : [],
@@ -121,7 +122,14 @@ describe("checkProductAvailability", () => {
     mockProduct(
       makeProduct({
         controlStock: true,
-        stockItems: [{ stockKey: buildStockKey("p1"), onHand: 5, reserved: 4 }],
+        stockItems: [
+          {
+            stockKey: buildStockKey("p1"),
+            onHand: 5,
+            reserved: 4,
+            isAvailable: true,
+          },
+        ],
       }),
     );
     expect(
@@ -132,11 +140,38 @@ describe("checkProductAvailability", () => {
     ).toBe(false);
   });
 
+  it("is unavailable when the stock row is manually withdrawn", async () => {
+    mockProduct(
+      makeProduct({
+        controlStock: true,
+        stockItems: [
+          {
+            stockKey: buildStockKey("p1"),
+            onHand: 10,
+            reserved: 0,
+            isAvailable: false,
+          },
+        ],
+      }),
+    );
+    expect(await checkProductAvailability("p1")).toEqual({
+      available: false,
+      reason: "OUT_OF_STOCK",
+    });
+  });
+
   it("ignores a stale size id when the product has no sizes", async () => {
     mockProduct(
       makeProduct({
         controlStock: true,
-        stockItems: [{ stockKey: buildStockKey("p1"), onHand: 2, reserved: 0 }],
+        stockItems: [
+          {
+            stockKey: buildStockKey("p1"),
+            onHand: 2,
+            reserved: 0,
+            isAvailable: true,
+          },
+        ],
       }),
     );
     expect(
@@ -193,5 +228,15 @@ describe("catalogue reads", () => {
   it("getProductById returns null when the product does not exist", async () => {
     vi.mocked(prisma.product.findUnique).mockResolvedValue(null);
     await expect(getProductById("missing")).resolves.toBeNull();
+  });
+
+  it("getProductById includes the stock rows", async () => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue(null);
+    await getProductById("p1");
+    expect(prisma.product.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({ stockItems: true }),
+      }),
+    );
   });
 });

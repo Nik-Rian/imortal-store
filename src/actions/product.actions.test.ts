@@ -24,6 +24,25 @@ vi.mock("@/lib/prisma", () => ({
       deleteMany: vi.fn(),
       createMany: vi.fn(),
     },
+    productSize: {
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
+      update: vi.fn(),
+      createMany: vi.fn(),
+    },
+    productVariant: {
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
+      update: vi.fn(),
+      createMany: vi.fn(),
+    },
+    stockItem: {
+      findMany: vi.fn(),
+      createMany: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    stockReservation: { count: vi.fn() },
+    orderItem: { count: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -59,6 +78,10 @@ function bundleForm(overrides: Record<string, string> = {}) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // Interactive transactions run their callback against the mocked client.
+  vi.mocked(prisma.$transaction).mockImplementation((async (
+    callback: (tx: unknown) => unknown,
+  ) => callback(prisma)) as never);
 });
 
 describe("createProduct (bundles)", () => {
@@ -127,7 +150,6 @@ describe("updateProduct (bundles)", () => {
     vi.mocked(prisma.product.findMany).mockResolvedValue([
       { id: "c1", isBundle: false, dropId: "d1" },
     ] as never);
-    vi.mocked(prisma.$transaction).mockResolvedValue([] as never);
     await updateProduct("b1", bundleForm());
     expect(prisma.bundleComponent.deleteMany).toHaveBeenCalledWith({
       where: { bundleId: "b1" },
@@ -163,6 +185,7 @@ describe("deleteProduct (bundles)", () => {
       componentOf: [],
     } as never);
     vi.mocked(prisma.product.delete).mockResolvedValue({} as never);
+    vi.mocked(prisma.stockReservation.count).mockResolvedValue(0);
     const result = await deleteProduct("b1");
     expect(result).toEqual({ success: true });
     expect(prisma.product.delete).toHaveBeenCalledWith({ where: { id: "b1" } });
@@ -290,7 +313,6 @@ describe("updateProduct (price, availability and page revalidation)", () => {
     } as never);
     vi.mocked(prisma.product.findMany).mockResolvedValue([]);
     vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.$transaction).mockResolvedValue([] as never);
   });
   it("rejects a payload that only carries the legacy price field", async () => {
     const result = await updateProduct(
@@ -366,7 +388,6 @@ describe("updateProduct (slug)", () => {
     } as never);
     vi.mocked(prisma.product.findMany).mockResolvedValue([]);
     vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([]);
-    vi.mocked(prisma.$transaction).mockResolvedValue([] as never);
   });
 
   it("keeps the stored slug when the slug field is absent", async () => {
@@ -453,5 +474,226 @@ describe("setProductAvailability", () => {
     expect(result.success === false && result.error).not.toContain("db down");
     expect(revalidatePath).not.toHaveBeenCalled();
     logSpy.mockRestore();
+  });
+});
+
+function trackedForm(overrides: Record<string, string | undefined> = {}) {
+  return productForm({
+    controlStock: "true",
+    hasSizes: "true",
+    hasVariants: "true",
+    sizes: JSON.stringify([{ id: "s1", size: "M" }]),
+    variants: JSON.stringify([{ id: "v1", name: "Preta" }]),
+    stock: JSON.stringify([
+      { variantName: "Preta", sizeLabel: "M", onHand: 5, isAvailable: true },
+    ]),
+    ...overrides,
+  });
+}
+
+function mockPersistedOptions() {
+  vi.mocked(prisma.productVariant.findMany).mockResolvedValue([
+    { id: "v1", name: "Preta" },
+  ] as never);
+  vi.mocked(prisma.productSize.findMany).mockResolvedValue([
+    { id: "s1", size: "M" },
+  ] as never);
+}
+
+describe("createProduct (stock)", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.product.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.product.create).mockResolvedValue({ id: "p9" } as never);
+    vi.mocked(prisma.stockItem.findMany).mockResolvedValue([]);
+    mockPersistedOptions();
+  });
+
+  it("creates stock rows keyed by the generated option ids", async () => {
+    await createProduct(
+      trackedForm({
+        sizes: JSON.stringify([{ size: "M" }]),
+        variants: JSON.stringify([{ name: "Preta" }]),
+      }),
+    );
+    expect(prisma.stockItem.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          productId: "p9",
+          variantId: "v1",
+          sizeId: "s1",
+          stockKey: "p9#v1#s1",
+          onHand: 5,
+          isAvailable: true,
+        },
+      ],
+    });
+  });
+
+  it("does not touch stock when tracking is off", async () => {
+    await createProduct(trackedForm({ controlStock: "false" }));
+    expect(prisma.stockItem.findMany).not.toHaveBeenCalled();
+    expect(prisma.stockItem.createMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects a negative quantity", async () => {
+    const result = await createProduct(
+      trackedForm({
+        stock: JSON.stringify([
+          {
+            variantName: "Preta",
+            sizeLabel: "M",
+            onHand: -1,
+            isAvailable: true,
+          },
+        ]),
+      }),
+    );
+    expect(result.success).toBe(false);
+    expect(prisma.product.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateProduct (stock)", () => {
+  beforeEach(() => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue({
+      slug: "camiseta",
+      images: [],
+      variants: [{ id: "v1", name: "Preta", image: null }],
+      sizes: [{ id: "s1", size: "M" }],
+    } as never);
+    vi.mocked(prisma.product.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.stockReservation.count).mockResolvedValue(0);
+    vi.mocked(prisma.orderItem.count).mockResolvedValue(0);
+    vi.mocked(prisma.stockItem.findMany).mockResolvedValue([
+      {
+        id: "si1",
+        stockKey: "p1#v1#s1",
+        onHand: 2,
+        reserved: 1,
+        isAvailable: true,
+      },
+    ] as never);
+    mockPersistedOptions();
+  });
+
+  it("updates the existing row with the reserved guard in the WHERE clause", async () => {
+    vi.mocked(prisma.stockItem.updateMany).mockResolvedValue({ count: 1 });
+    await updateProduct("p1", trackedForm());
+    expect(prisma.stockItem.updateMany).toHaveBeenCalledWith({
+      where: { id: "si1", reserved: { lte: 5 } },
+      data: { onHand: 5, isAvailable: true },
+    });
+    expect(prisma.stockItem.createMany).not.toHaveBeenCalled();
+  });
+
+  it("creates a row for a combination that has none yet", async () => {
+    vi.mocked(prisma.stockItem.findMany).mockResolvedValue([]);
+    await updateProduct("p1", trackedForm());
+    expect(prisma.stockItem.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          productId: "p1",
+          variantId: "v1",
+          sizeId: "s1",
+          stockKey: "p1#v1#s1",
+          onHand: 5,
+          isAvailable: true,
+        },
+      ],
+    });
+  });
+
+  it("persists a manually withdrawn combination", async () => {
+    vi.mocked(prisma.stockItem.updateMany).mockResolvedValue({ count: 1 });
+    await updateProduct(
+      "p1",
+      trackedForm({
+        stock: JSON.stringify([
+          {
+            variantName: "Preta",
+            sizeLabel: "M",
+            onHand: 2,
+            isAvailable: false,
+          },
+        ]),
+      }),
+    );
+    expect(prisma.stockItem.updateMany).toHaveBeenCalledWith({
+      where: { id: "si1", reserved: { lte: 2 } },
+      data: { onHand: 2, isAvailable: false },
+    });
+  });
+
+  it("rejects a quantity below the reserved amount", async () => {
+    vi.mocked(prisma.stockItem.findMany).mockResolvedValue([
+      {
+        id: "si1",
+        stockKey: "p1#v1#s1",
+        onHand: 6,
+        reserved: 3,
+        isAvailable: true,
+      },
+    ] as never);
+    vi.mocked(prisma.stockItem.updateMany).mockResolvedValue({ count: 0 });
+    const result = await updateProduct("p1", trackedForm());
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/reservada \(3\)/),
+    });
+  });
+
+  it("refuses to remove a size that appears in order history", async () => {
+    vi.mocked(prisma.orderItem.count).mockResolvedValue(1);
+    const result = await updateProduct(
+      "p1",
+      trackedForm({ hasSizes: "false", sizes: "[]", stock: "[]" }),
+    );
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/tamanhos.*indisponíveis/),
+    });
+    expect(prisma.productSize.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses to remove a variant referenced by a reservation", async () => {
+    vi.mocked(prisma.stockReservation.count).mockResolvedValue(1);
+    const result = await updateProduct(
+      "p1",
+      trackedForm({ hasVariants: "false", variants: "[]", stock: "[]" }),
+    );
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/variantes.*indisponíveis/),
+    });
+    expect(prisma.productVariant.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("leaves stock rows untouched when tracking is off", async () => {
+    await updateProduct(
+      "p1",
+      trackedForm({ controlStock: "false", stock: "[]" }),
+    );
+    expect(prisma.stockItem.findMany).not.toHaveBeenCalled();
+    expect(prisma.stockItem.updateMany).not.toHaveBeenCalled();
+    expect(prisma.stockItem.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteProduct (stock reservations)", () => {
+  it("refuses to delete a product with stock reservations", async () => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue({
+      images: [],
+      variants: [],
+      componentOf: [],
+    } as never);
+    vi.mocked(prisma.stockReservation.count).mockResolvedValue(2);
+    const result = await deleteProduct("p1");
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/reservas/),
+    });
+    expect(prisma.product.delete).not.toHaveBeenCalled();
   });
 });

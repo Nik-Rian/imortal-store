@@ -130,3 +130,31 @@ describe("applyBundleRules", () => {
     expect(result.controlStock).toBe(true);
   });
 });
+
+describe("productSchema stock rows", () => {
+  const row = {
+    variantName: null,
+    sizeLabel: null,
+    onHand: 3,
+    isAvailable: true,
+  };
+
+  it("accepts valid stock rows", () => {
+    expect(productSchema.safeParse({ ...base, stock: [row] }).success).toBe(
+      true,
+    );
+  });
+
+  it.each([-1, 1.5])("rejects quantity %s", (onHand) => {
+    expect(
+      productSchema.safeParse({ ...base, stock: [{ ...row, onHand }] }).success,
+    ).toBe(false);
+  });
+
+  it("rejects duplicate combinations", () => {
+    expect(
+      productSchema.safeParse({ ...base, stock: [row, { ...row, onHand: 1 }] })
+        .success,
+    ).toBe(false);
+  });
+});

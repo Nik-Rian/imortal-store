@@ -76,6 +76,7 @@ export const getProductById = cache(async (id: string) => {
       components: {
         orderBy: { componentProduct: { name: "asc" } },
       },
+      stockItems: true,
       _count: { select: { componentOf: true } },
     },
   });
@@ -144,8 +145,13 @@ export async function checkProductAvailability(
       usesVariants ? variantId : null,
       usesSizes ? sizeId : null,
     );
+
     const stockItem = product.stockItems.find((s) => s.stockKey === key);
-    if (!stockItem) return { available: false, reason: "OUT_OF_STOCK" };
+
+    if (!stockItem || !stockItem.isAvailable) {
+      return { available: false, reason: "OUT_OF_STOCK" };
+    }
+
     if (stockItem.onHand - stockItem.reserved < requestedQuantity) {
       return { available: false, reason: "OUT_OF_STOCK" };
     }

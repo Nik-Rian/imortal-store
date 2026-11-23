@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { StockItemSnapshot } from "@/lib/stock-matrix";
 import type { ProductWithVariants } from "@/types";
 import {
   fireEvent,
@@ -27,7 +28,10 @@ const componentOptions = [
   { id: "p3", name: "Boné Antigo", dropId: "d2", isBundle: false },
 ];
 
-function renderForm(initialData?: ProductWithVariants) {
+function renderForm(
+  initialData?: ProductWithVariants,
+  initialStockItems?: StockItemSnapshot[],
+) {
   const action = vi.fn().mockResolvedValue(undefined);
   render(
     <ProductForm
@@ -35,6 +39,7 @@ function renderForm(initialData?: ProductWithVariants) {
       drops={drops}
       componentOptions={componentOptions}
       initialData={initialData}
+      initialStockItems={initialStockItems}
     />,
   );
   return action;
@@ -318,5 +323,194 @@ describe("ProductForm price and availability contract", () => {
     const formData = action.mock.calls[0][0] as FormData;
     expect(formData.get("priceCents")).toBe("4990");
     expect(formData.get("isAvailable")).toBe("true");
+  });
+});
+
+const sizeRow = (id: string, size: string, isAvailable = true) => ({
+  id,
+  productId: "b1",
+  size,
+  isAvailable,
+  sortOrder: 0,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
+const variantRow = (id: string, name: string, isAvailable = true) => ({
+  id,
+  productId: "b1",
+  name,
+  image: null,
+  isAvailable,
+  sortOrder: 0,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
+const trackedProduct = (overrides: Partial<ProductWithVariants> = {}) =>
+  ({ ...baseProduct, controlStock: true, ...overrides }) as ProductWithVariants;
+
+describe("ProductForm stock matrix", () => {
+  it("renders a single row for a product without options", () => {
+    renderForm(trackedProduct());
+    expect(screen.getByLabelText("Quantidade de Produto")).toBeTruthy();
+  });
+
+  it("renders one row per variant", () => {
+    renderForm(
+      trackedProduct({
+        hasVariants: true,
+        variants: [variantRow("v1", "Preta"), variantRow("v2", "Branca")],
+      }),
+    );
+    expect(screen.getByLabelText("Quantidade de Preta")).toBeTruthy();
+    expect(screen.getByLabelText("Quantidade de Branca")).toBeTruthy();
+  });
+
+  it("renders one row per size", () => {
+    renderForm(
+      trackedProduct({
+        hasSizes: true,
+        sizes: [sizeRow("s1", "P"), sizeRow("s2", "M")],
+      }),
+    );
+    expect(screen.getByLabelText("Quantidade de P")).toBeTruthy();
+    expect(screen.getByLabelText("Quantidade de M")).toBeTruthy();
+  });
+
+  it("renders variant x size rows", () => {
+    renderForm(
+      trackedProduct({
+        hasVariants: true,
+        hasSizes: true,
+        variants: [variantRow("v1", "Preta"), variantRow("v2", "Branca")],
+        sizes: [sizeRow("s1", "P"), sizeRow("s2", "M")],
+      }),
+    );
+    expect(screen.getAllByLabelText(/^Quantidade de /)).toHaveLength(4);
+    expect(screen.getByLabelText("Quantidade de Branca / M")).toBeTruthy();
+  });
+
+  it("shows stored quantity, reserved and availability and posts edits", async () => {
+    const action = renderForm(
+      trackedProduct({
+        hasVariants: true,
+        hasSizes: true,
+        variants: [variantRow("v1", "Preta")],
+        sizes: [sizeRow("s1", "P")],
+      }),
+      [
+        {
+          variantId: "v1",
+          sizeId: "s1",
+          onHand: 3,
+          reserved: 1,
+          isAvailable: true,
+        },
+      ],
+    );
+    const quantity = screen.getByLabelText(
+      "Quantidade de Preta / P",
+    ) as HTMLInputElement;
+    expect(quantity.value).toBe("3");
+    expect(within(quantity.closest("tr")!).getByText("1")).toBeTruthy();
+
+    fireEvent.change(quantity, { target: { value: "7" } });
+    fireEvent.click(screen.getByLabelText("Disponível para venda: Preta / P"));
+    fireEvent.submit(document.querySelector("form")!);
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    const formData = action.mock.calls[0][0] as FormData;
+    expect(JSON.parse(formData.get("stock") as string)).toEqual([
+      { variantName: "Preta", sizeLabel: "P", onHand: 7, isAvailable: false },
+    ]);
+  });
+
+  it("keeps entered quantities when a variant is renamed", () => {
+    renderForm(
+      trackedProduct({
+        hasVariants: true,
+        hasSizes: true,
+        variants: [variantRow("v1", "Preta")],
+        sizes: [sizeRow("s1", "P")],
+      }),
+      [
+        {
+          variantId: "v1",
+          sizeId: "s1",
+          onHand: 3,
+          reserved: 0,
+          isAvailable: true,
+        },
+      ],
+    );
+    fireEvent.change(screen.getByDisplayValue("Preta"), {
+      target: { value: "Preto" },
+    });
+    expect(
+      (screen.getByLabelText("Quantidade de Preto / P") as HTMLInputElement)
+        .value,
+    ).toBe("3");
+  });
+
+  it("hides the matrix and posts an empty stock list when tracking is off", async () => {
+    const action = renderForm(trackedProduct());
+    fireEvent.click(screen.getByLabelText("Controlar Estoque"));
+    expect(screen.queryByLabelText("Quantidade de Produto")).toBeNull();
+
+    fireEvent.submit(document.querySelector("form")!);
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    expect((action.mock.calls[0][0] as FormData).get("stock")).toBe("[]");
+
+    fireEvent.click(screen.getByLabelText("Controlar Estoque"));
+    expect(screen.getByLabelText("Quantidade de Produto")).toBeTruthy();
+  });
+});
+
+describe("ProductForm option availability", () => {
+  it("posts variant and size availability", async () => {
+    const action = renderForm({
+      ...baseProduct,
+      hasVariants: true,
+      hasSizes: true,
+      variants: [variantRow("v1", "Preta")],
+      sizes: [sizeRow("s1", "P")],
+    } as ProductWithVariants);
+
+    fireEvent.click(screen.getByLabelText("Variante Preta disponível"));
+    fireEvent.click(screen.getByLabelText("Tamanho P disponível"));
+    fireEvent.submit(document.querySelector("form")!);
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    const formData = action.mock.calls[0][0] as FormData;
+    expect(JSON.parse(formData.get("variants") as string)[0]).toMatchObject({
+      id: "v1",
+      isAvailable: false,
+    });
+    expect(JSON.parse(formData.get("sizes") as string)[0]).toMatchObject({
+      id: "s1",
+      isAvailable: false,
+    });
+  });
+
+  it("keeps existing sizes when selecting all standard sizes", async () => {
+    const action = renderForm({
+      ...baseProduct,
+      hasSizes: true,
+      sizes: [sizeRow("s1", "P", false)],
+    } as ProductWithVariants);
+
+    fireEvent.click(screen.getByText("Selecionar Todos (P ao XGG)"));
+    fireEvent.submit(document.querySelector("form")!);
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    const sizes = JSON.parse(
+      (action.mock.calls[0][0] as FormData).get("sizes") as string,
+    );
+    expect(sizes).toHaveLength(5);
+    expect(sizes.find((s: { size: string }) => s.size === "P")).toMatchObject({
+      id: "s1",
+      isAvailable: false,
+    });
   });
 });

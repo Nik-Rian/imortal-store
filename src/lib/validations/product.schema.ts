@@ -1,3 +1,4 @@
+import { stockRowKey } from "@/lib/stock-matrix";
 import { z } from "zod";
 
 export const ALLOWED_SIZES = ["P", "M", "G", "GG", "XGG"] as const;
@@ -25,6 +26,17 @@ export const bundleComponentSchema = z.object({
     .int("A quantidade deve ser um número inteiro.")
     .min(1, "A quantidade de cada produto do kit deve ser ao menos 1."),
 });
+
+export const stockRowSchema = z.object({
+  variantName: z.string().min(1).nullable(),
+  sizeLabel: z.enum(ALLOWED_SIZES, { message: "Tamanho inválido." }).nullable(),
+  onHand: z
+    .number({ message: "Informe uma quantidade de estoque válida." })
+    .int("A quantidade em estoque deve ser um número inteiro.")
+    .nonnegative("A quantidade em estoque não pode ser negativa."),
+  isAvailable: z.boolean().default(true),
+});
+
 export const productSchema = z
   .object({
     name: z.string().trim().min(1, "O nome do produto é obrigatório."),
@@ -42,6 +54,7 @@ export const productSchema = z
     sizes: z.array(productSizeSchema).default([]),
     variants: z.array(productVariantSchema).default([]),
     components: z.array(bundleComponentSchema).default([]),
+    stock: z.array(stockRowSchema).default([]),
   })
   .refine(
     (data) => {
@@ -67,6 +80,17 @@ export const productSchema = z
       path: ["components"],
     },
   )
+  .refine(
+    (data) => {
+      const keys = data.stock.map((row) => stockRowKey(row));
+      return new Set(keys).size === keys.length;
+    },
+    {
+      message: "Linhas de estoque duplicadas não permitidas.",
+      path: ["stock"],
+    },
+  )
+
   .refine((data) => !data.isBundle || data.components.length > 0, {
     message: "Um kit precisa de ao menos um produto.",
     path: ["components"],
@@ -87,5 +111,6 @@ export function applyBundleRules(data: ProductInput): ProductInput {
     hasVariants: false,
     sizes: [],
     variants: [],
+    stock: [],
   };
 }

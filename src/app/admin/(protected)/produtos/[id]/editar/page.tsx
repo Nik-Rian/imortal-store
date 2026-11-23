@@ -44,6 +44,7 @@ export default async function EditProductPage({
       <ProductForm
         action={updateProductWithId}
         initialData={product}
+        initialStockItems={product.stockItems}
         drops={drops}
         componentOptions={componentOptions}
       />
