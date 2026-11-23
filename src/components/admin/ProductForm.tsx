@@ -1,12 +1,22 @@
 "use client";
 
 import { deleteBlobImages, uploadProductImage } from "@/actions/blob.actions";
+import { StockMatrix } from "@/components/admin/StockMatrix";
 import {
   IMAGE_SIZE_ERROR,
   IMAGE_TYPE_ERROR,
   isAllowedImageType,
   MAX_IMAGE_BYTES,
 } from "@/lib/media";
+import {
+  buildSellableCombinations,
+  DEFAULT_STOCK_ROW_VALUES,
+  mapStockItemsToRows,
+  renameVariantInStockRows,
+  stockRowKey,
+  type StockItemSnapshot,
+  type StockRowValues,
+} from "@/lib/stock-matrix";
 import { slugify } from "@/lib/utils";
 import {
   ALLOWED_SIZES,
@@ -30,6 +40,7 @@ interface ProductFormProps {
   initialData?: ProductWithVariants;
   drops: DropOption[];
   componentOptions: BundleComponentOption[];
+  initialStockItems?: StockItemSnapshot[];
 }
 
 export function ProductForm({
@@ -37,6 +48,7 @@ export function ProductForm({
   initialData,
   drops,
   componentOptions,
+  initialStockItems,
 }: ProductFormProps) {
   const isEditMode = !!initialData;
 
@@ -133,11 +145,30 @@ export function ProductForm({
     })) ?? [],
   );
 
+  // Stock matrix state, keyed by variant name and size label
+  const [stockRows, setStockRows] = useState<Record<string, StockRowValues>>(
+    () =>
+      mapStockItemsToRows(
+        initialStockItems ?? [],
+        initialData?.variants ?? [],
+        initialData?.sizes ?? [],
+      ),
+  );
+
   // Image Management State
   const [images, setImages] = useState<string[]>(initialData?.images ?? []);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
+
+  const stockCombinations = buildSellableCombinations({
+    hasVariants,
+    variantNames: variants.map((v) => v.name),
+    hasSizes,
+    sizeLabels: [...sizes]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((s) => s.size),
+  });
 
   // --- Handlers for Bundles ---
   const handleDropChange = (dropId: string) => {
@@ -182,12 +213,16 @@ export function ProductForm({
   // --- Handlers for Sizes ---
   const handleAddStandardShirtSizes = () => {
     const defaultSizes: AllowedSize[] = ["P", "M", "G", "GG", "XGG"];
-    setSizes(
-      defaultSizes.map((size) => ({
-        size,
-        sortOrder: ALLOWED_SIZES.indexOf(size),
-        isAvailable: true,
-      })),
+    // Existing entries are kept so their ids and availability survive.
+    setSizes((prev) =>
+      defaultSizes.map(
+        (size) =>
+          prev.find((s) => s.size === size) ?? {
+            size,
+            sortOrder: ALLOWED_SIZES.indexOf(size),
+            isAvailable: true,
+          },
+      ),
     );
     setHasSizes(true);
   };
@@ -206,6 +241,15 @@ export function ProductForm({
     });
   };
 
+  const handleToggleSizeAvailability = (
+    size: AllowedSize,
+    checked: boolean,
+  ) => {
+    setSizes((prev) =>
+      prev.map((s) => (s.size === size ? { ...s, isAvailable: checked } : s)),
+    );
+  };
+
   // --- Handlers for Variants ---
   const handleAddVariant = () => {
     setVariants((prev) => [
@@ -216,9 +260,34 @@ export function ProductForm({
   };
 
   const handleVariantNameChange = (index: number, newName: string) => {
+    const previousName = variants[index]?.name;
     setVariants((prev) =>
       prev.map((v, idx) => (idx === index ? { ...v, name: newName } : v)),
     );
+    // Entered quantities follow the variant when it is renamed.
+    if (previousName !== undefined && previousName !== newName) {
+      setStockRows((prev) =>
+        renameVariantInStockRows(prev, previousName, newName),
+      );
+    }
+  };
+
+  const handleToggleVariantAvailability = (index: number, checked: boolean) => {
+    setVariants((prev) =>
+      prev.map((v, idx) =>
+        idx === index ? { ...v, isAvailable: checked } : v,
+      ),
+    );
+  };
+
+  const handleStockRowChange = (
+    key: string,
+    changes: Partial<StockRowValues>,
+  ) => {
+    setStockRows((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? DEFAULT_STOCK_ROW_VALUES), ...changes },
+    }));
   };
 
   const handleRemoveVariant = (index: number) => {
@@ -331,6 +400,17 @@ export function ProductForm({
     // Ensure sizes are sorted properly by their explicit ALLOWED_SIZES order before saving
     const sortedSizes = [...sizes].sort((a, b) => a.sortOrder - b.sortOrder);
 
+    const stockPayload = stockCombinations.map((combination) => {
+      const values =
+        stockRows[stockRowKey(combination)] ?? DEFAULT_STOCK_ROW_VALUES;
+      return {
+        variantName: combination.variantName,
+        sizeLabel: combination.sizeLabel,
+        onHand: values.onHand,
+        isAvailable: values.isAvailable,
+      };
+    });
+
     const validationResult = productSchema.safeParse({
       name,
       slug: currentSlug,
@@ -346,6 +426,7 @@ export function ProductForm({
       variants: isBundle ? [] : variants,
       isBundle,
       components,
+      stock: isBundle || !controlStock ? [] : stockPayload,
     });
 
     if (!validationResult.success) {
@@ -372,6 +453,7 @@ export function ProductForm({
     formData.set("isAvailable", validData.isAvailable ? "true" : "false");
     formData.set("sizes", JSON.stringify(validData.sizes));
     formData.set("variants", JSON.stringify(validData.variants));
+    formData.set("stock", JSON.stringify(validData.stock));
 
     // dropId is set explicitly because a disabled <select> is left out of FormData.
     formData.set("dropId", validData.dropId);
@@ -463,7 +545,10 @@ export function ProductForm({
             {/* Control Stock */}
             <div className="flex items-center justify-between rounded-md border border-zinc-200 bg-zinc-50 p-4">
               <div className="space-y-0.5">
-                <label className="cursor-pointer text-sm font-medium text-zinc-900">
+                <label
+                  htmlFor="controlStock"
+                  className="cursor-pointer text-sm font-medium text-zinc-900"
+                >
                   Controlar Estoque
                 </label>
                 <p className="text-xs text-zinc-500">
@@ -471,6 +556,7 @@ export function ProductForm({
                 </p>
               </div>
               <input
+                id="controlStock"
                 type="checkbox"
                 checked={controlStock}
                 onChange={(e) => setControlStock(e.target.checked)}
@@ -764,6 +850,30 @@ export function ProductForm({
                 );
               })}
             </div>
+
+            {sizes.length > 0 && (
+              <div className="flex flex-wrap gap-4 pt-1">
+                {[...sizes]
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((s) => (
+                    <label
+                      key={s.size}
+                      className="flex cursor-pointer items-center gap-1.5 text-xs text-zinc-700"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={s.isAvailable}
+                        onChange={(e) =>
+                          handleToggleSizeAvailability(s.size, e.target.checked)
+                        }
+                        disabled={isPending}
+                        className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                      />
+                      {`Tamanho ${s.size} disponível`}
+                    </label>
+                  ))}
+              </div>
+            )}
           </div>
 
           {/* Variants Selection */}
@@ -839,6 +949,22 @@ export function ProductForm({
                       />
                     </div>
                     <div className="flex items-center gap-1">
+                      <label className="flex cursor-pointer items-center gap-1 text-xs text-zinc-700">
+                        <input
+                          type="checkbox"
+                          aria-label={`Variante ${variant.name || index + 1} disponível`}
+                          checked={variant.isAvailable}
+                          onChange={(e) =>
+                            handleToggleVariantAvailability(
+                              index,
+                              e.target.checked,
+                            )
+                          }
+                          disabled={isPending}
+                          className="h-3.5 w-3.5 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                        />
+                        Disponível
+                      </label>
                       <button
                         type="button"
                         onClick={() => handleRemoveVariant(index)}
@@ -853,6 +979,15 @@ export function ProductForm({
               </div>
             )}
           </div>
+
+          {controlStock && (
+            <StockMatrix
+              combinations={stockCombinations}
+              values={stockRows}
+              disabled={isPending}
+              onChange={handleStockRowChange}
+            />
+          )}
         </>
       )}
 
