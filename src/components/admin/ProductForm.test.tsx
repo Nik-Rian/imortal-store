@@ -1,11 +1,15 @@
-;
 // @vitest-environment jsdom
 import type { StockItemSnapshot } from "@/lib/stock-matrix";
 import type { ProductWithVariants } from "@/types";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ProductForm } from "./ProductForm";
-
 
 vi.mock("@/actions/blob.actions", () => ({
   uploadProductImage: vi.fn(),
