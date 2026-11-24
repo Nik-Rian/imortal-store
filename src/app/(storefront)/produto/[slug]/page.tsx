@@ -1,5 +1,6 @@
 import { AddToCartButton } from "@/components/product/AddToCartButton";
 import { ProductGallery } from "@/components/product/ProductGallery";
+import { computeProductAvailability } from "@/lib/availability";
 import { resolveInitialVariant } from "@/lib/listings";
 import { getBundleGalleryImages } from "@/lib/media";
 import { formatPrice } from "@/lib/utils";
@@ -67,6 +68,28 @@ export default async function ProductPage({ params, searchParams }: Props) {
     ? getBundleGalleryImages(product.images, product.components)
     : product.images;
 
+  // Availability is computed with the same rules as order creation. Only
+  // plain, necessary fields reach the client component: no stock counts, no
+  // unrelated columns.
+  const availability = computeProductAvailability(product);
+  const buttonProduct = {
+    id: product.id,
+    name: product.name,
+    slug: product.slug,
+    priceCents: product.priceCents,
+    images: product.images,
+    variants: availability.hasVariantOptions
+      ? product.variants.map((variant) => ({
+          id: variant.id,
+          name: variant.name,
+          image: variant.image,
+        }))
+      : [],
+    sizes: availability.hasSizeOptions
+      ? product.sizes.map((size) => ({ id: size.id, size: size.size }))
+      : [],
+  };
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-12">
       {/* Breadcrumb / Back Link */}
@@ -103,7 +126,8 @@ export default async function ProductPage({ params, searchParams }: Props) {
           <div className="mt-8 flex gap-4">
             <AddToCartButton
               key={initialVariantId ?? "no-variant"}
-              product={product}
+              product={buttonProduct}
+              availability={availability}
               initialVariantId={initialVariantId}
             />
           </div>

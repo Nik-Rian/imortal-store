@@ -1,4 +1,5 @@
 import { ProductCard } from "@/components/storefront/ProductCard";
+import { computeProductAvailability } from "@/lib/availability";
 import { buildListings } from "@/lib/listings";
 import { getStorefrontDrop } from "@/services/drop.service";
 import { getStorefrontProducts } from "@/services/product.service";
@@ -36,7 +37,13 @@ export default async function LojaPage() {
   const isSalesClosed =
     products.length > 0 && products.every((product) => !product.isAvailable);
 
-  const listings = buildListings(products);
+  const availabilityByProductId = new Map(
+    products.map(
+      (product) => [product.id, computeProductAvailability(product)] as const,
+    ),
+  );
+  const listings = buildListings(products, availabilityByProductId);
+
   const kitListings = listings.filter((listing) => listing.group === "BUNDLES");
   const productListings = listings.filter(
     (listing) => listing.group === "PRODUCTS",
@@ -58,10 +65,8 @@ export default async function LojaPage() {
             IMORTAL STORE
           </p>
 
-          <h1 className="mt-4 text-6xl leading-none font-black tracking-tight uppercase sm:text-7xl lg:text-8xl">
-            DROP
-            <br />
-            2026
+          <h1 className="mt-4 text-6xl leading-none font-black tracking-tight break-words uppercase sm:text-7xl lg:text-8xl">
+            {drop.name}
           </h1>
 
           <p className="mt-6 max-w-xl text-lg text-zinc-600">

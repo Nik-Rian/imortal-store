@@ -3,7 +3,6 @@ import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { buildStockKey } from "../src/lib/stock-key";
 
-
 // Product images hosted on Unsplash.
 // All images use the existing allowed image host.
 const IMAGES = {

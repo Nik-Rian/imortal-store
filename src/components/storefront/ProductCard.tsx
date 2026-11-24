@@ -8,7 +8,7 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ listing }: ProductCardProps) {
-  const isClosed = listing.state === "CLOSED";
+  const isUnavailable = listing.state !== "OPEN";
 
   return (
     <Link
@@ -23,13 +23,19 @@ export function ProductCard({ listing }: ProductCardProps) {
           sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
           className={cn(
             "object-cover transition-transform duration-500 group-hover:scale-105",
-            isClosed && "opacity-60 grayscale",
+            isUnavailable && "opacity-60 grayscale",
           )}
         />
 
-        {isClosed && (
+        {listing.state === "CLOSED" && (
           <div className="absolute top-2 right-2 border-2 border-black bg-zinc-900 px-2 py-1 text-xs font-black tracking-widest text-white uppercase">
-            Vendas Encerradas
+            Vendas fechadas no momento
+          </div>
+        )}
+
+        {listing.state === "SOLD_OUT" && (
+          <div className="absolute top-2 right-2 border-2 border-black bg-red-600 px-2 py-1 text-xs font-black tracking-widest text-white uppercase">
+            Esgotado
           </div>
         )}
       </div>

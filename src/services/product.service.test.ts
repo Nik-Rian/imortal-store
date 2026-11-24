@@ -228,6 +228,27 @@ describe("catalogue reads", () => {
     await expect(getProductBySlug("missing")).resolves.toBeNull();
   });
 
+  it("getProductBySlug includes the stock rows of the product and of its bundle components", async () => {
+    vi.mocked(prisma.product.findFirst).mockResolvedValue(null);
+
+    await getProductBySlug("camiseta");
+
+    expect(prisma.product.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          stockItems: true,
+          components: expect.objectContaining({
+            select: expect.objectContaining({
+              componentProduct: expect.objectContaining({
+                select: expect.objectContaining({ stockItems: true }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it("returns no catalogue and no product page when no drop is active", async () => {
     vi.mocked(getStorefrontDrop).mockResolvedValue(null);
 
@@ -246,7 +267,10 @@ describe("catalogue reads", () => {
       expect.objectContaining({
         where: { dropId: "d1" },
         include: expect.objectContaining({
+          drop: true,
+          sizes: expect.anything(),
           variants: expect.anything(),
+          stockItems: true,
           components: expect.anything(),
         }),
       }),
