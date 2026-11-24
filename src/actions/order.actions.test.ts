@@ -14,6 +14,7 @@ import {
   createPixOrder,
   MercadoPagoTimeoutError,
 } from "@/services/mercadopago.service";
+import { reserveStock, StockReservationError } from "@/services/stock.service";
 import { revalidatePath } from "next/cache";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -32,6 +33,7 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -47,6 +49,11 @@ vi.mock("@/services/mercadopago.service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/mercadopago.service")>()),
   createPixOrder: vi.fn(),
   createCardOrder: vi.fn(),
+}));
+
+vi.mock("@/services/stock.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/stock.service")>()),
+  reserveStock: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({
@@ -81,6 +88,14 @@ function makeCatalogue(
     products: new Map(products.map((p) => [p.id, p] as const)),
     stock: new Map(stock.map((s) => [s.stockKey, s] as const)),
   };
+}
+
+// The transaction callback receives the mocked client itself, so assertions on
+// order creation keep targeting prisma.order.create.
+function runTransactionsAgainstMockedClient() {
+  vi.mocked(prisma.$transaction).mockImplementation(((
+    callback: (tx: unknown) => Promise<unknown>,
+  ) => callback(prisma)) as never);
 }
 
 describe("createOrder Validation", () => {
@@ -219,6 +234,7 @@ describe("createOrder retry and duplicate protection", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    runTransactionsAgainstMockedClient();
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.mocked(createPixOrder).mockResolvedValue(pixResult);
@@ -297,6 +313,8 @@ describe("createOrder retry and duplicate protection", () => {
       where: { idempotencyKey: "key-1" },
     });
     expect(prisma.order.create).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(reserveStock).not.toHaveBeenCalled();
     expect(createPixOrder).not.toHaveBeenCalled();
   });
 
@@ -318,6 +336,26 @@ describe("createOrder retry and duplicate protection", () => {
     expect(createPixOrder).toHaveBeenCalledWith(
       expect.objectContaining({ orderId: "order-1", idempotencyKey: "key-1" }),
     );
+  });
+
+  it("resumes the existing order after a rolled back attempt without reserving stock again", async () => {
+    vi.mocked(prisma.$transaction).mockRejectedValue(
+      new Error("Unique constraint failed on idempotencyKey"),
+    );
+    vi.mocked(prisma.order.findFirst)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(storedOrder() as never);
+
+    const result = await createOrder({ ...payload, attemptKey: "key-1" });
+
+    expect(result).toMatchObject({
+      success: true,
+      orderId: "order-1",
+      accessToken: "token-1",
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(reserveStock).not.toHaveBeenCalled();
+    expect(createPixOrder).toHaveBeenCalledTimes(1);
   });
 
   it("hides a create failure behind a safe message when no order exists for the key", async () => {
@@ -532,6 +570,7 @@ describe("createOrder variant and size selection", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    runTransactionsAgainstMockedClient();
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.mocked(loadCheckoutCatalogue).mockResolvedValue(makeCatalogue());
@@ -699,6 +738,7 @@ describe("createOrder bundles and shared stock", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    runTransactionsAgainstMockedClient();
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     useCatalogue();
@@ -774,6 +814,89 @@ describe("createOrder bundles and shared stock", () => {
         },
       }),
     });
+  });
+
+  it("reserves the aggregated demand of every line and component inside the order transaction", async () => {
+    const result = await createOrder({
+      ...basePayload,
+      items: [shirtLine(1), kitLine(1)],
+    });
+
+    expect(result.success).toBe(true);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(reserveStock).toHaveBeenCalledTimes(1);
+    expect(reserveStock).toHaveBeenCalledWith(prisma, "order-1", [
+      expect.objectContaining({ stockKey: SHIRT_M, quantity: 2 }),
+      expect.objectContaining({ stockKey: CAP_BLUE, quantity: 1 }),
+    ]);
+
+    const firstCall = (mock: { mock: { invocationCallOrder: number[] } }) =>
+      mock.mock.invocationCallOrder[0];
+    expect(firstCall(vi.mocked(prisma.order.create))).toBeLessThan(
+      firstCall(vi.mocked(reserveStock)),
+    );
+  });
+
+  it("creates the provider charge only after the reservation transaction has committed", async () => {
+    const events: string[] = [];
+    vi.mocked(prisma.$transaction).mockImplementation((async (
+      callback: (tx: unknown) => Promise<unknown>,
+    ) => {
+      const created = await callback(prisma);
+      events.push("committed");
+      return created;
+    }) as never);
+    vi.mocked(createPixOrder).mockImplementation(async () => {
+      events.push("provider");
+      return {
+        paymentId: "pay-1",
+        orderId: "ORD1",
+        qrCode: "qr",
+        qrCodeBase64: "b64",
+        status: "action_required",
+      };
+    });
+
+    const result = await createOrder({
+      ...basePayload,
+      items: [shirtLine()],
+    });
+
+    expect(result.success).toBe(true);
+    expect(events).toEqual(["committed", "provider"]);
+  });
+
+  it("maps a reservation that loses the race to the out-of-stock message without calling the provider", async () => {
+    vi.mocked(reserveStock).mockRejectedValue(
+      new StockReservationError({
+        reason: "OUT_OF_STOCK",
+        productId: "prod-cap",
+        productName: "Boné",
+        variantId: "var-blue",
+        variantName: "Azul",
+        sizeId: null,
+        sizeLabel: null,
+        bundleName: "Kit Calouro",
+      }),
+    );
+
+    const result = await createOrder({
+      ...basePayload,
+      items: [kitLine()],
+      attemptKey: "key-1",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Kit Calouro/);
+    expect(result.error).toMatch(/Boné/);
+    expect(result.error).toMatch(/Azul/);
+    expect(result.error).not.toBe(SAFE_ORDER_FAILURE_MESSAGE);
+    expect(result.orderId).toBeUndefined();
+    expect(result).not.toHaveProperty("accessToken");
+    // Only the initial lookup runs: a stock failure is not an idempotency conflict.
+    expect(prisma.order.findFirst).toHaveBeenCalledTimes(1);
+    expect(createPixOrder).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
   });
 
   it("keeps the plain line snapshot unchanged and without components", async () => {
@@ -1173,6 +1296,7 @@ describe("createOrder card payments", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    runTransactionsAgainstMockedClient();
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.mocked(createCardOrder).mockResolvedValue({
