@@ -3,6 +3,7 @@ import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { buildStockKey } from "../src/lib/stock-key";
 
+
 // Product images hosted on Unsplash.
 // All images use the existing allowed image host.
 const IMAGES = {
@@ -26,7 +27,7 @@ const IMAGES = {
   walletFront:
     "https://images.unsplash.com/photo-1627123424574-724758594e93?w=1000&auto=format&fit=crop&q=85",
   walletBack:
-    "https://images.unsplash.com/photo-1588444839799-aea08566ef13?w=1000&auto=format&fit=crop&q=85",
+    "https://images.unsplash.com/photo-1639789972237-7ee9434066ed?w=1000&auto=format&fit=crop&q=85",
   walletLifestyle:
     "https://images.unsplash.com/photo-1697551894947-25fba13585e6?w=1000&auto=format&fit=crop&q=85",
 
