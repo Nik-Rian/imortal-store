@@ -31,6 +31,32 @@ export const getProducts = cache(async (options: GetProductsOptions = {}) => {
   });
 });
 
+// Storefront listing source: the products of the presented drop with the
+// variants and bundle components needed to build listings in one query.
+export const getStorefrontProducts = cache(async () => {
+  const storefrontDrop = await getStorefrontDrop();
+  if (!storefrontDrop) return [];
+
+  return prisma.product.findMany({
+    where: { dropId: storefrontDrop.id },
+    include: {
+      variants: {
+        orderBy: { sortOrder: "asc" },
+      },
+      components: {
+        orderBy: { componentProduct: { name: "asc" } },
+        select: {
+          quantity: true,
+          componentProduct: {
+            select: { id: true, name: true, images: true },
+          },
+        },
+      },
+    },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+  });
+});
+
 export const getProductBySlug = cache(
   async (slug: string, options: GetProductsOptions = {}) => {
     const { activeOnly = true } = options;

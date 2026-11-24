@@ -38,9 +38,13 @@ interface AddToCartButtonProps {
       status: DropStatus;
     } | null;
   };
+  initialVariantId?: string | null;
 }
 
-export function AddToCartButton({ product }: AddToCartButtonProps) {
+export function AddToCartButton({
+  product,
+  initialVariantId,
+}: AddToCartButtonProps) {
   const { addItem } = useCart();
   const [quantity, setQuantity] = useState(1);
 
@@ -73,9 +77,15 @@ export function AddToCartButton({ product }: AddToCartButtonProps) {
       : null,
   );
 
+  // The requested variant is honored only when it exists and is available;
+  // otherwise the first available variant is preselected.
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
     hasVariants
-      ? (product.variants?.find((v) => v.isAvailable !== false)?.id ?? null)
+      ? ((
+          product.variants?.find(
+            (v) => v.id === initialVariantId && v.isAvailable !== false,
+          ) ?? product.variants?.find((v) => v.isAvailable !== false)
+        )?.id ?? null)
       : null,
   );
 

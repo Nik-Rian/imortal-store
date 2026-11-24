@@ -7,6 +7,7 @@ import {
   getProductById,
   getProductBySlug,
   getProducts,
+  getStorefrontProducts,
 } from "./product.service";
 
 vi.mock("react", () => ({ cache: <T>(fn: T) => fn }));
@@ -234,6 +235,40 @@ describe("catalogue reads", () => {
     await expect(getProductBySlug("camiseta")).resolves.toBeNull();
     expect(prisma.product.findMany).not.toHaveBeenCalled();
     expect(prisma.product.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("getStorefrontProducts filters by the storefront drop and includes variants and components", async () => {
+    vi.mocked(prisma.product.findMany).mockResolvedValue([] as never);
+
+    await getStorefrontProducts();
+
+    expect(prisma.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { dropId: "d1" },
+        include: expect.objectContaining({
+          variants: expect.anything(),
+          components: expect.anything(),
+        }),
+      }),
+    );
+  });
+
+  it("getStorefrontProducts returns an empty list when no drop is active", async () => {
+    vi.mocked(getStorefrontDrop).mockResolvedValue(null);
+
+    await expect(getStorefrontProducts()).resolves.toEqual([]);
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+  });
+
+  it("getStorefrontProducts propagates database errors", async () => {
+    vi.mocked(prisma.product.findMany).mockRejectedValue(databaseError);
+    await expect(getStorefrontProducts()).rejects.toThrow("connection refused");
+  });
+
+  it("getStorefrontProducts propagates a failure to load the storefront drop", async () => {
+    vi.mocked(getStorefrontDrop).mockRejectedValue(databaseError);
+    await expect(getStorefrontProducts()).rejects.toThrow("connection refused");
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
   });
 
   it("getProductById propagates database errors", async () => {

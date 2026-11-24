@@ -1,8 +1,7 @@
-import { getProductImage } from "@/lib/media";
-import { formatPrice } from "@/lib/utils";
+import { ProductCard } from "@/components/storefront/ProductCard";
+import { buildListings } from "@/lib/listings";
 import { getStorefrontDrop } from "@/services/drop.service";
-import { getProducts } from "@/services/product.service";
-import Link from "next/link";
+import { getStorefrontProducts } from "@/services/product.service";
 
 // Rendered on every request so prices, availability and the closed-sales
 // state always reflect the database.
@@ -11,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function LojaPage() {
   const [drop, products] = await Promise.all([
     getStorefrontDrop(),
-    getProducts(),
+    getStorefrontProducts(),
   ]);
 
   if (!drop) {
@@ -36,6 +35,18 @@ export default async function LojaPage() {
   // Sales read as closed once every listing of the active drop is closed.
   const isSalesClosed =
     products.length > 0 && products.every((product) => !product.isAvailable);
+
+  const listings = buildListings(products);
+  const kitListings = listings.filter((listing) => listing.group === "BUNDLES");
+  const productListings = listings.filter(
+    (listing) => listing.group === "PRODUCTS",
+  );
+  const sections = [
+    ...(kitListings.length > 0
+      ? [{ id: "kits", title: "Kits", listings: kitListings }]
+      : []),
+    { id: "products", title: "Produtos", listings: productListings },
+  ];
 
   return (
     <main className="min-h-screen bg-zinc-50 text-zinc-900">
@@ -65,61 +76,32 @@ export default async function LojaPage() {
           )}
         </section>
 
-        {/* PRODUCTS */}
+        {/* LISTINGS */}
 
-        <section>
-          <div className="mb-8 flex items-center justify-between border-b-2 border-black pb-4">
-            <h2 className="text-3xl font-black tracking-wide uppercase">
-              Produtos
-            </h2>
+        <div className="space-y-16">
+          {sections.map((section) => (
+            <section key={section.id}>
+              <div className="mb-8 flex items-center justify-between border-b-2 border-black pb-4">
+                <h2 className="text-3xl font-black tracking-wide uppercase">
+                  {section.title}
+                </h2>
 
-            <span className="font-bold tracking-widest text-orange-500 uppercase">
-              {products.length} itens
-            </span>
-          </div>
+                <span className="font-bold tracking-widest text-orange-500 uppercase">
+                  {section.listings.length} itens
+                </span>
+              </div>
 
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {products.map((product) => (
-              <Link
-                key={product.id}
-                href={`/produto/${product.slug}`}
-                className="group overflow-hidden border-2 border-black bg-white transition-all duration-300 hover:-translate-y-2 hover:shadow-[10px_10px_0px_#f97316]"
-              >
-                <div className="aspect-4/5 overflow-hidden border-b-2 border-black bg-zinc-100">
-                  <img
-                    src={getProductImage(product.images)}
-                    alt={product.name}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {section.listings.map((listing) => (
+                  <ProductCard
+                    key={listing.key}
+                    listing={listing}
                   />
-                </div>
-
-                <div className="space-y-4 p-6">
-                  <div>
-                    <p className="text-xs font-bold tracking-[0.3em] text-orange-500 uppercase">
-                      Vestuário
-                    </p>
-
-                    <h3 className="mt-2 text-2xl leading-tight font-black uppercase">
-                      {product.name}
-                    </h3>
-                  </div>
-
-                  <div className="flex items-end justify-between">
-                    <span className="text-2xl font-black text-orange-500">
-                      {formatPrice(product.priceCents)}
-                    </span>
-
-                    <span className="font-bold tracking-widest uppercase transition-transform group-hover:translate-x-1">
-                      Ver →
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        {/* FOOTER STRIPE */}
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
 
         <section className="mt-24 border-t-4 border-black pt-8">
           <p className="text-center text-sm font-bold tracking-[0.4em] text-zinc-400 uppercase">
