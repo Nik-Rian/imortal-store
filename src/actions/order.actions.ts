@@ -5,6 +5,7 @@ import { OrderStatus } from "@/generated/prisma/client";
 import { requireSession } from "@/lib/auth-guard";
 import { describeCardFailure, PaymentRejectedError } from "@/lib/card-outcome";
 import {
+  aggregateStockDemand,
   buildOrderSnapshots,
   evaluateAvailability,
   resolveOrderLines,
@@ -22,6 +23,7 @@ import {
   createPixOrder,
   MercadoPagoTimeoutError,
 } from "@/services/mercadopago.service";
+import { reserveStock, StockReservationError } from "@/services/stock.service";
 import { revalidatePath } from "next/cache";
 
 // Unexpected failures never expose Error.message to the customer: it can carry
@@ -135,7 +137,7 @@ export async function createOrder(payload: CreateOrderInput) {
           error: availabilityErrorMessage(unavailable),
         };
       }
-
+      const stockDemand = aggregateStockDemand(resolution.lines);
       const { totalPriceCents, items: orderItemsData } = buildOrderSnapshots(
         resolution.lines,
       );
@@ -146,29 +148,53 @@ export async function createOrder(payload: CreateOrderInput) {
       const newIdempotencyKey = attemptKey || randomUUID();
 
       try {
-        order = await prisma.order.create({
-          data: {
-            accessToken: newAccessToken,
-            customerName,
-            customerPhone: customerPhone ?? null,
-            customerEmail: customerEmail ?? null,
-            status: "PENDING",
-            totalPriceCents,
-            cancelableUntil,
-            idempotencyKey: newIdempotencyKey,
-            // createMany cannot create child rows, so each item is created
-            // with its component snapshots in the same nested write.
-            items: {
-              create: orderItemsData.map(({ components, ...item }) => ({
-                ...item,
-                ...(components.length > 0
-                  ? { components: { create: components } }
-                  : {}),
-              })),
+        // Order creation and stock reservation commit or roll back together.
+        // The provider call stays outside: nothing slow runs while stock rows
+        // are locked.
+        order = await prisma.$transaction(async (tx) => {
+          const created = await tx.order.create({
+            data: {
+              accessToken: newAccessToken,
+              customerName,
+              customerPhone: customerPhone ?? null,
+              customerEmail: customerEmail ?? null,
+              status: "PENDING",
+              totalPriceCents,
+              cancelableUntil,
+              idempotencyKey: newIdempotencyKey,
+              // createMany cannot create child rows, so each item is created
+              // with its component snapshots in the same nested write.
+              items: {
+                create: orderItemsData.map(({ components, ...item }) => ({
+                  ...item,
+                  ...(components.length > 0
+                    ? { components: { create: components } }
+                    : {}),
+                })),
+              },
             },
-          },
+          });
+          await reserveStock(tx, created.id, stockDemand);
+          return created;
         });
       } catch (createError) {
+        if (createError instanceof StockReservationError) {
+          console.warn("[createOrder] Item unavailable", {
+            productId: createError.failure.productId,
+            variantId: createError.failure.variantId,
+            sizeId: createError.failure.sizeId,
+            reason: createError.failure.reason,
+          });
+          return {
+            success: false,
+            error: availabilityErrorMessage(createError.failure),
+          };
+        }
+
+        // The lookup runs only after the transaction has ended: a failed
+        // statement aborts a PostgreSQL transaction, so no further query can
+        // run inside it. A unique violation on the idempotency key has already
+        // rolled back the order and every counter incremented by this attempt.
         const existing = attemptKey
           ? await prisma.order.findFirst({
               where: { idempotencyKey: attemptKey },
