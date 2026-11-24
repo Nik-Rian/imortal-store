@@ -1,5 +1,9 @@
+import type { PaymentStatus } from "@/generated/prisma/client";
 import { verifyMercadoPagoSignature } from "@/lib/mercadopago";
-import { resolvePaymentSync } from "@/lib/payment-status";
+import {
+  resolvePaymentSync,
+  type PaymentSyncDecision,
+} from "@/lib/payment-status";
 import { prisma } from "@/lib/prisma";
 import {
   getMercadoPagoOrder,
@@ -7,6 +11,11 @@ import {
   MercadoPagoOrderDetails,
   MercadoPagoPaymentDetails,
 } from "@/services/mercadopago.service";
+import {
+  finalizeReservations,
+  releaseReservations,
+  type StockTransactionClient,
+} from "@/services/stock.service";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
@@ -14,6 +23,39 @@ const MP_WEBHOOK_SECRET = process.env.MERCADOPAGO_WEBHOOK_SECRET;
 const MAX_SYNC_ATTEMPTS = 3;
 
 type SyncOutcome = "updated" | "unchanged" | "not_found" | "conflict";
+
+/**
+ * Stock follows provider-confirmed outcomes only. Each branch touches only
+ * reservations still RESERVED, so a replayed or out-of-order notification
+ * cannot change stock twice. Refunds, chargebacks and reviews never reach
+ * stock: returned goods are restored manually through the stock editor.
+ * Runs inside the transaction of the compare-and-set, so a failure here rolls
+ * the order update back and the provider redelivers the notification.
+ */
+async function applyStockEffect(
+  tx: StockTransactionClient,
+  orderId: string,
+  previousPaymentStatus: PaymentStatus,
+  decision: PaymentSyncDecision,
+): Promise<void> {
+  if (decision.paymentStatus === previousPaymentStatus) return;
+
+  switch (decision.paymentStatus) {
+    case "PAID":
+      // Payment on an already canceled order is a late payment: it stays
+      // flagged for administrative resolution and is never honored silently.
+      if (decision.fulfillmentStatus === "CANCELED") return;
+      await finalizeReservations(tx, orderId);
+      return;
+    case "FAILED":
+    case "EXPIRED":
+    case "CANCELED":
+      await releaseReservations(tx, orderId);
+      return;
+    default:
+      return;
+  }
+}
 
 async function syncOrderPayment(
   mpOrder: MercadoPagoOrderDetails,
@@ -42,32 +84,43 @@ async function syncOrderPayment(
       providerTotalCents,
       providerPaidCents,
     });
+
     if (!decision.apply) return "unchanged";
-    const { count } = await prisma.order.updateMany({
-      where: {
-        id: order.id,
-        paymentStatus: order.paymentStatus,
-        status: order.status,
-      },
-      data: {
-        mpOrderId: mpOrder.orderId,
-        paymentStatus: decision.paymentStatus,
-        status: decision.fulfillmentStatus,
-        paymentReviewReason: decision.reviewReason,
-        providerStatus: mpOrder.status,
-        providerStatusDetail: payment?.statusDetail || mpStatusDetail || null,
-        paidAmount: providerPaidCents,
-        lastPaymentSync: new Date(),
-        ...(payment?.paymentId ? { mpPaymentId: payment.paymentId } : {}),
-        ...(payment?.qrCode
-          ? {
-              pixQrCode: payment.qrCode,
-              pixQrCodeBase64: payment.qrCodeBase64 ?? null,
-            }
-          : {}),
-      },
+    const applied = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          paymentStatus: order.paymentStatus,
+          status: order.status,
+        },
+        data: {
+          mpOrderId: mpOrder.orderId,
+          paymentStatus: decision.paymentStatus,
+          status: decision.fulfillmentStatus,
+          paymentReviewReason: decision.reviewReason,
+          providerStatus: mpOrder.status,
+          providerStatusDetail: payment?.statusDetail || mpStatusDetail || null,
+          paidAmount: providerPaidCents,
+          lastPaymentSync: new Date(),
+          ...(payment?.paymentId ? { mpPaymentId: payment.paymentId } : {}),
+          ...(payment?.qrCode
+            ? {
+                pixQrCode: payment.qrCode,
+                pixQrCodeBase64: payment.qrCodeBase64 ?? null,
+              }
+            : {}),
+        },
+      });
+
+      if (count === 0) return false;
+
+      await applyStockEffect(tx, order.id, order.paymentStatus, decision);
+
+      return true;
     });
-    if (count === 0) continue;
+
+    if (!applied) continue;
+
     if (
       decision.reviewReason &&
       decision.reviewReason !== order.paymentReviewReason
@@ -82,6 +135,7 @@ async function syncOrderPayment(
         localTotalCents: order.totalPriceCents,
       });
     }
+
     revalidatePath(`/pedidos/${order.accessToken}`);
     revalidatePath("/admin/pedidos");
     return "updated";

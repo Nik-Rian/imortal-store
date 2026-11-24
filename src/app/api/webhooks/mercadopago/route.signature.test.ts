@@ -11,7 +11,16 @@ const SECRET = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { order: { findFirst: vi.fn(), updateMany: vi.fn() } },
+  prisma: {
+    order: { findFirst: vi.fn(), updateMany: vi.fn() },
+    $transaction: vi.fn(),
+  },
+}));
+
+vi.mock("@/services/stock.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/stock.service")>()),
+  finalizeReservations: vi.fn(),
+  releaseReservations: vi.fn(),
 }));
 
 vi.mock("@/services/mercadopago.service", async (importOriginal) => ({
@@ -53,6 +62,7 @@ const expectNoWork = () => {
   expect(getMercadoPagoOrder).not.toHaveBeenCalled();
   expect(prisma.order.findFirst).not.toHaveBeenCalled();
   expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  expect(prisma.$transaction).not.toHaveBeenCalled();
 };
 
 describe("Mercado Pago webhook signature", () => {
@@ -79,6 +89,10 @@ describe("Mercado Pago webhook signature", () => {
       paymentReviewReason: null,
     } as never);
     vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 1 });
+
+    vi.mocked(prisma.$transaction).mockImplementation(((
+      callback: (tx: unknown) => unknown,
+    ) => callback(prisma)) as never);
   });
 
   afterEach(() => {
@@ -91,6 +105,7 @@ describe("Mercado Pago webhook signature", () => {
     // The provider fetch must keep the original-case id; only the manifest is lowercased.
     expect(getMercadoPagoOrder).toHaveBeenCalledWith(ORDER_ID);
     expect(prisma.order.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
   it("returns 401 and does no work when x-signature is missing", async () => {

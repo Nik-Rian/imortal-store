@@ -1,10 +1,23 @@
 import { prisma } from "@/lib/prisma";
 import { getMercadoPagoOrder } from "@/services/mercadopago.service";
+import {
+  finalizeReservations,
+  releaseReservations,
+} from "@/services/stock.service";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { order: { findFirst: vi.fn(), updateMany: vi.fn() } },
+  prisma: {
+    order: { findFirst: vi.fn(), updateMany: vi.fn() },
+    $transaction: vi.fn(),
+  },
+}));
+
+vi.mock("@/services/stock.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/stock.service")>()),
+  finalizeReservations: vi.fn(),
+  releaseReservations: vi.fn(),
 }));
 
 vi.mock("@/services/mercadopago.service", async (importOriginal) => ({
@@ -53,6 +66,9 @@ describe("Mercado Pago webhook route", () => {
     vi.mocked(getMercadoPagoOrder).mockResolvedValue(mpOrder() as never);
     vi.mocked(prisma.order.findFirst).mockResolvedValue(localOrder() as never);
     vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 1 });
+    vi.mocked(prisma.$transaction).mockImplementation(((
+      callback: (tx: unknown) => unknown,
+    ) => callback(prisma)) as never);
   });
 
   it("applies the first processed notice once and ignores the replay", async () => {
@@ -75,6 +91,9 @@ describe("Mercado Pago webhook route", () => {
         }),
       }),
     );
+    expect(finalizeReservations).toHaveBeenCalledTimes(1);
+    expect(finalizeReservations).toHaveBeenCalledWith(prisma, "order-1");
+    expect(releaseReservations).not.toHaveBeenCalled();
   });
 
   it("leaves a READY_FOR_PICKUP order untouched on a duplicate processed notice", async () => {
@@ -87,6 +106,8 @@ describe("Mercado Pago webhook route", () => {
     const res = await POST(webhookRequest());
     expect(res.status).toBe(200);
     expect(prisma.order.updateMany).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(finalizeReservations).not.toHaveBeenCalled();
   });
 
   it("cancels the order when the provider reports expired", async () => {
@@ -106,6 +127,9 @@ describe("Mercado Pago webhook route", () => {
         }),
       }),
     );
+    expect(releaseReservations).toHaveBeenCalledTimes(1);
+    expect(releaseReservations).toHaveBeenCalledWith(prisma, "order-1");
+    expect(finalizeReservations).not.toHaveBeenCalled();
   });
 
   it("does not mark PAID on an amount mismatch and logs it", async () => {
@@ -126,6 +150,8 @@ describe("Mercado Pago webhook route", () => {
       expect.stringContaining("flagged"),
       expect.objectContaining({ reason: "AMOUNT_MISMATCH" }),
     );
+    expect(finalizeReservations).not.toHaveBeenCalled();
+    expect(releaseReservations).not.toHaveBeenCalled();
     warn.mockRestore();
   });
 
@@ -134,6 +160,9 @@ describe("Mercado Pago webhook route", () => {
     const res = await POST(webhookRequest());
     expect(res.status).toBe(409);
     expect(prisma.order.findFirst).toHaveBeenCalledTimes(3);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+    expect(finalizeReservations).not.toHaveBeenCalled();
+    expect(releaseReservations).not.toHaveBeenCalled();
   });
 
   it("cancels the order and keeps the payment-level reason when a card is refused", async () => {
@@ -163,7 +192,11 @@ describe("Mercado Pago webhook route", () => {
         }),
       }),
     );
+    expect(releaseReservations).toHaveBeenCalledTimes(1);
+    expect(releaseReservations).toHaveBeenCalledWith(prisma, "order-1");
+    expect(finalizeReservations).not.toHaveBeenCalled();
   });
+
   it("marks a card order IN_REVIEW while the provider is still processing it", async () => {
     vi.mocked(getMercadoPagoOrder).mockResolvedValue(
       mpOrder({
@@ -188,7 +221,10 @@ describe("Mercado Pago webhook route", () => {
         }),
       }),
     );
+    expect(finalizeReservations).not.toHaveBeenCalled();
+    expect(releaseReservations).not.toHaveBeenCalled();
   });
+
   it("never lets a late failure notice undo a paid card order", async () => {
     vi.mocked(prisma.order.findFirst).mockResolvedValue(
       localOrder({ paymentStatus: "PAID" }) as never,
@@ -210,5 +246,6 @@ describe("Mercado Pago webhook route", () => {
     const res = await POST(webhookRequest());
     expect(res.status).toBe(200);
     expect(prisma.order.updateMany).not.toHaveBeenCalled();
+    expect(releaseReservations).not.toHaveBeenCalled();
   });
 });

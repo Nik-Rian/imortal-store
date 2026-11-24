@@ -1,6 +1,8 @@
 import type { FailureSubject, StockDemand } from "@/lib/order-lines";
 import { describe, expect, it, vi } from "vitest";
 import {
+  finalizeReservations,
+  releaseReservations,
   reserveStock,
   StockReservationError,
   type StockTransactionClient,
@@ -213,5 +215,124 @@ describe("reserveStock", () => {
 
     expect(tx.$executeRaw).not.toHaveBeenCalled();
     expect(tx.stockReservation.createMany).not.toHaveBeenCalled();
+  });
+});
+
+function makeSettlementTransaction(
+  reservations: { id: string; stockItemId: string; quantity: number }[],
+  claimed: number[] = reservations.map(() => 1),
+) {
+  const updateMany = vi.fn();
+  for (const count of claimed) {
+    updateMany.mockResolvedValueOnce({ count });
+  }
+  const tx = {
+    stockReservation: {
+      findMany: vi.fn().mockResolvedValue(reservations),
+      updateMany,
+    },
+    stockItem: { update: vi.fn().mockResolvedValue({}) },
+  };
+  return { tx, client: tx as unknown as StockTransactionClient };
+}
+
+describe("finalizeReservations", () => {
+  it("marks the reservation FINALIZED and decreases onHand and reserved by its quantity", async () => {
+    const { tx, client } = makeSettlementTransaction([
+      { id: "res-1", stockItemId: "item-a", quantity: 3 },
+    ]);
+
+    await finalizeReservations(client, "order-1");
+
+    expect(tx.stockReservation.updateMany).toHaveBeenCalledWith({
+      where: { id: "res-1", status: "RESERVED" },
+      data: { status: "FINALIZED" },
+    });
+    expect(tx.stockItem.update).toHaveBeenCalledWith({
+      where: { id: "item-a" },
+      data: { onHand: { decrement: 3 }, reserved: { decrement: 3 } },
+    });
+  });
+
+  it("reads only the RESERVED reservations of the given order", async () => {
+    const { tx, client } = makeSettlementTransaction([]);
+
+    await finalizeReservations(client, "order-1");
+
+    expect(tx.stockReservation.findMany).toHaveBeenCalledWith({
+      where: { orderId: "order-1", status: "RESERVED" },
+      select: { id: true, stockItemId: true, quantity: true },
+    });
+  });
+
+  it("settles in ascending stock item id whatever the read order", async () => {
+    const { tx, client } = makeSettlementTransaction([
+      { id: "res-c", stockItemId: "item-c", quantity: 1 },
+      { id: "res-a", stockItemId: "item-a", quantity: 1 },
+    ]);
+
+    await finalizeReservations(client, "order-1");
+
+    expect(
+      tx.stockItem.update.mock.calls.map((call) => call[0].where.id),
+    ).toEqual(["item-a", "item-c"]);
+  });
+
+  it("leaves the counters alone when another transaction already settled the reservation", async () => {
+    const { tx, client } = makeSettlementTransaction(
+      [{ id: "res-1", stockItemId: "item-a", quantity: 3 }],
+      [0],
+    );
+
+    await finalizeReservations(client, "order-1");
+
+    expect(tx.stockItem.update).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for an order without reservations", async () => {
+    const { tx, client } = makeSettlementTransaction([]);
+
+    await finalizeReservations(client, "order-1");
+
+    expect(tx.stockReservation.updateMany).not.toHaveBeenCalled();
+    expect(tx.stockItem.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("releaseReservations", () => {
+  it("marks the reservation RELEASED and decreases only reserved", async () => {
+    const { tx, client } = makeSettlementTransaction([
+      { id: "res-1", stockItemId: "item-a", quantity: 2 },
+    ]);
+
+    await releaseReservations(client, "order-1");
+
+    expect(tx.stockReservation.updateMany).toHaveBeenCalledWith({
+      where: { id: "res-1", status: "RESERVED" },
+      data: { status: "RELEASED" },
+    });
+    expect(tx.stockItem.update).toHaveBeenCalledWith({
+      where: { id: "item-a" },
+      data: { reserved: { decrement: 2 } },
+    });
+  });
+
+  it("leaves the counters alone when another transaction already settled the reservation", async () => {
+    const { tx, client } = makeSettlementTransaction(
+      [{ id: "res-1", stockItemId: "item-a", quantity: 2 }],
+      [0],
+    );
+
+    await releaseReservations(client, "order-1");
+
+    expect(tx.stockItem.update).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for an order without reservations", async () => {
+    const { tx, client } = makeSettlementTransaction([]);
+
+    await releaseReservations(client, "order-1");
+
+    expect(tx.stockItem.update).not.toHaveBeenCalled();
   });
 });
