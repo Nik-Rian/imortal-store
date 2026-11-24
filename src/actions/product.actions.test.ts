@@ -68,7 +68,7 @@ function bundleForm(overrides: Record<string, string> = {}) {
     hasVariants: "true",
     sizes: JSON.stringify([{ size: "P" }]),
     variants: JSON.stringify([{ name: "Preta" }]),
-    components: JSON.stringify([{ componentProductId: "c1", quantity: 2 }]),
+    components: JSON.stringify([{ componentProductId: "c1", quantity: 1 }]),
     ...overrides,
   };
   const fd = new FormData();
@@ -122,8 +122,38 @@ describe("createProduct (bundles)", () => {
         sizes: { create: [] },
         variants: { create: [] },
         components: {
-          create: [{ componentProductId: "c1", quantity: 2 }],
+          create: [{ componentProductId: "c1", quantity: 1 }],
         },
+      }),
+    });
+  });
+
+  it("rejects a component posted with a quantity other than 1", async () => {
+    const result = await createProduct(
+      bundleForm({
+        components: JSON.stringify([{ componentProductId: "c1", quantity: 2 }]),
+      }),
+    );
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/uma unidade/),
+    });
+    expect(prisma.product.create).not.toHaveBeenCalled();
+  });
+
+  it("stores quantity 1 when the posted component omits the quantity", async () => {
+    vi.mocked(prisma.product.findMany).mockResolvedValue([
+      { id: "c1", isBundle: false, dropId: "d1" },
+    ] as never);
+    vi.mocked(prisma.product.create).mockResolvedValue({} as never);
+    await createProduct(
+      bundleForm({
+        components: JSON.stringify([{ componentProductId: "c1" }]),
+      }),
+    );
+    expect(prisma.product.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        components: { create: [{ componentProductId: "c1", quantity: 1 }] },
       }),
     });
   });
@@ -156,9 +186,41 @@ describe("updateProduct (bundles)", () => {
     });
 
     expect(prisma.bundleComponent.createMany).toHaveBeenCalledWith({
-      data: [{ bundleId: "b1", componentProductId: "c1", quantity: 2 }],
+      data: [{ bundleId: "b1", componentProductId: "c1", quantity: 1 }],
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a component posted with a quantity other than 1", async () => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue(current as never);
+    const result = await updateProduct(
+      "b1",
+      bundleForm({
+        components: JSON.stringify([{ componentProductId: "c1", quantity: 2 }]),
+      }),
+    );
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/uma unidade/),
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("stores quantity 1 when the posted component omits the quantity", async () => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue(current as never);
+    vi.mocked(prisma.bundleComponent.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.product.findMany).mockResolvedValue([
+      { id: "c1", isBundle: false, dropId: "d1" },
+    ] as never);
+    await updateProduct(
+      "b1",
+      bundleForm({
+        components: JSON.stringify([{ componentProductId: "c1" }]),
+      }),
+    );
+    expect(prisma.bundleComponent.createMany).toHaveBeenCalledWith({
+      data: [{ bundleId: "b1", componentProductId: "c1", quantity: 1 }],
+    });
   });
 });
 

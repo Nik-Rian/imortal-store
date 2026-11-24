@@ -102,27 +102,27 @@ describe("ProductForm bundle controls", () => {
     }
   });
 
-  it("adds a component with quantity 1, edits it and can remove it", () => {
+  it("adds a component without a quantity control and can remove it", () => {
     renderForm();
     enableBundle();
     fireEvent.change(screen.getByLabelText("Produtos do Kit"), {
       target: { value: "p1" },
     });
-    const quantity = screen.getByLabelText(
-      "Quantidade de Camiseta",
-    ) as HTMLInputElement;
-    expect(quantity.value).toBe("1");
+    expect(screen.getByLabelText("Remover Camiseta")).toBeTruthy();
+    expect(screen.queryByLabelText("Quantidade de Camiseta")).toBeNull();
     expect(pickerOptions()).not.toContain("Camiseta");
 
-    fireEvent.change(quantity, { target: { value: "3" } });
-    expect(
-      (screen.getByLabelText("Quantidade de Camiseta") as HTMLInputElement)
-        .value,
-    ).toBe("3");
-
     fireEvent.click(screen.getByLabelText("Remover Camiseta"));
-    expect(screen.queryByLabelText("Quantidade de Camiseta")).toBeNull();
+    expect(screen.queryByLabelText("Remover Camiseta")).toBeNull();
     expect(pickerOptions()).toContain("Camiseta");
+  });
+
+  it("states that the customer chooses variant and size of each component", () => {
+    renderForm();
+    enableBundle();
+    expect(
+      screen.getByText(/escolhe a variante e o tamanho de cada produto/),
+    ).toBeTruthy();
   });
 
   it("drops components from another drop when the drop changes", () => {
@@ -134,7 +134,7 @@ describe("ProductForm bundle controls", () => {
     fireEvent.change(screen.getByLabelText("Drop"), {
       target: { value: "d2" },
     });
-    expect(screen.queryByLabelText("Quantidade de Camiseta")).toBeNull();
+    expect(screen.queryByLabelText("Remover Camiseta")).toBeNull();
     expect(pickerOptions()).toEqual([
       "Adicionar produto ao kit...",
       "Boné Antigo",
@@ -156,9 +156,6 @@ describe("ProductForm bundle controls", () => {
     fireEvent.change(screen.getByLabelText("Produtos do Kit"), {
       target: { value: "p1" },
     });
-    fireEvent.change(screen.getByLabelText("Quantidade de Camiseta"), {
-      target: { value: "2" },
-    });
 
     fireEvent.submit(document.querySelector("form")!);
 
@@ -166,7 +163,7 @@ describe("ProductForm bundle controls", () => {
     const formData = action.mock.calls[0][0] as FormData;
     expect(formData.get("isBundle")).toBe("true");
     expect(JSON.parse(formData.get("components") as string)).toEqual([
-      { componentProductId: "p1", quantity: 2 },
+      { componentProductId: "p1", quantity: 1 },
     ]);
     expect(formData.get("dropId")).toBe("d1");
     expect(formData.get("controlStock")).toBe("false");
@@ -198,7 +195,7 @@ describe("ProductForm bundle controls", () => {
 });
 
 describe("ProductForm edit mode", () => {
-  it("loads an existing bundle with its components", () => {
+  it("loads an existing bundle without a quantity input", () => {
     renderForm({
       ...baseProduct,
       isBundle: true,
@@ -207,10 +204,24 @@ describe("ProductForm edit mode", () => {
     expect(
       (screen.getByLabelText("Produto Kit") as HTMLInputElement).checked,
     ).toBe(true);
-    expect(
-      (screen.getByLabelText("Quantidade de Camiseta") as HTMLInputElement)
-        .value,
-    ).toBe("2");
+    expect(screen.getByLabelText("Remover Camiseta")).toBeTruthy();
+    expect(screen.queryByLabelText("Quantidade de Camiseta")).toBeNull();
+  });
+
+  it("saves the components of an existing bundle with quantity 1", async () => {
+    const action = renderForm({
+      ...baseProduct,
+      isBundle: true,
+      components: [{ componentProductId: "p1", quantity: 2 }],
+    });
+
+    fireEvent.submit(document.querySelector("form")!);
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    const formData = action.mock.calls[0][0] as FormData;
+    expect(JSON.parse(formData.get("components") as string)).toEqual([
+      { componentProductId: "p1", quantity: 1 },
+    ]);
   });
 
   it("blocks kit conversion and drop changes for a product used as a component", () => {

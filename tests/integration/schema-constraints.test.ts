@@ -118,7 +118,7 @@ describe("StockItem CHECK constraints", () => {
 });
 
 describe("BundleComponent CHECK constraints", () => {
-  test("rejects a quantity below 1", async () => {
+  test("rejects a quantity other than 1", async () => {
     const bundle = await createProduct({ isBundle: true });
     const validComponent = await createProduct({ dropId: bundle.dropId });
     const invalidComponent = await createProduct({ dropId: bundle.dropId });
@@ -153,6 +153,53 @@ describe("BundleComponent CHECK constraints", () => {
       }),
       "BundleComponent_quantity_check",
     );
+
+    await expectConstraintViolation(
+      prisma.bundleComponent.create({
+        data: {
+          bundleId: bundle.id,
+          componentProductId: invalidComponent.id,
+          quantity: 2,
+        },
+      }),
+      "BundleComponent_quantity_check",
+    );
+
+    await expectConstraintViolation(
+      prisma.bundleComponent.create({
+        data: {
+          bundleId: bundle.id,
+          componentProductId: invalidComponent.id,
+          quantity: 3,
+        },
+      }),
+      "BundleComponent_quantity_check",
+    );
+  });
+
+  test("rejects raising the quantity of an existing component above 1", async () => {
+    const bundle = await createProduct({ isBundle: true });
+    const component = await createProduct({ dropId: bundle.dropId });
+    const bundleComponent = await prisma.bundleComponent.create({
+      data: {
+        bundleId: bundle.id,
+        componentProductId: component.id,
+        quantity: 1,
+      },
+    });
+
+    await expectConstraintViolation(
+      prisma.bundleComponent.update({
+        where: { id: bundleComponent.id },
+        data: { quantity: 2 },
+      }),
+      "BundleComponent_quantity_check",
+    );
+
+    const unchanged = await prisma.bundleComponent.findUniqueOrThrow({
+      where: { id: bundleComponent.id },
+    });
+    expect(unchanged.quantity).toBe(1);
   });
 
   test("rejects a bundle that contains itself", async () => {

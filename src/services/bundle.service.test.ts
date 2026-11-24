@@ -14,7 +14,7 @@ vi.mock("@/lib/prisma", () => ({
 
 const components = [
   { componentProductId: "c1", quantity: 1 },
-  { componentProductId: "c2", quantity: 2 },
+  { componentProductId: "c2", quantity: 1 },
 ];
 
 function mockFound(rows: { id: string; isBundle: boolean; dropId: string }[]) {
