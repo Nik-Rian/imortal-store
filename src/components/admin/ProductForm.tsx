@@ -91,14 +91,15 @@ export function ProductForm({
   const [isBundle, setIsBundle] = useState<boolean>(
     initialData?.isBundle ?? false,
   );
+
   const [components, setComponents] = useState<
-    { componentProductId: string; quantity: number }[]
+    { componentProductId: string }[]
   >(
     initialData?.components?.map((c) => ({
       componentProductId: c.componentProductId,
-      quantity: c.quantity,
     })) ?? [],
   );
+
   // A product that already belongs to a bundle can't become
   // one or change drop , so the form blocks both up front.
   const isUsedAsComponent = (initialData?._count?.componentOf ?? 0) > 0;
@@ -188,19 +189,7 @@ export function ProductForm({
     setComponents((prev) =>
       prev.some((c) => c.componentProductId === productId)
         ? prev
-        : [...prev, { componentProductId: productId, quantity: 1 }],
-    );
-  };
-
-  const handleComponentQuantityChange = (
-    productId: string,
-    rawValue: string,
-  ) => {
-    const quantity = Math.max(1, parseInt(rawValue, 10) || 1);
-    setComponents((prev) =>
-      prev.map((c) =>
-        c.componentProductId === productId ? { ...c, quantity } : c,
-      ),
+        : [...prev, { componentProductId: productId }],
     );
   };
 
@@ -1002,8 +991,9 @@ export function ProductForm({
               Produtos do Kit
             </label>
             <p className="text-xs text-zinc-500">
-              Apenas produtos comuns do drop selecionado. O cliente escolhe
-              tamanho e variante de cada unidade.
+              Apenas produtos comuns do drop selecionado. Cada unidade do kit
+              inclui uma unidade de cada produto, e o cliente escolhe a variante
+              e o tamanho de cada produto por unidade do kit.
             </p>
           </div>
           <select
@@ -1042,21 +1032,6 @@ export function ProductForm({
                     <span className="flex-1 text-sm text-zinc-900">
                       {label}
                     </span>
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      aria-label={`Quantidade de ${label}`}
-                      value={component.quantity}
-                      onChange={(e) =>
-                        handleComponentQuantityChange(
-                          component.componentProductId,
-                          e.target.value,
-                        )
-                      }
-                      disabled={isPending}
-                      className="h-8 w-20 rounded-md border border-zinc-200 bg-white px-2 text-sm focus-visible:ring-1 focus-visible:ring-zinc-900 focus-visible:outline-none"
-                    />
                     <button
                       type="button"
                       aria-label={`Remover ${label}`}

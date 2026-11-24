@@ -19,12 +19,16 @@ export const productVariantSchema = z.object({
   sortOrder: z.number().int().default(0),
 });
 
+/** A bundle unit always holds exactly one unit of each component. */
+export const BUNDLE_COMPONENT_QUANTITY = 1;
+
 export const bundleComponentSchema = z.object({
   componentProductId: z.string().min(1, "Selecione um produto para o kit."),
   quantity: z
-    .number()
-    .int("A quantidade deve ser um número inteiro.")
-    .min(1, "A quantidade de cada produto do kit deve ser ao menos 1."),
+    .literal(BUNDLE_COMPONENT_QUANTITY, {
+      message: "Cada produto do kit deve ter exatamente uma unidade.",
+    })
+    .default(BUNDLE_COMPONENT_QUANTITY),
 });
 
 export const stockRowSchema = z.object({

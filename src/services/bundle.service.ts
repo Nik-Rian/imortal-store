@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 
 export interface BundleComponentInput {
   componentProductId: string;
+  /** Always 1: a bundle unit holds exactly one unit of each component. */
   quantity: number;
 }
 

@@ -54,7 +54,7 @@ describe("productSchema", () => {
 });
 
 describe("productSchema bundles", () => {
-  const component = { componentProductId: "p1", quantity: 2 };
+  const component = { componentProductId: "p1", quantity: 1 };
 
   it("accepts a bundle with components", () => {
     expect(
@@ -83,7 +83,7 @@ describe("productSchema bundles", () => {
     ).toBe(false);
   });
 
-  it.each([0, -1, 1.5])("rejects component quantity %s", (quantity) => {
+  it.each([0, -1, 1.5, 2, 3])("rejects component quantity %s", (quantity) => {
     expect(
       productSchema.safeParse({
         ...base,
@@ -92,10 +92,21 @@ describe("productSchema bundles", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("treats an absent component quantity as 1", () => {
+    const parsed = productSchema.parse({
+      ...base,
+      isBundle: true,
+      components: [{ componentProductId: "p1" }],
+    });
+    expect(parsed.components).toEqual([
+      { componentProductId: "p1", quantity: 1 },
+    ]);
+  });
 });
 
 describe("applyBundleRules", () => {
-  const component = { componentProductId: "p1", quantity: 2 };
+  const component = { componentProductId: "p1", quantity: 1 };
 
   it("forces stock, size and variant settings off for a bundle", () => {
     const parsed = productSchema.parse({

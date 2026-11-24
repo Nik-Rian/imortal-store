@@ -13,6 +13,7 @@ import {
 } from "@/lib/stock-matrix";
 import {
   applyBundleRules,
+  BUNDLE_COMPONENT_QUANTITY,
   productSchema,
 } from "@/lib/validations/product.schema";
 import {
@@ -61,6 +62,7 @@ function getUniqueConflictMessage(error: unknown): string | null {
     ? SLUG_CONFLICT_ERROR
     : DUPLICATE_ENTRY_ERROR;
 }
+
 /**
  * Runs the bundle rules and returns the violation message instead of
  * throwing, so it reaches the client intact in production builds. Only
@@ -79,6 +81,7 @@ async function getBundleIntegrityError(
     return "Não foi possível validar o kit. Tente novamente.";
   }
 }
+
 /**
  * Reads the availability flag posted by the admin form.
  * Returns `undefined` when the field is absent so each caller can apply its own
@@ -226,14 +229,19 @@ export async function createProduct(
   const rawPrice = formData.get("priceCents") as string | null;
   const rawSizes = formData.get("sizes") as string;
   let sizesInput: unknown = [];
+
   try {
     if (rawSizes) sizesInput = JSON.parse(rawSizes);
   } catch {}
+
   const rawVariants = formData.get("variants") as string;
+
   let variantsInput: unknown = [];
+
   try {
     if (rawVariants) variantsInput = JSON.parse(rawVariants);
   } catch {}
+
   const isAvailable = parseIsAvailable(formData.get("isAvailable")) ?? true;
   const controlStock =
     formData.get("controlStock") === "true" ||
@@ -250,15 +258,21 @@ export async function createProduct(
   const isBundle =
     formData.get("isBundle") === "true" || formData.get("isBundle") === "on";
   const rawComponents = formData.get("components") as string;
+
   let componentsInput: unknown = [];
+
   try {
     if (rawComponents) componentsInput = JSON.parse(rawComponents);
   } catch {}
+
   const rawStock = formData.get("stock") as string;
+
   let stockInput: unknown = [];
+
   try {
     if (rawStock) stockInput = JSON.parse(rawStock);
   } catch {}
+
   const validationResult = productSchema.safeParse({
     name: formData.get("name"),
     slug: formData.get("slug"),
@@ -330,7 +344,7 @@ export async function createProduct(
           components: {
             create: input.components.map((c) => ({
               componentProductId: c.componentProductId,
-              quantity: c.quantity,
+              quantity: BUNDLE_COMPONENT_QUANTITY,
             })),
           },
         },
@@ -565,7 +579,7 @@ export async function updateProduct(
             data: input.components.map((c) => ({
               bundleId: id,
               componentProductId: c.componentProductId,
-              quantity: c.quantity,
+              quantity: BUNDLE_COMPONENT_QUANTITY,
             })),
           });
         }
