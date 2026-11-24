@@ -1,65 +1,53 @@
+import type { Listing } from "@/lib/listings";
+import { cn, formatPrice } from "@/lib/utils";
 import Image from "next/image";
 import Link from "next/link";
 
 interface ProductCardProps {
-  slug: string;
-  name: string;
-  priceCents: number;
-  imageUrl: string;
-  isAvailable: boolean;
-  isDropActive: boolean;
-  variants: { isAvailable: boolean }[];
+  listing: Listing;
 }
 
-export function ProductCard({
-  slug,
-  name,
-  priceCents,
-  imageUrl,
-  isAvailable,
-  isDropActive,
-  variants,
-}: ProductCardProps) {
-  const hasAvailableVariants = variants.some((v) => v.isAvailable);
-  const isSoldOut = !isAvailable || !hasAvailableVariants;
+export function ProductCard({ listing }: ProductCardProps) {
+  const isClosed = listing.state === "CLOSED";
 
   return (
     <Link
-      href={`/produto/${slug}`}
-      className="group relative block"
+      href={listing.href}
+      className="group overflow-hidden border-2 border-black bg-white transition-all duration-300 hover:-translate-y-2 hover:shadow-[10px_10px_0px_#f97316]"
     >
-      <div className="relative aspect-square overflow-hidden rounded-lg bg-zinc-900">
+      <div className="relative aspect-4/5 overflow-hidden border-b-2 border-black bg-zinc-100">
         <Image
-          src={imageUrl}
-          alt={name}
+          src={listing.imageUrl}
+          alt={listing.title}
           fill
-          className={`object-cover transition-transform group-hover:scale-105 ${
-            isSoldOut || !isDropActive ? "opacity-60 grayscale" : ""
-          }`}
+          sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+          className={cn(
+            "object-cover transition-transform duration-500 group-hover:scale-105",
+            isClosed && "opacity-60 grayscale",
+          )}
         />
 
-        {/* Status Badges */}
-        {!isDropActive ? (
-          <div className="absolute top-2 right-2 rounded border border-zinc-800 bg-zinc-950/90 px-2 py-1 text-xs font-semibold tracking-wider text-zinc-400 uppercase">
+        {isClosed && (
+          <div className="absolute top-2 right-2 border-2 border-black bg-zinc-900 px-2 py-1 text-xs font-black tracking-widest text-white uppercase">
             Vendas Encerradas
           </div>
-        ) : isSoldOut ? (
-          <div className="absolute top-2 right-2 rounded border border-red-800/50 bg-red-950/90 px-2 py-1 text-xs font-semibold tracking-wider text-red-400 uppercase">
-            Esgotado
-          </div>
-        ) : null}
+        )}
       </div>
 
-      <div className="mt-3 flex justify-between text-sm">
-        <h3 className="font-medium text-zinc-200 transition-colors group-hover:text-amber-400">
-          {name}
+      <div className="space-y-4 p-6">
+        <h3 className="text-2xl leading-tight font-black uppercase">
+          {listing.title}
         </h3>
-        <span className="font-bold text-zinc-100">
-          {(priceCents / 100).toLocaleString("pt-BR", {
-            style: "currency",
-            currency: "BRL",
-          })}
-        </span>
+
+        <div className="flex items-end justify-between">
+          <span className="text-2xl font-black text-orange-500">
+            {formatPrice(listing.priceCents)}
+          </span>
+
+          <span className="font-bold tracking-widest uppercase transition-transform group-hover:translate-x-1">
+            Ver →
+          </span>
+        </div>
       </div>
     </Link>
   );

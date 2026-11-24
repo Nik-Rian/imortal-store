@@ -4,9 +4,23 @@ import { prisma as applicationPrisma } from "@/lib/prisma";
 import { buildStockKey } from "@/lib/stock-key";
 import { loadCheckoutCatalogue } from "@/services/checkout.service";
 import { createPixOrder } from "@/services/mercadopago.service";
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createDrop, createProduct, createStockItem, disconnectTestPrisma, getTestPrisma, truncateAllTables } from "./helpers/db";
-
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import {
+  createDrop,
+  createProduct,
+  createStockItem,
+  disconnectTestPrisma,
+  getTestPrisma,
+  truncateAllTables,
+} from "./helpers/db";
 
 // The action module builds its own Prisma client from DATABASE_URL when it is
 // first imported, so the variable must point at the disposable test database

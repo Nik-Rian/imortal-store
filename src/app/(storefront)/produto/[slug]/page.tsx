@@ -1,5 +1,6 @@
 import { AddToCartButton } from "@/components/product/AddToCartButton";
 import { ProductGallery } from "@/components/product/ProductGallery";
+import { resolveInitialVariant } from "@/lib/listings";
 import { getBundleGalleryImages } from "@/lib/media";
 import { formatPrice } from "@/lib/utils";
 import { getProductBySlug } from "@/services/product.service";
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -38,7 +40,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function ProductPage({ params }: Props) {
+export default async function ProductPage({ params, searchParams }: Props) {
   // Await the params to extract the slug
   const { slug } = await params;
 
@@ -49,6 +51,15 @@ export default async function ProductPage({ params }: Props) {
   if (!product) {
     notFound();
   }
+
+  // The variant chosen on a listing arrives as ?variante=<id>. Resolving it
+  // against this product's own variants rejects ids of other products, and an
+  // unavailable or unknown id falls back to the first available variant.
+  const { variante } = await searchParams;
+  const initialVariantId = resolveInitialVariant(
+    product.variants,
+    typeof variante === "string" ? variante : null,
+  );
 
   // A bundle's carousel shows its components' images; its own uploaded image
   // stays the listing thumbnail and the link-preview image (BND-003).
@@ -90,7 +101,11 @@ export default async function ProductPage({ params }: Props) {
           </div>
 
           <div className="mt-8 flex gap-4">
-            <AddToCartButton product={product} />
+            <AddToCartButton
+              key={initialVariantId ?? "no-variant"}
+              product={product}
+              initialVariantId={initialVariantId}
+            />
           </div>
         </div>
       </div>
