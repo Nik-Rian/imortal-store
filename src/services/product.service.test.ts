@@ -82,11 +82,27 @@ describe("checkProductAvailability", () => {
     },
   );
 
+  it("is not found when the product does not exist", async () => {
+    vi.mocked(prisma.product.findUnique).mockResolvedValue(null);
+    expect(await checkProductAvailability("missing")).toEqual({
+      available: false,
+      reason: "NOT_FOUND",
+    });
+  });
+
   it("rejects a product whose drop is concluded", async () => {
     mockProduct(makeProduct({ drop: { status: "CONCLUDED" } }));
     expect(await checkProductAvailability("p1")).toEqual({
       available: false,
       reason: "DROP_ENDED",
+    });
+  });
+
+  it("rejects a product whose listing is closed", async () => {
+    mockProduct(makeProduct({ isAvailable: false }));
+    expect(await checkProductAvailability("p1")).toEqual({
+      available: false,
+      reason: "PRODUCT_UNAVAILABLE",
     });
   });
 

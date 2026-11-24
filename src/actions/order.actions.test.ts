@@ -1,13 +1,19 @@
 import { inspect } from "node:util";
 import { requireSession } from "@/lib/auth-guard";
 import { describeCardFailure, PaymentRejectedError } from "@/lib/card-outcome";
+import type {
+  Catalogue,
+  CatalogueProduct,
+  StockRecord,
+} from "@/lib/order-lines";
 import { prisma } from "@/lib/prisma";
+import { buildStockKey } from "@/lib/stock-key";
+import { loadCheckoutCatalogue } from "@/services/checkout.service";
 import {
   createCardOrder,
   createPixOrder,
   MercadoPagoTimeoutError,
 } from "@/services/mercadopago.service";
-import { checkProductAvailability } from "@/services/product.service";
 import { revalidatePath } from "next/cache";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -26,8 +32,6 @@ vi.mock("@/lib/prisma", () => ({
       update: vi.fn(),
       updateMany: vi.fn(),
     },
-    productVariant: { findMany: vi.fn() },
-    product: { findMany: vi.fn() },
   },
 }));
 
@@ -35,8 +39,8 @@ vi.mock("@/lib/auth-guard", () => ({
   requireSession: vi.fn(),
 }));
 
-vi.mock("@/services/product.service", () => ({
-  checkProductAvailability: vi.fn(),
+vi.mock("@/services/checkout.service", () => ({
+  loadCheckoutCatalogue: vi.fn(),
 }));
 
 vi.mock("@/services/mercadopago.service", async (importOriginal) => ({
@@ -48,6 +52,36 @@ vi.mock("@/services/mercadopago.service", async (importOriginal) => ({
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
+
+function makeProduct(
+  overrides: Partial<CatalogueProduct> = {},
+): CatalogueProduct {
+  return {
+    id: "prod-1",
+    name: "Camisa",
+    priceCents: 5000,
+    isAvailable: true,
+    controlStock: false,
+    hasSizes: false,
+    hasVariants: false,
+    isBundle: false,
+    drop: { name: "Drop 1", status: "ACTIVE" },
+    variants: [],
+    sizes: [],
+    components: [],
+    ...overrides,
+  };
+}
+
+function makeCatalogue(
+  products: CatalogueProduct[] = [makeProduct()],
+  stock: StockRecord[] = [],
+): Catalogue {
+  return {
+    products: new Map(products.map((p) => [p.id, p] as const)),
+    stock: new Map(stock.map((s) => [s.stockKey, s] as const)),
+  };
+}
 
 describe("createOrder Validation", () => {
   beforeEach(() => {
@@ -137,8 +171,7 @@ describe("createOrder Validation", () => {
       expect(prisma.order.findUnique).not.toHaveBeenCalled();
       expect(prisma.order.findFirst).not.toHaveBeenCalled();
       expect(prisma.order.create).not.toHaveBeenCalled();
-      expect(prisma.productVariant.findMany).not.toHaveBeenCalled();
-      expect(prisma.product.findMany).not.toHaveBeenCalled();
+      expect(loadCheckoutCatalogue).not.toHaveBeenCalled();
     },
   );
 });
@@ -190,18 +223,7 @@ describe("createOrder retry and duplicate protection", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.mocked(createPixOrder).mockResolvedValue(pixResult);
     vi.mocked(prisma.order.update).mockResolvedValue({} as never);
-    vi.mocked(checkProductAvailability).mockResolvedValue({
-      available: true,
-    } as never);
-    vi.mocked(prisma.product.findMany).mockResolvedValue([
-      {
-        id: "prod-1",
-        name: "Camisa",
-        priceCents: 5000,
-        drop: { name: "Drop 1" },
-        sizes: [],
-      },
-    ] as never);
+    vi.mocked(loadCheckoutCatalogue).mockResolvedValue(makeCatalogue());
   });
 
   afterEach(() => {
@@ -495,7 +517,7 @@ describe("createOrder retry and duplicate protection", () => {
       }),
     );
     expect(prisma.order.create).not.toHaveBeenCalled();
-    expect(prisma.product.findMany).not.toHaveBeenCalled();
+    expect(loadCheckoutCatalogue).not.toHaveBeenCalled();
   });
 });
 
@@ -512,15 +534,7 @@ describe("createOrder variant and size selection", () => {
     vi.resetAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    vi.mocked(prisma.product.findMany).mockResolvedValue([
-      {
-        id: "prod-1",
-        name: "Camisa",
-        priceCents: 5000,
-        drop: { name: "Drop 1" },
-        sizes: [],
-      },
-    ] as never);
+    vi.mocked(loadCheckoutCatalogue).mockResolvedValue(makeCatalogue());
   });
 
   afterEach(() => {
@@ -528,28 +542,32 @@ describe("createOrder variant and size selection", () => {
   });
 
   it("rejects a product-only line when the product requires a variant", async () => {
-    vi.mocked(checkProductAvailability).mockResolvedValue({
-      available: false,
-      reason: "VARIANT_UNAVAILABLE",
-    });
+    vi.mocked(loadCheckoutCatalogue).mockResolvedValue(
+      makeCatalogue([
+        makeProduct({
+          hasVariants: true,
+          variants: [{ id: "var-1", name: "Preta", isAvailable: true }],
+        }),
+      ]),
+    );
 
     const result = await createOrder(payload);
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/variação/);
-    // The action forwards the missing selection untouched to the rule.
-    expect(checkProductAvailability).toHaveBeenCalledWith(
-      "prod-1",
-      undefined,
-      undefined,
-      1,
+    // The missing selection reaches the rule untouched and is reported.
+    expect(console.warn).toHaveBeenCalledWith(
+      "[createOrder] Item unavailable",
+      expect.objectContaining({
+        productId: "prod-1",
+        reason: "VARIANT_UNAVAILABLE",
+      }),
     );
     expect(prisma.order.create).not.toHaveBeenCalled();
     expect(createPixOrder).not.toHaveBeenCalled();
   });
 
   it("still creates the order for a product without variants", async () => {
-    vi.mocked(checkProductAvailability).mockResolvedValue({ available: true });
     vi.mocked(prisma.order.create).mockResolvedValue({
       id: "order-1",
       accessToken: "token-1",
@@ -583,20 +601,17 @@ describe("createOrder variant and size selection", () => {
   });
 
   it("rejects a variant that belongs to a different product than the line", async () => {
-    vi.mocked(prisma.productVariant.findMany).mockResolvedValue([
-      {
-        id: "var-1",
-        productId: "prod-2",
-        name: "Preta",
-        product: {
+    vi.mocked(loadCheckoutCatalogue).mockResolvedValue(
+      makeCatalogue([
+        makeProduct({
           id: "prod-2",
           name: "Outra",
           priceCents: 1000,
-          drop: { name: "Drop 1" },
-          sizes: [],
-        },
-      },
-    ] as never);
+          hasVariants: true,
+          variants: [{ id: "var-1", name: "Preta", isAvailable: true }],
+        }),
+      ]),
+    );
 
     const result = await createOrder({
       ...payload,
@@ -605,7 +620,404 @@ describe("createOrder variant and size selection", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/não pertence/);
-    expect(checkProductAvailability).not.toHaveBeenCalled();
+    expect(prisma.order.create).not.toHaveBeenCalled();
+    expect(createPixOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe("createOrder bundles and shared stock", () => {
+  const SAFE_ORDER_FAILURE_MESSAGE =
+    "Não foi possível processar o pedido agora. Tente novamente em instantes.";
+
+  const SHIRT_M = buildStockKey("prod-1", null, "size-m");
+  const CAP_BLUE = buildStockKey("prod-cap", "var-blue", null);
+
+  const shirt = makeProduct({
+    id: "prod-1",
+    name: "Camisa",
+    priceCents: 5000,
+    controlStock: true,
+    hasSizes: true,
+    sizes: [
+      { id: "size-m", size: "M", isAvailable: true },
+      { id: "size-g", size: "G", isAvailable: true },
+    ],
+  });
+  const cap = makeProduct({
+    id: "prod-cap",
+    name: "Boné",
+    priceCents: 3000,
+    controlStock: true,
+    hasVariants: true,
+    variants: [{ id: "var-blue", name: "Azul", isAvailable: true }],
+  });
+  const kit = makeProduct({
+    id: "prod-kit",
+    name: "Kit Calouro",
+    priceCents: 12000,
+    isBundle: true,
+    components: [
+      { componentProductId: "prod-cap", quantity: 1 },
+      { componentProductId: "prod-1", quantity: 1 },
+    ],
+  });
+
+  const stock = (shirtOnHand = 5, capOnHand = 5): StockRecord[] => [
+    { stockKey: SHIRT_M, onHand: shirtOnHand, reserved: 0, isAvailable: true },
+    { stockKey: CAP_BLUE, onHand: capOnHand, reserved: 0, isAvailable: true },
+  ];
+
+  const kitSelection = [
+    { componentProductId: "prod-cap", variantId: "var-blue" },
+    { componentProductId: "prod-1", sizeId: "size-m" },
+  ];
+  const kitLine = (quantity = 1) => ({
+    productId: "prod-kit",
+    quantity,
+    components: kitSelection,
+  });
+  const shirtLine = (quantity = 1) => ({
+    productId: "prod-1",
+    sizeId: "size-m",
+    quantity,
+  });
+
+  const basePayload = {
+    customerName: "Maria Silva",
+    customerPhone: "11999999999",
+    customerEmail: "maria@example.com",
+    customerCpf: "52998224725",
+  };
+
+  const useCatalogue = (
+    products: CatalogueProduct[] = [kit, cap, shirt],
+    stockRows: StockRecord[] = stock(),
+  ) =>
+    vi
+      .mocked(loadCheckoutCatalogue)
+      .mockResolvedValue(makeCatalogue(products, stockRows));
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    useCatalogue();
+    vi.mocked(prisma.order.create).mockResolvedValue({
+      id: "order-1",
+      accessToken: "token-1",
+      idempotencyKey: "key-1",
+      status: "PENDING",
+      paymentStatus: "PENDING",
+      customerName: "Maria Silva",
+      customerPhone: "11999999999",
+      customerEmail: "maria@example.com",
+      totalPriceCents: 24000,
+      pixQrCode: null,
+      mpPaymentId: null,
+      paymentMethod: "PIX",
+    } as never);
+    vi.mocked(prisma.order.update).mockResolvedValue({} as never);
+    vi.mocked(createPixOrder).mockResolvedValue({
+      paymentId: "pay-1",
+      orderId: "ORD1",
+      qrCode: "qr",
+      qrCodeBase64: "b64",
+      status: "action_required",
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("prices a bundle with its own price and persists the composition snapshot", async () => {
+    const result = await createOrder({
+      ...basePayload,
+      items: [kitLine(2)],
+    });
+
+    expect(result).toMatchObject({ success: true, orderId: "order-1" });
+    expect(loadCheckoutCatalogue).toHaveBeenCalledTimes(1);
+    expect(prisma.order.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        totalPriceCents: 24000,
+        items: {
+          create: [
+            {
+              productId: "prod-kit",
+              productName: "Kit Calouro",
+              dropName: "Drop 1",
+              variantName: null,
+              sizeLabel: null,
+              unitPriceCents: 12000,
+              quantity: 2,
+              components: {
+                create: [
+                  {
+                    productId: "prod-cap",
+                    productName: "Boné",
+                    variantName: "Azul",
+                    sizeLabel: null,
+                    quantity: 1,
+                  },
+                  {
+                    productId: "prod-1",
+                    productName: "Camisa",
+                    variantName: null,
+                    sizeLabel: "M",
+                    quantity: 1,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+    });
+  });
+
+  it("keeps the plain line snapshot unchanged and without components", async () => {
+    await createOrder({ ...basePayload, items: [shirtLine(2)] });
+
+    expect(prisma.order.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        totalPriceCents: 10000,
+        items: {
+          create: [
+            {
+              productId: "prod-1",
+              productName: "Camisa",
+              dropName: "Drop 1",
+              variantName: null,
+              sizeLabel: "M",
+              unitPriceCents: 5000,
+              quantity: 2,
+            },
+          ],
+        },
+      }),
+    });
+  });
+
+  it("totals a mixed cart and adds components only to the bundle line", async () => {
+    await createOrder({
+      ...basePayload,
+      items: [shirtLine(2), kitLine(1)],
+    });
+
+    const [{ data }] = vi.mocked(prisma.order.create).mock.calls[0];
+    const created = data as unknown as {
+      totalPriceCents: number;
+      items: { create: Record<string, unknown>[] };
+    };
+    expect(created.totalPriceCents).toBe(5000 * 2 + 12000);
+    expect(created.items.create).toHaveLength(2);
+    expect(created.items.create[0]).not.toHaveProperty("components");
+    expect(created.items.create[1]).toHaveProperty("components");
+  });
+
+  const invalidSelections: [
+    string,
+    (
+      | { componentProductId: string; variantId?: string; sizeId?: string }[]
+      | undefined
+    ),
+    RegExp,
+  ][] = [
+    ["no components", undefined, /Selecione as opções de todos/],
+    [
+      "a missing component",
+      [{ componentProductId: "prod-cap", variantId: "var-blue" }],
+      /Selecione as opções de todos/,
+    ],
+    [
+      "a product that is not part of the kit",
+      [...kitSelection, { componentProductId: "prod-other" }],
+      /não faz parte do kit/,
+    ],
+    [
+      "a variant of another product",
+      [
+        { componentProductId: "prod-cap", variantId: "var-other" },
+        { componentProductId: "prod-1", sizeId: "size-m" },
+      ],
+      /não pertence/,
+    ],
+    [
+      "no variant for a component with variants",
+      [
+        { componentProductId: "prod-cap" },
+        { componentProductId: "prod-1", sizeId: "size-m" },
+      ],
+      /Selecione a variação/,
+    ],
+    [
+      "no size for a component with sizes",
+      [
+        { componentProductId: "prod-cap", variantId: "var-blue" },
+        { componentProductId: "prod-1" },
+      ],
+      /Selecione o tamanho/,
+    ],
+  ];
+
+  it.each(invalidSelections)(
+    "rejects a bundle line with %s",
+    async (_label, components, expected) => {
+      const result = await createOrder({
+        ...basePayload,
+        items: [{ productId: "prod-kit", quantity: 1, components }],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(expected);
+      expect(prisma.order.create).not.toHaveBeenCalled();
+      expect(createPixOrder).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a duplicated component before touching the database", async () => {
+    const result = await createOrder({
+      ...basePayload,
+      items: [
+        {
+          productId: "prod-kit",
+          quantity: 1,
+          components: [kitSelection[0], kitSelection[0]],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/uma única vez/);
+    expect(loadCheckoutCatalogue).not.toHaveBeenCalled();
+  });
+
+  it("rejects component selections on a line that is not a bundle", async () => {
+    const result = await createOrder({
+      ...basePayload,
+      items: [
+        {
+          ...shirtLine(),
+          components: [
+            { componentProductId: "prod-cap", variantId: "var-blue" },
+          ],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/não é um kit/);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects products that were not found", async () => {
+    useCatalogue([], []);
+
+    const result = await createOrder({
+      ...basePayload,
+      items: [shirtLine()],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/não foram encontrados/);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts a bundle and a component line that fit the stock together", async () => {
+    useCatalogue([kit, cap, shirt], stock(2, 5));
+
+    const result = await createOrder({
+      ...basePayload,
+      items: [shirtLine(1), kitLine(1)],
+    });
+
+    expect(result.success).toBe(true);
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a cart whose lines fit the stock one by one but not together", async () => {
+    useCatalogue([kit, cap, shirt], stock(1, 5));
+
+    const alone = await createOrder({ ...basePayload, items: [kitLine(1)] });
+    expect(alone.success).toBe(true);
+
+    vi.mocked(prisma.order.create).mockClear();
+    const combined = await createOrder({
+      ...basePayload,
+      items: [shirtLine(1), kitLine(1)],
+    });
+
+    expect(combined.success).toBe(false);
+    expect(combined.error).toMatch(/Kit Calouro/);
+    expect(combined.error).toMatch(/Camisa/);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+    expect(createPixOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the bundle and the component option when a component has no stock", async () => {
+    useCatalogue([kit, cap, shirt], stock(5, 0));
+
+    const result = await createOrder({ ...basePayload, items: [kitLine()] });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Kit Calouro/);
+    expect(result.error).toMatch(/Boné/);
+    expect(result.error).toMatch(/Azul/);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a bundle whose selected component variant is unavailable", async () => {
+    useCatalogue([
+      kit,
+      {
+        ...cap,
+        variants: [{ id: "var-blue", name: "Azul", isAvailable: false }],
+      },
+      shirt,
+    ]);
+
+    const result = await createOrder({ ...basePayload, items: [kitLine()] });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Kit Calouro/);
+    expect(result.error).toMatch(/Boné/);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it("still orders a bundle whose component product is closed for sale", async () => {
+    useCatalogue([kit, cap, { ...shirt, isAvailable: false }]);
+
+    const result = await createOrder({ ...basePayload, items: [kitLine()] });
+
+    expect(result.success).toBe(true);
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a bundle whose own listing is closed", async () => {
+    useCatalogue([{ ...kit, isAvailable: false }, cap, shirt]);
+
+    const result = await createOrder({ ...basePayload, items: [kitLine()] });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Kit Calouro/);
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it("hides an unexpected loading failure behind the generic message", async () => {
+    const failure = new Error("db down");
+    vi.mocked(loadCheckoutCatalogue).mockRejectedValue(failure);
+
+    const result = await createOrder({ ...basePayload, items: [kitLine()] });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe(SAFE_ORDER_FAILURE_MESSAGE);
+    expect(result.error).not.toMatch(/db down/);
+    expect(result.orderId).toBeUndefined();
+    expect(console.error).toHaveBeenCalledWith(
+      "Error creating order:",
+      failure,
+    );
     expect(prisma.order.create).not.toHaveBeenCalled();
   });
 });
@@ -780,18 +1192,7 @@ describe("createOrder card payments", () => {
     vi.mocked(prisma.order.create).mockResolvedValue(storedOrder() as never);
     vi.mocked(prisma.order.update).mockResolvedValue({} as never);
     vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 1 } as never);
-    vi.mocked(checkProductAvailability).mockResolvedValue({
-      available: true,
-    } as never);
-    vi.mocked(prisma.product.findMany).mockResolvedValue([
-      {
-        id: "prod-1",
-        name: "Camisa",
-        priceCents: 5000,
-        drop: { name: "Drop 1" },
-        sizes: [],
-      },
-    ] as never);
+    vi.mocked(loadCheckoutCatalogue).mockResolvedValue(makeCatalogue());
   });
   afterEach(() => {
     vi.restoreAllMocks();
