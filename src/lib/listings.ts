@@ -1,6 +1,11 @@
+import {
+  getVariantState,
+  type AvailabilityState,
+  type ProductAvailability,
+} from "@/lib/availability";
 import { getProductImage } from "@/lib/media";
 
-export type ListingState = "OPEN" | "CLOSED";
+export type ListingState = AvailabilityState;
 export type ListingGroup = "BUNDLES" | "PRODUCTS";
 
 export interface ListingVariantSource {
@@ -35,7 +40,10 @@ export interface Listing {
   group: ListingGroup;
 }
 
-function buildProductListings(product: ListingProductSource): Listing[] {
+function buildProductListings(
+  product: ListingProductSource,
+  availability?: ProductAvailability,
+): Listing[] {
   const group: ListingGroup = product.isBundle ? "BUNDLES" : "PRODUCTS";
   const productPath = `/produto/${product.slug}`;
   const productImage = getProductImage(product.images);
@@ -52,7 +60,11 @@ function buildProductListings(product: ListingProductSource): Listing[] {
       href: `${productPath}?variante=${encodeURIComponent(variant.id)}`,
       imageUrl: variant.image || productImage,
       priceCents: product.priceCents,
-      state: product.isAvailable && variant.isAvailable ? "OPEN" : "CLOSED",
+      state: availability
+        ? getVariantState(availability, variant.id)
+        : product.isAvailable && variant.isAvailable
+          ? "OPEN"
+          : "CLOSED",
       group,
     }));
   }
@@ -71,7 +83,11 @@ function buildProductListings(product: ListingProductSource): Listing[] {
       href: productPath,
       imageUrl: productImage,
       priceCents: product.priceCents,
-      state: product.isAvailable && hasAvailableVariant ? "OPEN" : "CLOSED",
+      state: availability
+        ? availability.state
+        : product.isAvailable && hasAvailableVariant
+          ? "OPEN"
+          : "CLOSED",
       group,
     },
   ];
@@ -83,8 +99,11 @@ function buildProductListings(product: ListingProductSource): Listing[] {
  */
 export function buildListings(
   products: readonly ListingProductSource[],
+  availabilityByProductId?: ReadonlyMap<string, ProductAvailability>,
 ): Listing[] {
-  const listings = products.flatMap((product) => buildProductListings(product));
+  const listings = products.flatMap((product) =>
+    buildProductListings(product, availabilityByProductId?.get(product.id)),
+  );
 
   return [
     ...listings.filter((listing) => listing.group === "BUNDLES"),

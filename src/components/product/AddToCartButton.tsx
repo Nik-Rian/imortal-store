@@ -2,7 +2,12 @@
 
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/context/CartContext";
-import type { DropStatus } from "@/generated/prisma/client";
+import {
+  findCombination,
+  isSizePurchasable,
+  isVariantPurchasable,
+  type ProductAvailability,
+} from "@/lib/availability";
 import { getProductImage } from "@/lib/media";
 import { Minus, Plus, ShoppingBag } from "lucide-react";
 import Image from "next/image";
@@ -12,14 +17,12 @@ import { toast } from "sonner";
 interface Size {
   id: string;
   size: string;
-  isAvailable?: boolean;
 }
 
 interface Variant {
   id: string;
   name: string;
   image?: string | null;
-  isAvailable?: boolean;
 }
 
 interface AddToCartButtonProps {
@@ -29,87 +32,70 @@ interface AddToCartButtonProps {
     slug: string;
     priceCents: number;
     images: string[];
-    isAvailable?: boolean;
-    hasSizes?: boolean;
-    hasVariants?: boolean;
-    sizes?: Size[];
-    variants?: Variant[];
-    drop?: {
-      status: DropStatus;
-    } | null;
+    sizes: Size[];
+    variants: Variant[];
   };
+  availability: ProductAvailability;
   initialVariantId?: string | null;
 }
 
 export function AddToCartButton({
   product,
+  availability,
   initialVariantId,
 }: AddToCartButtonProps) {
   const { addItem } = useCart();
   const [quantity, setQuantity] = useState(1);
 
-  // Sales are open only while the drop is active; the status comes from the server.
-  const isDropActive = product.drop ? product.drop.status === "ACTIVE" : true;
+  // The server supplies only the options that apply to the product, so the
+  // presence of rows decides which selectors are shown.
+  const hasSizes = product.sizes.length > 0;
+  const hasVariants = product.variants.length > 0;
 
-  // Check overall stock/availability
-  const hasSizes = Boolean(
-    product.hasSizes && product.sizes && product.sizes.length > 0,
-  );
-  const hasVariants = Boolean(
-    product.hasVariants && product.variants && product.variants.length > 0,
-  );
+  const firstPurchasableSizeId = (variantId: string | null) =>
+    product.sizes.find((s) => isSizePurchasable(availability, variantId, s.id))
+      ?.id ?? null;
 
-  const hasAvailableSizes = hasSizes
-    ? product.sizes?.some((s) => s.isAvailable !== false)
-    : true;
-  const hasAvailableVariants = hasVariants
-    ? product.variants?.some((v) => v.isAvailable !== false)
-    : true;
-
-  const isSoldOut =
-    product.isAvailable === false ||
-    (hasSizes && !hasAvailableSizes) ||
-    (hasVariants && !hasAvailableVariants);
-
-  const [selectedSizeId, setSelectedSizeId] = useState<string | null>(
-    hasSizes
-      ? (product.sizes?.find((s) => s.isAvailable !== false)?.id ?? null)
-      : null,
-  );
-
-  // The requested variant is honored only when it exists and is available;
-  // otherwise the first available variant is preselected.
+  // The requested variant is honored only when it can be bought; otherwise
+  // the first purchasable variant is preselected.
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(
-    hasVariants
-      ? ((
-          product.variants?.find(
-            (v) => v.id === initialVariantId && v.isAvailable !== false,
-          ) ?? product.variants?.find((v) => v.isAvailable !== false)
-        )?.id ?? null)
-      : null,
+    () => {
+      if (!hasVariants) return null;
+      const requested = product.variants.find(
+        (v) =>
+          v.id === initialVariantId && isVariantPurchasable(availability, v.id),
+      );
+      const fallback = product.variants.find((v) =>
+        isVariantPurchasable(availability, v.id),
+      );
+      return (requested ?? fallback)?.id ?? null;
+    },
   );
 
-  // Drop Closed State UI
-  if (!isDropActive) {
+  const [selectedSizeId, setSelectedSizeId] = useState<string | null>(() =>
+    hasSizes ? firstPurchasableSizeId(selectedVariantId) : null,
+  );
+
+  const selectedCombination = findCombination(
+    availability,
+    selectedVariantId,
+    selectedSizeId,
+  );
+  const maxQuantity = selectedCombination?.maxQuantity ?? null;
+  const effectiveQuantity =
+    maxQuantity === null
+      ? quantity
+      : Math.max(1, Math.min(quantity, maxQuantity));
+
+  // Closed for now: nothing can be selected or bought.
+  if (availability.state === "CLOSED") {
     return (
       <Button
         disabled
+        variant="secondary"
         className="w-full font-semibold tracking-wider uppercase sm:w-64"
       >
-        Vendas Encerradas
-      </Button>
-    );
-  }
-
-  // Sold Out State UI
-  if (isSoldOut) {
-    return (
-      <Button
-        disabled
-        variant="outline"
-        className="w-full border-red-800/50 font-semibold tracking-wider text-red-500 uppercase sm:w-64"
-      >
-        Esgotado
+        Vendas fechadas no momento
       </Button>
     );
   }
@@ -129,6 +115,11 @@ export function AddToCartButton({
 
     if (hasVariants && !selectedVariant) {
       toast.error("Por favor, selecione uma variação.");
+      return;
+    }
+
+    if (!selectedCombination?.purchasable) {
+      toast.error("Esta combinação não está disponível.");
       return;
     }
 
@@ -168,14 +159,30 @@ export function AddToCartButton({
           <div className="flex flex-wrap gap-2">
             {product.variants.map((variant) => {
               const isSelected = variant.id === selectedVariantId;
-              const isAvailable = variant.isAvailable !== false;
+              const isAvailable = isVariantPurchasable(
+                availability,
+                variant.id,
+              );
 
               return (
                 <button
                   key={variant.id}
                   type="button"
                   disabled={!isAvailable}
-                  onClick={() => setSelectedVariantId(variant.id)}
+                  onClick={() => {
+                    setSelectedVariantId(variant.id);
+                    if (
+                      hasSizes &&
+                      (!selectedSizeId ||
+                        !isSizePurchasable(
+                          availability,
+                          variant.id,
+                          selectedSizeId,
+                        ))
+                    ) {
+                      setSelectedSizeId(firstPurchasableSizeId(variant.id));
+                    }
+                  }}
                   className={`relative flex h-11 cursor-pointer items-center gap-2 rounded-md border-2 px-4 text-sm font-extrabold uppercase transition-all ${
                     !isAvailable
                       ? "cursor-not-allowed border-zinc-200 bg-zinc-100 text-zinc-400 line-through dark:border-zinc-800 dark:bg-zinc-900"
@@ -211,7 +218,11 @@ export function AddToCartButton({
           <div className="flex flex-wrap gap-2">
             {product.sizes.map((size) => {
               const isSelected = size.id === selectedSizeId;
-              const isAvailable = size.isAvailable !== false;
+              const isAvailable = isSizePurchasable(
+                availability,
+                selectedVariantId,
+                size.id,
+              );
 
               return (
                 <button
@@ -234,41 +245,55 @@ export function AddToCartButton({
           </div>
         </div>
       )}
-
       {/* Quantity & Action */}
-      <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
-        <div className="flex w-fit items-center rounded-md border border-input bg-background">
+      {availability.state === "SOLD_OUT" ? (
+        <Button
+          disabled
+          variant="outline"
+          className="w-full border-red-800/50 font-semibold tracking-wider text-red-500 uppercase sm:w-64"
+        >
+          Esgotado
+        </Button>
+      ) : (
+        <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
+          <div className="flex w-fit items-center rounded-md border border-input bg-background">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Diminuir quantidade"
+              onClick={() => setQuantity(Math.max(1, effectiveQuantity - 1))}
+              disabled={effectiveQuantity <= 1}
+              className="h-10 w-10 rounded-r-none"
+            >
+              <Minus className="h-4 w-4" />
+            </Button>
+            <span className="w-12 text-center text-sm font-medium select-none">
+              {effectiveQuantity}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Aumentar quantidade"
+              onClick={() => setQuantity(effectiveQuantity + 1)}
+              disabled={
+                maxQuantity !== null && effectiveQuantity >= maxQuantity
+              }
+              className="h-10 w-10 rounded-l-none"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+
           <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setQuantity((prev) => (prev > 1 ? prev - 1 : 1))}
-            disabled={quantity <= 1}
-            className="h-10 w-10 rounded-r-none"
+            onClick={handleAddToCart}
+            className="w-full gap-2 text-base font-semibold sm:w-64"
+            size="lg"
           >
-            <Minus className="h-4 w-4" />
-          </Button>
-          <span className="w-12 text-center text-sm font-medium select-none">
-            {quantity}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setQuantity((prev) => prev + 1)}
-            className="h-10 w-10 rounded-l-none"
-          >
-            <Plus className="h-4 w-4" />
+            <ShoppingBag className="h-5 w-5" />
+            Adicionar ao Carrinho
           </Button>
         </div>
-
-        <Button
-          onClick={handleAddToCart}
-          className="w-full gap-2 text-base font-semibold sm:w-64"
-          size="lg"
-        >
-          <ShoppingBag className="h-5 w-5" />
-          Adicionar ao Carrinho
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

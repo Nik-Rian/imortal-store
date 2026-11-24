@@ -10,6 +10,31 @@ export interface GetProductsOptions {
   activeOnly?: boolean;
 }
 
+// Bundle components with everything the availability computation needs:
+// the component product's own options, drop and stock rows.
+const bundleComponentsWithAvailabilityData = {
+  orderBy: { componentProduct: { name: "asc" } },
+  select: {
+    quantity: true,
+    componentProduct: {
+      select: {
+        id: true,
+        name: true,
+        images: true,
+        priceCents: true,
+        isAvailable: true,
+        controlStock: true,
+        hasSizes: true,
+        hasVariants: true,
+        drop: { select: { name: true, status: true } },
+        variants: { orderBy: { sortOrder: "asc" } },
+        sizes: { orderBy: { sortOrder: "asc" } },
+        stockItems: true,
+      },
+    },
+  },
+} as const;
+
 // Database errors are intentionally not caught in the read functions below:
 // they must reach the error boundary and must never be cached as an empty
 // result. A missing record is still reported as null (or an empty list when
@@ -40,18 +65,15 @@ export const getStorefrontProducts = cache(async () => {
   return prisma.product.findMany({
     where: { dropId: storefrontDrop.id },
     include: {
+      drop: true,
+      sizes: {
+        orderBy: { sortOrder: "asc" },
+      },
       variants: {
         orderBy: { sortOrder: "asc" },
       },
-      components: {
-        orderBy: { componentProduct: { name: "asc" } },
-        select: {
-          quantity: true,
-          componentProduct: {
-            select: { id: true, name: true, images: true },
-          },
-        },
-      },
+      stockItems: true,
+      components: bundleComponentsWithAvailabilityData,
     },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
   });
@@ -77,15 +99,8 @@ export const getProductBySlug = cache(
         variants: {
           orderBy: { sortOrder: "asc" },
         },
-        components: {
-          orderBy: { componentProduct: { name: "asc" } },
-          select: {
-            quantity: true,
-            componentProduct: {
-              select: { id: true, name: true, images: true },
-            },
-          },
-        },
+        components: bundleComponentsWithAvailabilityData,
+        stockItems: true,
       },
     });
   },

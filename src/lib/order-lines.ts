@@ -143,11 +143,11 @@ function fail(error: string): { ok: false; error: string } {
 
 // A dimension is active only when the flag is on and rows exist. When active,
 // a valid selection is required (same rule as the storefront).
-function usesVariants(product: ProductRecord): boolean {
+export function usesVariants(product: ProductRecord): boolean {
   return product.hasVariants && product.variants.length > 0;
 }
 
-function usesSizes(product: ProductRecord): boolean {
+export function usesSizes(product: ProductRecord): boolean {
   return product.hasSizes && product.sizes.length > 0;
 }
 
@@ -339,7 +339,7 @@ function subjectOf(
   };
 }
 
-function stockKeyFor(
+export function stockKeyFor(
   product: ProductRecord,
   variant: VariantRecord | null,
   size: SizeRecord | null,
@@ -416,6 +416,11 @@ function checkSelection(
   return null;
 }
 
+/** Units of a stock row that can still be bought. */
+export function availableUnits(row: StockRecord): number {
+  return row.onHand - row.reserved;
+}
+
 function checkStockDemand(
   demands: readonly StockDemand[],
   stock: ReadonlyMap<string, StockRecord>,
@@ -426,7 +431,7 @@ function checkStockDemand(
       return { reason: "OUT_OF_STOCK", ...demand.contributions[0].subject };
     }
 
-    const available = row.onHand - row.reserved;
+    const available = availableUnits(row);
     let requested = 0;
     for (const contribution of demand.contributions) {
       requested += contribution.quantity;
