@@ -1,6 +1,7 @@
 import { MarkAllReadyButton } from "@/components/admin/MarkAllReadyButton";
 import { OrderStatusButtons } from "@/components/admin/OrderStatusButtons";
 import { PrintButton } from "@/components/admin/PrintButton";
+import { ReconcileButton } from "@/components/admin/ReconcileButton";
 import type {
   OrderStatus,
   PaymentReviewReason,
@@ -83,6 +84,7 @@ export default async function AdminOrdersPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <ReconcileButton />
           <MarkAllReadyButton hasPaidOrders={hasPaidOrders} />
           <PrintButton />
         </div>

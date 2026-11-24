@@ -361,6 +361,49 @@ function validateMercadoPagoOrderId(orderId: string): string {
   return orderId;
 }
 
+interface ProviderPaymentPayload {
+  id: number | string;
+  status: string;
+  status_detail?: string;
+  payment_method?: {
+    qr_code?: string;
+    qr_code_base64?: string;
+    ticket_url?: string;
+  };
+}
+
+interface ProviderOrderPayload {
+  id: number | string;
+  status: number | string;
+  status_detail?: string | null;
+  total_amount?: number | string | null;
+  total_paid_amount?: number | string | null;
+  external_reference?: string | null;
+  transactions?: { payments?: ProviderPaymentPayload[] };
+}
+
+function mapProviderOrder(data: ProviderOrderPayload): MercadoPagoOrderDetails {
+  const payments = data.transactions?.payments;
+  return {
+    orderId: String(data.id),
+    status: String(data.status),
+    status_detail: data.status_detail ?? undefined,
+    totalAmount: Number(data.total_amount) || 0,
+    totalPaidAmount: Number(data.total_paid_amount) || 0,
+    externalReference: data.external_reference ?? undefined,
+    payments: Array.isArray(payments)
+      ? payments.map((payment) => ({
+          paymentId: String(payment.id),
+          status: payment.status,
+          statusDetail: payment.status_detail,
+          qrCode: payment.payment_method?.qr_code,
+          qrCodeBase64: payment.payment_method?.qr_code_base64,
+          ticketUrl: payment.payment_method?.ticket_url,
+        }))
+      : [],
+  };
+}
+
 /**
  * Fetches order details from Mercado Pago Checkout Transparente Orders API.
  */
@@ -397,33 +440,70 @@ export async function getMercadoPagoOrder(
 
   if (data === null) return null;
 
-  return {
-    orderId: String(data.id),
-    status: String(data.status),
-    status_detail: data.status_detail ?? undefined,
-    totalAmount: Number(data.total_amount) || 0,
-    totalPaidAmount: Number(data.total_paid_amount) || 0,
-    externalReference: data.external_reference ?? undefined,
-    payments: Array.isArray(data.transactions?.payments)
-      ? data.transactions.payments.map(
-          (payment: {
-            id: number | string;
-            status: string;
-            status_detail?: string;
-            payment_method?: {
-              qr_code?: string;
-              qr_code_base64?: string;
-              ticket_url?: string;
-            };
-          }) => ({
-            paymentId: String(payment.id),
-            status: payment.status,
-            statusDetail: payment.status_detail,
-            qrCode: payment.payment_method?.qr_code,
-            qrCodeBase64: payment.payment_method?.qr_code_base64,
-            ticketUrl: payment.payment_method?.ticket_url,
-          }),
-        )
-      : [],
-  };
+  return mapProviderOrder(data);
+}
+
+/** Longest creation-date window the provider accepts for an order search. */
+export const ORDER_SEARCH_MAX_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Searches provider orders by external reference inside a bounded creation-date
+ * window. Resolves to an empty array only when the provider answered
+ * successfully with no matching order; every other outcome (HTTP error,
+ * timeout, malformed body, results that ignore the filter) throws, so a caller
+ * can never mistake a failed search for an empty one.
+ */
+export async function searchMercadoPagoOrdersByExternalReference(
+  externalReference: string,
+  searchWindow: { from: Date; to: Date },
+): Promise<MercadoPagoOrderDetails[]> {
+  if (!MP_ACCESS_TOKEN) {
+    throw new Error("MERCADOPAGO_ACCESS_TOKEN is not configured.");
+  }
+
+  const windowMs = searchWindow.to.getTime() - searchWindow.from.getTime();
+  if (!(windowMs > 0) || windowMs > ORDER_SEARCH_MAX_WINDOW_MS) {
+    throw new Error(
+      "Mercado Pago order search window must be positive and at most 30 days.",
+    );
+  }
+
+  const searchUrl = new URL("/v1/orders", MP_BASE_URL);
+  searchUrl.searchParams.set("begin_date", searchWindow.from.toISOString());
+  searchUrl.searchParams.set("end_date", searchWindow.to.toISOString());
+  searchUrl.searchParams.set("external_reference", externalReference);
+
+  const data = await withProviderTimeout(async (signal) => {
+    const response = await fetch(searchUrl, {
+      headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` },
+      redirect: "error",
+      signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to search orders in Mercado Pago (status ${response.status}).`,
+      );
+    }
+
+    return response.json();
+  });
+
+  if (!Array.isArray(data?.data)) {
+    throw new Error(
+      "Mercado Pago order search returned an unexpected response.",
+    );
+  }
+
+  const orders = (data.data as ProviderOrderPayload[]).map(mapProviderOrder);
+
+  // A response that ignores the external reference filter must never be read
+  // as "no order exists" for this reference.
+  if (orders.some((order) => order.externalReference !== externalReference)) {
+    throw new Error(
+      "Mercado Pago order search returned orders that do not match the external reference.",
+    );
+  }
+
+  return orders;
 }
