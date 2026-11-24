@@ -1,15 +1,11 @@
+;
 // @vitest-environment jsdom
 import type { StockItemSnapshot } from "@/lib/stock-matrix";
 import type { ProductWithVariants } from "@/types";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ProductForm } from "./ProductForm";
+
 
 vi.mock("@/actions/blob.actions", () => ({
   uploadProductImage: vi.fn(),
@@ -470,11 +466,27 @@ describe("ProductForm stock matrix", () => {
     expect(screen.queryByLabelText("Quantidade de Produto")).toBeNull();
 
     fireEvent.submit(document.querySelector("form")!);
-    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+
+    // Wait until submission has completed and controls are enabled again.
+    await waitFor(() => {
+      expect(action).toHaveBeenCalledTimes(1);
+
+      const checkbox = screen.getByLabelText(
+        "Controlar Estoque",
+      ) as HTMLInputElement;
+
+      expect(checkbox.disabled).toBe(false);
+    });
+
     expect((action.mock.calls[0][0] as FormData).get("stock")).toBe("[]");
 
-    fireEvent.click(screen.getByLabelText("Controlar Estoque"));
-    expect(screen.getByLabelText("Quantidade de Produto")).toBeTruthy();
+    const checkbox = screen.getByLabelText(
+      "Controlar Estoque",
+    ) as HTMLInputElement;
+
+    fireEvent.click(checkbox);
+
+    expect(await screen.findByLabelText("Quantidade de Produto")).toBeTruthy();
   });
 });
 
