@@ -14,6 +14,11 @@ import {
 import { getAdminTransitionRule } from "@/lib/order-status";
 import { prisma } from "@/lib/prisma";
 import {
+  createRateLimiter,
+  getClientAddress,
+  readPositiveIntegerEnv,
+} from "@/lib/rate-limit";
+import {
   createOrderSchema,
   type CreateOrderInput,
 } from "@/lib/validations/checkout.schema";
@@ -25,6 +30,7 @@ import {
 } from "@/services/mercadopago.service";
 import { reserveStock, StockReservationError } from "@/services/stock.service";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 
 // Unexpected failures never expose Error.message to the customer: it can carry
 // configuration or database details. Not exported because a "use server" module
@@ -34,6 +40,26 @@ const ORDER_CREATION_FAILURE_MESSAGE =
 
 const PROVIDER_TIMEOUT_FAILURE_MESSAGE =
   "O serviço de pagamento demorou para responder. Aguarde um momento e tente novamente.";
+
+const ORDER_RATE_LIMIT_FAILURE_MESSAGE =
+  "Muitos pedidos foram iniciados em pouco tempo. Aguarde alguns minutos e tente novamente.";
+
+const DEFAULT_ORDER_RATE_LIMIT_MAX = 8;
+const DEFAULT_ORDER_RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
+
+// In-memory and per process: state resets on restart and is not shared across
+// instances. Limits come from the environment, read once at module load.
+const orderCreationLimiter = createRateLimiter({
+  maxRequests: readPositiveIntegerEnv(
+    process.env.CHECKOUT_RATE_LIMIT_MAX,
+    DEFAULT_ORDER_RATE_LIMIT_MAX,
+  ),
+  windowMs:
+    readPositiveIntegerEnv(
+      process.env.CHECKOUT_RATE_LIMIT_WINDOW_SECONDS,
+      DEFAULT_ORDER_RATE_LIMIT_WINDOW_SECONDS,
+    ) * 1000,
+});
 
 function availabilityErrorMessage(failure: AvailabilityFailure): string {
   const { reason, productName, variantName, sizeLabel, bundleName } = failure;
@@ -137,6 +163,23 @@ export async function createOrder(payload: CreateOrderInput) {
           error: availabilityErrorMessage(unavailable),
         };
       }
+
+      // Only attempts that would create a new order reach this point. Retries
+      // and idempotent resumes are resolved above, and carts rejected as
+      // unavailable return earlier, so none of them consume quota.
+      const rateLimit = orderCreationLimiter.consume(
+        getClientAddress(await headers()),
+      );
+      if (!rateLimit.allowed) {
+        console.warn("[createOrder] Order creation rate limit exceeded", {
+          retryAfterSeconds: rateLimit.retryAfterSeconds,
+        });
+        return {
+          success: false,
+          error: ORDER_RATE_LIMIT_FAILURE_MESSAGE,
+        };
+      }
+
       const stockDemand = aggregateStockDemand(resolution.lines);
       const { totalPriceCents, items: orderItemsData } = buildOrderSnapshots(
         resolution.lines,

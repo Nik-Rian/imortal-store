@@ -16,6 +16,7 @@ import {
 } from "@/services/mercadopago.service";
 import { reserveStock, StockReservationError } from "@/services/stock.service";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createOrder,
@@ -58,6 +59,23 @@ vi.mock("@/services/stock.service", async (importOriginal) => ({
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
+}));
+
+// Hoisted so the limiter, created when the action module is imported, always
+// starts from the default limits, and so each call can get its own client.
+const testClient = vi.hoisted(() => {
+  delete process.env.CHECKOUT_RATE_LIMIT_MAX;
+  delete process.env.CHECKOUT_RATE_LIMIT_WINDOW_SECONDS;
+  return { counter: 0 };
+});
+
+// Every call gets a distinct address by default, so the module-level limiter
+// state never leaks quota between unrelated tests.
+vi.mock("next/headers", () => ({
+  headers: vi.fn(
+    async () =>
+      new Headers({ "x-forwarded-for": `test-client-${++testClient.counter}` }),
+  ),
 }));
 
 function makeProduct(
@@ -1484,5 +1502,148 @@ describe("createOrder card payments", () => {
     expect(result).not.toHaveProperty("accessToken");
     expect(prisma.order.update).not.toHaveBeenCalled();
     expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("createOrder rate limiting", () => {
+  const RATE_LIMIT_MESSAGE =
+    "Muitos pedidos foram iniciados em pouco tempo. Aguarde alguns minutos e tente novamente.";
+  const payload = {
+    customerName: "Maria Silva",
+    customerPhone: "11999999999",
+    customerEmail: "maria@example.com",
+    customerCpf: "52998224725",
+    items: [{ productId: "prod-1", quantity: 1 }],
+  };
+  const storedOrder = (overrides: Record<string, unknown> = {}) => ({
+    id: "order-1",
+    accessToken: "token-1",
+    idempotencyKey: "key-1",
+    status: "PENDING",
+    paymentStatus: "PENDING",
+    customerName: "Maria Silva",
+    customerPhone: "11999999999",
+    customerEmail: "maria@example.com",
+    totalPriceCents: 5000,
+    pixQrCode: null,
+    mpPaymentId: null,
+    paymentMethod: "PIX",
+    ...overrides,
+  });
+  const useClientAddress = (address: string) => {
+    vi.mocked(headers).mockResolvedValue(
+      new Headers({ "x-forwarded-for": address }) as never,
+    );
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    runTransactionsAgainstMockedClient();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(createPixOrder).mockResolvedValue({
+      paymentId: "pay-1",
+      orderId: "ORD1",
+      qrCode: "qr",
+      qrCodeBase64: "b64",
+      status: "action_required",
+    });
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.order.create).mockResolvedValue(storedOrder() as never);
+    vi.mocked(prisma.order.update).mockResolvedValue({} as never);
+    vi.mocked(loadCheckoutCatalogue).mockResolvedValue(makeCatalogue());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("refuses the ninth new order from one address inside the window and creates nothing", async () => {
+    useClientAddress("203.0.113.10");
+
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      const accepted = await createOrder(payload);
+      expect(accepted.success).toBe(true);
+    }
+    expect(prisma.order.create).toHaveBeenCalledTimes(8);
+    expect(createPixOrder).toHaveBeenCalledTimes(8);
+
+    const refused = await createOrder(payload);
+
+    expect(refused).toEqual({ success: false, error: RATE_LIMIT_MESSAGE });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(8);
+    expect(prisma.order.create).toHaveBeenCalledTimes(8);
+    expect(reserveStock).toHaveBeenCalledTimes(8);
+    expect(createPixOrder).toHaveBeenCalledTimes(8);
+  });
+
+  it("keeps a separate quota for each client address", async () => {
+    useClientAddress("203.0.113.20");
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      await createOrder(payload);
+    }
+    expect((await createOrder(payload)).success).toBe(false);
+
+    useClientAddress("203.0.113.21");
+    const otherClient = await createOrder(payload);
+
+    expect(otherClient.success).toBe(true);
+  });
+
+  it("never counts retries of an existing pending order", async () => {
+    useClientAddress("203.0.113.30");
+    vi.mocked(prisma.order.findUnique).mockResolvedValue(
+      storedOrder() as never,
+    );
+
+    for (let attempt = 1; attempt <= 10; attempt++) {
+      const result = await createOrder({
+        ...payload,
+        orderId: "order-1",
+        accessToken: "token-1",
+      });
+      expect(result).toMatchObject({ success: true, orderId: "order-1" });
+    }
+
+    expect(prisma.order.create).not.toHaveBeenCalled();
+  });
+
+  it("never counts the resume of an existing order found by attempt key", async () => {
+    useClientAddress("203.0.113.40");
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(
+      storedOrder({ pixQrCode: "qr", mpPaymentId: "pay-1" }) as never,
+    );
+
+    for (let attempt = 1; attempt <= 10; attempt++) {
+      const result = await createOrder({ ...payload, attemptKey: "key-1" });
+      expect(result).toMatchObject({ success: true, orderId: "order-1" });
+    }
+
+    expect(prisma.order.create).not.toHaveBeenCalled();
+    expect(createPixOrder).not.toHaveBeenCalled();
+  });
+
+  it("does not consume quota for carts rejected before an order would be created", async () => {
+    useClientAddress("203.0.113.50");
+    vi.mocked(loadCheckoutCatalogue).mockResolvedValue(
+      makeCatalogue([
+        makeProduct({
+          hasVariants: true,
+          variants: [{ id: "var-1", name: "Preta", isAvailable: true }],
+        }),
+      ]),
+    );
+
+    for (let attempt = 1; attempt <= 10; attempt++) {
+      const rejected = await createOrder(payload);
+      expect(rejected.success).toBe(false);
+      expect(rejected.error).not.toBe(RATE_LIMIT_MESSAGE);
+    }
+
+    vi.mocked(loadCheckoutCatalogue).mockResolvedValue(makeCatalogue());
+    const accepted = await createOrder(payload);
+
+    expect(accepted.success).toBe(true);
+    expect(prisma.order.create).toHaveBeenCalledTimes(1);
   });
 });
