@@ -1,20 +1,35 @@
 import { PaymentStatus } from "@/generated/prisma/client";
 import { mapPaymentStatus } from "@/lib/payment-status";
+import { prisma } from "@/lib/prisma";
 import {
   getMercadoPagoOrder,
   MercadoPagoTimeoutError,
 } from "@/services/mercadopago.service";
+import {
+  finalizeReservations,
+  releaseReservations,
+} from "@/services/stock.service";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { POST } from "./route";
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: {},
+  prisma: {
+    order: { findFirst: vi.fn(), updateMany: vi.fn() },
+    $transaction: vi.fn(),
+  },
 }));
 
 vi.mock("@/services/mercadopago.service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/mercadopago.service")>()),
   getMercadoPagoOrder: vi.fn(),
 }));
+
+vi.mock("@/services/stock.service", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/stock.service")>()),
+  finalizeReservations: vi.fn(),
+  releaseReservations: vi.fn(),
+}));
+
 vi.mock("@/lib/mercadopago", () => ({
   verifyMercadoPagoSignature: vi.fn(() => true),
 }));
@@ -138,4 +153,258 @@ describe("Webhook resource id handling", () => {
       expect(error).toHaveBeenCalled();
     },
   );
+});
+
+describe("Webhook stock effects per payment status", () => {
+  const providerOrder = (overrides: Record<string, unknown> = {}) => ({
+    orderId: "ORD123",
+    status: "processed",
+    status_detail: "accredited",
+    totalAmount: 50,
+    totalPaidAmount: 50,
+    externalReference: "order-1",
+    payments: [{ paymentId: "pay-1", status: "processed" }],
+    ...overrides,
+  });
+
+  const localOrder = (overrides: Record<string, unknown> = {}) => ({
+    id: "order-1",
+    accessToken: "tok",
+    status: "PENDING",
+    paymentStatus: "PENDING",
+    totalPriceCents: 5000,
+    paymentReviewReason: null,
+    ...overrides,
+  });
+
+  const request = () =>
+    new Request(
+      "http://localhost/api/webhooks/mercadopago?topic=order&data.id=ORD123",
+      { method: "POST", body: "{}" },
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 1 });
+    vi.mocked(prisma.$transaction).mockImplementation(((
+      callback: (tx: unknown) => unknown,
+    ) => callback(prisma)) as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  type Effect = "finalize" | "release" | "none";
+
+  // paymentStatus null: the notification changes nothing and no transaction runs.
+  const cases: {
+    name: string;
+    provider: Record<string, unknown>;
+    local: Record<string, unknown>;
+    effect: Effect;
+    paymentStatus: string | null;
+    fulfillment?: string;
+  }[] = [
+    {
+      name: "approval finalizes the reservations",
+      provider: {},
+      local: {},
+      effect: "finalize",
+      paymentStatus: "PAID",
+      fulfillment: "PENDING",
+    },
+    {
+      name: "approval after review finalizes the reservations",
+      provider: {},
+      local: { paymentStatus: "IN_REVIEW" },
+      effect: "finalize",
+      paymentStatus: "PAID",
+      fulfillment: "PENDING",
+    },
+    {
+      name: "failure releases the reservations",
+      provider: {
+        status: "failed",
+        status_detail: "failed",
+        totalPaidAmount: 0,
+      },
+      local: {},
+      effect: "release",
+      paymentStatus: "FAILED",
+      fulfillment: "CANCELED",
+    },
+    {
+      name: "expiry releases the reservations",
+      provider: {
+        status: "expired",
+        status_detail: undefined,
+        totalPaidAmount: 0,
+      },
+      local: {},
+      effect: "release",
+      paymentStatus: "EXPIRED",
+      fulfillment: "CANCELED",
+    },
+    {
+      name: "provider cancellation releases the reservations",
+      provider: {
+        status: "canceled",
+        status_detail: undefined,
+        totalPaidAmount: 0,
+      },
+      local: {},
+      effect: "release",
+      paymentStatus: "CANCELED",
+      fulfillment: "CANCELED",
+    },
+    {
+      name: "pending keeps the reservations",
+      provider: {
+        status: "pending",
+        status_detail: undefined,
+        totalPaidAmount: 0,
+      },
+      local: {},
+      effect: "none",
+      paymentStatus: null,
+    },
+    {
+      name: "processing keeps the reservations",
+      provider: {
+        status: "processing",
+        status_detail: "in_process",
+        totalPaidAmount: 0,
+      },
+      local: {},
+      effect: "none",
+      paymentStatus: "IN_REVIEW",
+      fulfillment: "PENDING",
+    },
+    {
+      name: "amount mismatch keeps the reservations",
+      provider: { totalAmount: 40, totalPaidAmount: 40 },
+      local: {},
+      effect: "none",
+      paymentStatus: "IN_REVIEW",
+      fulfillment: "PENDING",
+    },
+    {
+      name: "full refund of a ready order changes no stock or fulfilment",
+      provider: { status: "refunded", status_detail: undefined },
+      local: { paymentStatus: "PAID", status: "READY_FOR_PICKUP" },
+      effect: "none",
+      paymentStatus: "REFUNDED",
+      fulfillment: "READY_FOR_PICKUP",
+    },
+    {
+      name: "partial refund of a completed order changes no stock or fulfilment",
+      provider: { status: "processed", status_detail: "partially_refunded" },
+      local: { paymentStatus: "PAID", status: "COMPLETED" },
+      effect: "none",
+      paymentStatus: "PARTIALLY_REFUNDED",
+      fulfillment: "COMPLETED",
+    },
+    {
+      name: "chargeback in review changes no stock or fulfilment",
+      provider: { status: "charged_back", status_detail: "in_process" },
+      local: { paymentStatus: "PAID", status: "READY_FOR_PICKUP" },
+      effect: "none",
+      paymentStatus: "CHARGEBACK_IN_REVIEW",
+      fulfillment: "READY_FOR_PICKUP",
+    },
+    {
+      name: "lost chargeback changes no stock or fulfilment",
+      provider: { status: "charged_back", status_detail: "settled" },
+      local: { paymentStatus: "PAID", status: "COMPLETED" },
+      effect: "none",
+      paymentStatus: "CHARGEBACK_LOST",
+      fulfillment: "COMPLETED",
+    },
+    {
+      name: "won chargeback changes no stock or fulfilment",
+      provider: { status: "charged_back", status_detail: "reimbursed" },
+      local: { paymentStatus: "PAID", status: "READY_FOR_PICKUP" },
+      effect: "none",
+      paymentStatus: "CHARGEBACK_WON",
+      fulfillment: "READY_FOR_PICKUP",
+    },
+    {
+      name: "a repeated approval has no effect",
+      provider: {},
+      local: { paymentStatus: "PAID" },
+      effect: "none",
+      paymentStatus: null,
+    },
+  ];
+
+  test.each(cases)(
+    "$name",
+    async ({ provider, local, effect, paymentStatus, fulfillment }) => {
+      vi.mocked(getMercadoPagoOrder).mockResolvedValue(
+        providerOrder(provider) as never,
+      );
+      vi.mocked(prisma.order.findFirst).mockResolvedValue(
+        localOrder(local) as never,
+      );
+
+      const res = await POST(request());
+
+      expect(res.status).toBe(200);
+      expect(finalizeReservations).toHaveBeenCalledTimes(
+        effect === "finalize" ? 1 : 0,
+      );
+      expect(releaseReservations).toHaveBeenCalledTimes(
+        effect === "release" ? 1 : 0,
+      );
+      if (paymentStatus === null) {
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        return;
+      }
+      expect(prisma.order.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            paymentStatus,
+            status: fulfillment,
+          }),
+        }),
+      );
+    },
+  );
+
+  test("a payment confirmed after the order was canceled stays flagged and finalizes nothing", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(getMercadoPagoOrder).mockResolvedValue(providerOrder() as never);
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(
+      localOrder({ paymentStatus: "EXPIRED", status: "CANCELED" }) as never,
+    );
+
+    const res = await POST(request());
+
+    expect(res.status).toBe(200);
+    expect(prisma.order.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          paymentStatus: "PAID",
+          status: "CANCELED",
+          paymentReviewReason: "LATE_PAYMENT",
+        }),
+      }),
+    );
+    expect(finalizeReservations).not.toHaveBeenCalled();
+    expect(releaseReservations).not.toHaveBeenCalled();
+  });
+
+  test("applies no stock effect when the compare-and-set loses", async () => {
+    vi.mocked(getMercadoPagoOrder).mockResolvedValue(providerOrder() as never);
+    vi.mocked(prisma.order.findFirst).mockResolvedValue(localOrder() as never);
+    vi.mocked(prisma.order.updateMany).mockResolvedValue({ count: 0 });
+
+    const res = await POST(request());
+
+    expect(res.status).toBe(409);
+    expect(finalizeReservations).not.toHaveBeenCalled();
+    expect(releaseReservations).not.toHaveBeenCalled();
+  });
 });
