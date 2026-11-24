@@ -5,6 +5,7 @@ import {
   getMercadoPagoOrder,
   MercadoPagoTimeoutError,
 } from "@/services/mercadopago.service";
+import { syncOrderPayment } from "@/services/payment-sync.service";
 import {
   finalizeReservations,
   releaseReservations,
@@ -29,6 +30,13 @@ vi.mock("@/services/stock.service", async (importOriginal) => ({
   finalizeReservations: vi.fn(),
   releaseReservations: vi.fn(),
 }));
+
+vi.mock("@/services/payment-sync.service", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/services/payment-sync.service")>();
+  // Passthrough spy: existing suites keep exercising the real implementation.
+  return { ...actual, syncOrderPayment: vi.fn(actual.syncOrderPayment) };
+});
 
 vi.mock("@/lib/mercadopago", () => ({
   verifyMercadoPagoSignature: vi.fn(() => true),
@@ -406,5 +414,54 @@ describe("Webhook stock effects per payment status", () => {
     expect(res.status).toBe(409);
     expect(finalizeReservations).not.toHaveBeenCalled();
     expect(releaseReservations).not.toHaveBeenCalled();
+  });
+});
+
+describe("Webhook delegation to the shared payment sync", () => {
+  const providerOrder = {
+    orderId: "ORD123",
+    status: "processed",
+    totalAmount: 50,
+    totalPaidAmount: 50,
+    externalReference: "order-1",
+    payments: [],
+  };
+
+  const request = () =>
+    new Request(
+      "http://localhost/api/webhooks/mercadopago?topic=order&data.id=ORD123",
+      { method: "POST", body: "{}" },
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("passes the provider order to the shared sync and acknowledges", async () => {
+    vi.mocked(getMercadoPagoOrder).mockResolvedValue(providerOrder as never);
+    vi.mocked(syncOrderPayment).mockResolvedValueOnce("updated");
+
+    const res = await POST(request());
+
+    expect(res.status).toBe(200);
+    expect(syncOrderPayment).toHaveBeenCalledWith(providerOrder);
+  });
+
+  test("answers 409 when the shared sync reports a conflict", async () => {
+    vi.mocked(getMercadoPagoOrder).mockResolvedValue(providerOrder as never);
+    vi.mocked(syncOrderPayment).mockResolvedValueOnce("conflict");
+
+    const res = await POST(request());
+
+    expect(res.status).toBe(409);
+  });
+
+  test("does not sync when the provider has no such order", async () => {
+    vi.mocked(getMercadoPagoOrder).mockResolvedValue(null);
+
+    const res = await POST(request());
+
+    expect(res.status).toBe(200);
+    expect(syncOrderPayment).not.toHaveBeenCalled();
   });
 });
