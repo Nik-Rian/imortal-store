@@ -9,7 +9,21 @@ export interface CartItem {
   slug: string;
   priceCents: number;
   image: string;
+  /** Marks a bundle line so an incomplete stored line can be recognised. */
+  isBundle?: boolean;
+  /** One entry per bundle component, with the chosen options. */
+  components?: CartItemComponent[];
   quantity: number;
+}
+
+export interface CartItemComponent {
+  componentProductId: string;
+  // Display snapshots. The server re-validates every id and never uses names.
+  componentName: string;
+  variantId?: string;
+  variantName?: string;
+  sizeId?: string;
+  sizeLabel?: string;
 }
 
 export interface CartContextType {

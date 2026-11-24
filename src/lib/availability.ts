@@ -48,6 +48,12 @@ export interface ProductAvailability {
   combinations: CombinationAvailability[];
 }
 
+/** Options of one bundle component and which of them can be bought. */
+export interface ComponentAvailability {
+  componentProductId: string;
+  availability: ProductAvailability;
+}
+
 type Option = { variant: VariantRecord | null; size: SizeRecord | null };
 
 function listOptions(product: ProductRecord): Option[] {
@@ -76,6 +82,27 @@ function buildStockMap(
   return stock;
 }
 
+// One component option checked with the decision used by order creation, for
+// the units the bundle needs of that component.
+function evaluateComponentOption(
+  line: ResolvedLine,
+  entry: AvailabilityComponentInput,
+  variant: VariantRecord | null,
+  size: SizeRecord | null,
+  stock: ReadonlyMap<string, StockRecord>,
+): AvailabilityReason | null {
+  const resolved: ResolvedComponent = {
+    product: entry.componentProduct,
+    variant,
+    size,
+    quantity: entry.quantity,
+  };
+  return (
+    evaluateAvailability([{ ...line, components: [resolved] }], stock)
+      ?.reason ?? null
+  );
+}
+
 // A bundle is buyable only when every component has at least one option that
 // the order decision accepts for the units the bundle needs. Components are
 // distinct products, so their stock keys never overlap and can be checked
@@ -88,22 +115,15 @@ function findBlockedComponentReason(
 ): AvailabilityReason | null {
   for (const entry of product.components) {
     const component = entry.componentProduct;
-    const reasons = listOptions(component).map(({ variant, size }) => {
-      const resolved: ResolvedComponent = {
-        product: component,
-        variant,
-        size,
-        quantity: entry.quantity,
-      };
-      return (
-        evaluateAvailability([{ ...line, components: [resolved] }], stock)
-          ?.reason ?? null
-      );
-    });
+
+    const reasons = listOptions(component).map(({ variant, size }) =>
+      evaluateComponentOption(line, entry, variant, size, stock),
+    );
 
     const failures = reasons.filter(
       (reason): reason is AvailabilityReason => reason !== null,
     );
+
     if (failures.length < reasons.length) continue;
 
     return failures.includes("OUT_OF_STOCK") ? "OUT_OF_STOCK" : failures[0];
@@ -188,6 +208,57 @@ export function computeProductAvailability(
     hasSizeOptions: usesSizes(product),
     combinations,
   };
+}
+
+/**
+ * Purchasable options of every component of a bundle, in component order.
+ * Same decision as order creation: the component product's own listing flag is
+ * ignored and demand is the quantity the bundle needs of the component. Stock
+ * counts are not exposed, so maxQuantity is always null.
+ */
+export function computeBundleComponentAvailability(
+  product: AvailabilityProductInput,
+): ComponentAvailability[] {
+  const stock = buildStockMap(product);
+  const bundleLine: ResolvedLine = {
+    product,
+    variant: null,
+    size: null,
+    quantity: 1,
+    components: [],
+  };
+
+  return product.components.map((entry) => {
+    const component = entry.componentProduct;
+    const combinations = listOptions(component).map(
+      ({ variant, size }): CombinationAvailability => {
+        const reason = evaluateComponentOption(
+          bundleLine,
+          entry,
+          variant,
+          size,
+          stock,
+        );
+        return {
+          variantId: variant?.id ?? null,
+          sizeId: size?.id ?? null,
+          purchasable: reason === null,
+          reason,
+          maxQuantity: null,
+        };
+      },
+    );
+
+    return {
+      componentProductId: component.id,
+      availability: {
+        state: stateFromCombinations(combinations),
+        hasVariantOptions: usesVariants(component),
+        hasSizeOptions: usesSizes(component),
+        combinations,
+      },
+    };
+  });
 }
 
 /** State of the listing of a single variant (one listing per variant). */

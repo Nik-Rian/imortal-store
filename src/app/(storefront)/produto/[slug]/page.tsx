@@ -1,8 +1,12 @@
 import { AddToCartButton } from "@/components/product/AddToCartButton";
+import type { BundleComponentView } from "@/components/product/BundleSelector";
 import { ProductGallery } from "@/components/product/ProductGallery";
-import { computeProductAvailability } from "@/lib/availability";
+import {
+  computeBundleComponentAvailability,
+  computeProductAvailability,
+} from "@/lib/availability";
 import { resolveInitialVariant } from "@/lib/listings";
-import { getBundleGalleryImages } from "@/lib/media";
+import { getBundleGalleryImages, getProductImage } from "@/lib/media";
 import { formatPrice } from "@/lib/utils";
 import { getProductBySlug } from "@/services/product.service";
 import type { Metadata } from "next";
@@ -90,6 +94,40 @@ export default async function ProductPage({ params, searchParams }: Props) {
       : [],
   };
 
+  // Component options reach the client as plain data: ids, labels and the
+  // purchasable flag of each option, never stock counts.
+  const componentAvailability = product.isBundle
+    ? computeBundleComponentAvailability(product)
+    : [];
+  const bundleComponents: BundleComponentView[] = product.components.flatMap(
+    (entry) => {
+      const component = entry.componentProduct;
+      const optionAvailability = componentAvailability.find(
+        (candidate) => candidate.componentProductId === component.id,
+      )?.availability;
+      if (!optionAvailability) return [];
+
+      return [
+        {
+          productId: component.id,
+          name: component.name,
+          image: getProductImage(component.images),
+          quantity: entry.quantity,
+          variants: optionAvailability.hasVariantOptions
+            ? component.variants.map((variant) => ({
+                id: variant.id,
+                name: variant.name,
+              }))
+            : [],
+          sizes: optionAvailability.hasSizeOptions
+            ? component.sizes.map((size) => ({ id: size.id, size: size.size }))
+            : [],
+          availability: optionAvailability,
+        },
+      ];
+    },
+  );
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-12">
       {/* Breadcrumb / Back Link */}
@@ -129,6 +167,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
               product={buttonProduct}
               availability={availability}
               initialVariantId={initialVariantId}
+              bundleComponents={bundleComponents}
             />
           </div>
         </div>

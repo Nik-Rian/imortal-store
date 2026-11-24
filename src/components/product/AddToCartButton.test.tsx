@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { AddToCartButton } from "@/components/product/AddToCartButton";
+import type { BundleComponentView } from "@/components/product/BundleSelector";
 import type {
   CombinationAvailability,
   ProductAvailability,
@@ -184,6 +185,117 @@ describe("AddToCartButton", () => {
     expect(addItem).toHaveBeenCalledWith(
       expect.objectContaining({ productId: "p1", sizeId: "s1" }),
       2,
+    );
+  });
+});
+
+describe("AddToCartButton bundles", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const kitProduct = {
+    id: "kit",
+    name: "Kit Calouro",
+    slug: "kit-calouro",
+    priceCents: 12000,
+    images: ["/kit.png"],
+    variants: [],
+    sizes: [],
+  };
+  const kitAvailability: ProductAvailability = {
+    state: "OPEN",
+    hasVariantOptions: false,
+    hasSizeOptions: false,
+    combinations: [
+      {
+        variantId: null,
+        sizeId: null,
+        purchasable: true,
+        reason: null,
+        maxQuantity: null,
+      },
+    ],
+  };
+  const componentOption = (sizeId: string | null) => ({
+    variantId: null,
+    sizeId,
+    purchasable: true,
+    reason: null,
+    maxQuantity: null,
+  });
+  const components: BundleComponentView[] = [
+    {
+      productId: "shirt",
+      name: "Camisa",
+      image: "/shirt.png",
+      quantity: 1,
+      variants: [],
+      sizes: [
+        { id: "s-m", size: "M" },
+        { id: "s-g", size: "G" },
+      ],
+      availability: {
+        state: "OPEN",
+        hasVariantOptions: false,
+        hasSizeOptions: true,
+        combinations: [componentOption("s-m"), componentOption("s-g")],
+      },
+    },
+    {
+      productId: "sticker",
+      name: "Adesivo",
+      image: "/sticker.png",
+      quantity: 1,
+      variants: [],
+      sizes: [],
+      availability: {
+        state: "OPEN",
+        hasVariantOptions: false,
+        hasSizeOptions: false,
+        combinations: [componentOption(null)],
+      },
+    },
+  ];
+
+  const renderKit = () =>
+    render(
+      <AddToCartButton
+        product={kitProduct}
+        availability={kitAvailability}
+        bundleComponents={components}
+      />,
+    );
+
+  it("keeps the add button disabled and names the missing component", () => {
+    renderKit();
+
+    expect(
+      isDisabled(screen.getByRole("button", { name: /Adicionar ao Carrinho/ })),
+    ).toBe(true);
+    expect(screen.getByText(/Escolha as opções de "Camisa"/)).toBeTruthy();
+  });
+
+  it("adds the bundle with one entry per component once the choices are made", () => {
+    renderKit();
+
+    fireEvent.click(screen.getByRole("button", { name: "M" }));
+    const add = screen.getByRole("button", { name: /Adicionar ao Carrinho/ });
+    expect(isDisabled(add)).toBe(false);
+    fireEvent.click(add);
+
+    expect(addItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productId: "kit",
+        isBundle: true,
+        components: [
+          expect.objectContaining({
+            componentProductId: "shirt",
+            sizeId: "s-m",
+            sizeLabel: "M",
+          }),
+          expect.objectContaining({ componentProductId: "sticker" }),
+        ],
+      }),
+      1,
     );
   });
 });

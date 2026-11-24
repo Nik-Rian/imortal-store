@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  buildCartComponents,
+  BundleSelector,
+  findIncompleteComponent,
+  type BundleComponentView,
+  type BundleSelections,
+  type ComponentSelection,
+} from "@/components/product/BundleSelector";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/context/CartContext";
 import {
@@ -37,15 +45,22 @@ interface AddToCartButtonProps {
   };
   availability: ProductAvailability;
   initialVariantId?: string | null;
+  /** Components of a bundle with their options; empty for a plain product. */
+  bundleComponents?: BundleComponentView[];
 }
 
 export function AddToCartButton({
   product,
   availability,
   initialVariantId,
+  bundleComponents = [],
 }: AddToCartButtonProps) {
   const { addItem } = useCart();
   const [quantity, setQuantity] = useState(1);
+
+  const [componentSelections, setComponentSelections] =
+    useState<BundleSelections>({});
+  const isBundle = bundleComponents.length > 0;
 
   // The server supplies only the options that apply to the product, so the
   // presence of rows decides which selectors are shown.
@@ -87,6 +102,10 @@ export function AddToCartButton({
       ? quantity
       : Math.max(1, Math.min(quantity, maxQuantity));
 
+  const incompleteComponent = isBundle
+    ? findIncompleteComponent(bundleComponents, componentSelections)
+    : null;
+
   // Closed for now: nothing can be selected or bought.
   if (availability.state === "CLOSED") {
     return (
@@ -99,6 +118,16 @@ export function AddToCartButton({
       </Button>
     );
   }
+
+  const handleComponentChange = (
+    componentProductId: string,
+    selection: ComponentSelection,
+  ) => {
+    setComponentSelections((current) => ({
+      ...current,
+      [componentProductId]: selection,
+    }));
+  };
 
   const handleAddToCart = () => {
     const selectedSize = hasSizes
@@ -123,6 +152,13 @@ export function AddToCartButton({
       return;
     }
 
+    if (incompleteComponent) {
+      toast.error(
+        `Escolha as opções de "${incompleteComponent.name}" para adicionar o kit.`,
+      );
+      return;
+    }
+
     addItem(
       {
         id: `${product.id}-${selectedSizeId ?? ""}-${selectedVariantId ?? ""}`,
@@ -135,6 +171,15 @@ export function AddToCartButton({
         slug: product.slug,
         priceCents: product.priceCents,
         image: selectedVariant?.image || getProductImage(product.images),
+        ...(isBundle
+          ? {
+              isBundle: true,
+              components: buildCartComponents(
+                bundleComponents,
+                componentSelections,
+              ),
+            }
+          : {}),
       },
       quantity,
     );
@@ -245,6 +290,15 @@ export function AddToCartButton({
           </div>
         </div>
       )}
+
+      {isBundle && (
+        <BundleSelector
+          components={bundleComponents}
+          selections={componentSelections}
+          onChange={handleComponentChange}
+        />
+      )}
+
       {/* Quantity & Action */}
       {availability.state === "SOLD_OUT" ? (
         <Button
@@ -286,6 +340,7 @@ export function AddToCartButton({
 
           <Button
             onClick={handleAddToCart}
+            disabled={incompleteComponent !== null}
             className="w-full gap-2 text-base font-semibold sm:w-64"
             size="lg"
           >
@@ -293,6 +348,14 @@ export function AddToCartButton({
             Adicionar ao Carrinho
           </Button>
         </div>
+      )}
+      {incompleteComponent && availability.state !== "SOLD_OUT" && (
+        <p
+          role="status"
+          className="text-sm text-red-500"
+        >
+          {`Escolha as opções de "${incompleteComponent.name}" para adicionar o kit ao carrinho.`}
+        </p>
       )}
     </div>
   );

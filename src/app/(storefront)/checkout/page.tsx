@@ -128,6 +128,14 @@ export default function CheckoutPage() {
         variantId: item.variantId || undefined,
         sizeId: item.sizeId || undefined,
         quantity: item.quantity,
+        // Only ids go to the server; names and labels are display snapshots.
+        components: item.components?.map(
+          ({ componentProductId, variantId, sizeId }) => ({
+            componentProductId,
+            variantId,
+            sizeId,
+          }),
+        ),
       }));
 
       // Tokenization happens in the browser. Only the token reaches the server.
