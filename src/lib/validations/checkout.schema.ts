@@ -28,6 +28,12 @@ export const checkoutSchema = z.object({
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 
+export const bundleComponentSelectionSchema = z.object({
+  componentProductId: z.string().min(1, "O produto do kit é obrigatório"),
+  variantId: z.string().optional(),
+  sizeId: z.string().optional(),
+});
+
 export const orderItemSchema = z
   .object({
     variantId: z.string().optional(),
@@ -39,10 +45,21 @@ export const orderItemSchema = z
       .int("A quantidade deve ser um valor inteiro")
       .positive("A quantidade deve ser maior que zero")
       .max(100, "A quantidade máxima por item é 100"),
+    components: z.array(bundleComponentSelectionSchema).optional(),
   })
   .refine((data) => data.variantId || data.productId, {
     message: "O item deve ter um variantId ou productId",
-  });
+  })
+  .refine(
+    (data) =>
+      !data.components ||
+      new Set(data.components.map((c) => c.componentProductId)).size ===
+        data.components.length,
+    {
+      message: "Cada produto do kit deve ser informado uma única vez.",
+      path: ["components"],
+    },
+  );
 
 export const MAX_CARD_INSTALLMENTS = 3;
 

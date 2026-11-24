@@ -1,5 +1,8 @@
+import {
+  evaluateAvailability,
+  type AvailabilityReason,
+} from "@/lib/order-lines";
 import { prisma } from "@/lib/prisma";
-import { buildStockKey } from "@/lib/stock-key";
 import { getStorefrontDrop } from "@/services/drop.service";
 import { cache } from "react";
 
@@ -84,13 +87,7 @@ export const getProductById = cache(async (id: string) => {
 
 export interface AvailabilityCheckResult {
   available: boolean;
-  reason?:
-    | "DROP_ENDED"
-    | "PRODUCT_UNAVAILABLE"
-    | "VARIANT_UNAVAILABLE"
-    | "SIZE_UNAVAILABLE"
-    | "OUT_OF_STOCK"
-    | "NOT_FOUND";
+  reason?: AvailabilityReason | "NOT_FOUND";
 }
 
 export async function checkProductAvailability(
@@ -111,50 +108,22 @@ export async function checkProductAvailability(
 
   if (!product) return { available: false, reason: "NOT_FOUND" };
 
-  if (product.drop.status !== "ACTIVE") {
-    return { available: false, reason: "DROP_ENDED" };
-  }
+  const variant = variantId
+    ? (product.variants.find((v) => v.id === variantId) ?? null)
+    : null;
+  const size = sizeId
+    ? (product.sizes.find((s) => s.id === sizeId) ?? null)
+    : null;
+  const stock = new Map(
+    product.stockItems.map((item) => [item.stockKey, item] as const),
+  );
 
-  if (!product.isAvailable) {
-    return { available: false, reason: "PRODUCT_UNAVAILABLE" };
-  }
+  const failure = evaluateAvailability(
+    [{ product, variant, size, quantity: requestedQuantity, components: [] }],
+    stock,
+  );
 
-  // Same rule as the storefront: a dimension is active only when the flag is
-  // on and rows exist. When active, a valid selection is required.
-  const usesVariants = product.hasVariants && product.variants.length > 0;
-  const usesSizes = product.hasSizes && product.sizes.length > 0;
-
-  if (usesVariants) {
-    const variant = product.variants.find((v) => v.id === variantId);
-    if (!variant || !variant.isAvailable) {
-      return { available: false, reason: "VARIANT_UNAVAILABLE" };
-    }
-  }
-
-  if (usesSizes) {
-    const size = product.sizes.find((s) => s.id === sizeId);
-
-    if (!size || !size.isAvailable) {
-      return { available: false, reason: "SIZE_UNAVAILABLE" };
-    }
-  }
-
-  if (product.controlStock) {
-    const key = buildStockKey(
-      productId,
-      usesVariants ? variantId : null,
-      usesSizes ? sizeId : null,
-    );
-
-    const stockItem = product.stockItems.find((s) => s.stockKey === key);
-
-    if (!stockItem || !stockItem.isAvailable) {
-      return { available: false, reason: "OUT_OF_STOCK" };
-    }
-
-    if (stockItem.onHand - stockItem.reserved < requestedQuantity) {
-      return { available: false, reason: "OUT_OF_STOCK" };
-    }
-  }
-  return { available: true };
+  return failure
+    ? { available: false, reason: failure.reason }
+    : { available: true };
 }

@@ -50,6 +50,7 @@ model Product {
   sizes       ProductSize[]
   variants    ProductVariant[]
   orderItems  OrderItem[]
+  orderItemComponents OrderItemComponent[]
   stockItems  StockItem[]
   components  BundleComponent[] @relation("BundleComponents")
   componentOf BundleComponent[] @relation("ComponentProduct")
@@ -233,11 +234,34 @@ model OrderItem {
   unitPriceCents Int
   quantity       Int
 
+  components OrderItemComponent[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([productId])
+}
+
+model OrderItemComponent {
+  id String @id @default(uuid())
+
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  productName String
+  variantName String?
+  sizeLabel   String?
+
+  // Units of this component inside one unit of the bundle line.
+  quantity Int
+
+  createdAt DateTime @default(now())
+
+  @@index([orderItemId])
 }
 
 model User {

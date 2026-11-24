@@ -4,21 +4,24 @@ import { randomUUID } from "crypto";
 import { OrderStatus } from "@/generated/prisma/client";
 import { requireSession } from "@/lib/auth-guard";
 import { describeCardFailure, PaymentRejectedError } from "@/lib/card-outcome";
+import {
+  buildOrderSnapshots,
+  evaluateAvailability,
+  resolveOrderLines,
+  type AvailabilityFailure,
+} from "@/lib/order-lines";
 import { getAdminTransitionRule } from "@/lib/order-status";
 import { prisma } from "@/lib/prisma";
 import {
   createOrderSchema,
   type CreateOrderInput,
 } from "@/lib/validations/checkout.schema";
+import { loadCheckoutCatalogue } from "@/services/checkout.service";
 import {
   createCardOrder,
   createPixOrder,
   MercadoPagoTimeoutError,
 } from "@/services/mercadopago.service";
-import {
-  checkProductAvailability,
-  type AvailabilityCheckResult,
-} from "@/services/product.service";
 import { revalidatePath } from "next/cache";
 
 // Unexpected failures never expose Error.message to the customer: it can carry
@@ -30,21 +33,24 @@ const ORDER_CREATION_FAILURE_MESSAGE =
 const PROVIDER_TIMEOUT_FAILURE_MESSAGE =
   "O serviço de pagamento demorou para responder. Aguarde um momento e tente novamente.";
 
-interface OrderItemData {
-  productId: string;
-  productName: string;
-  dropName: string;
-  variantName: string | null;
-  sizeLabel: string | null;
-  unitPriceCents: number;
-  quantity: number;
-}
+function availabilityErrorMessage(failure: AvailabilityFailure): string {
+  const { reason, productName, variantName, sizeLabel, bundleName } = failure;
 
-function availabilityErrorMessage(
-  reason: AvailabilityCheckResult["reason"],
-  productName: string,
-  variantName?: string | null,
-): string {
+  if (bundleName) {
+    const option = [variantName, sizeLabel].filter(Boolean).join(", ");
+    const detail = option ? ` (${option})` : "";
+    switch (reason) {
+      case "DROP_ENDED":
+        return `O drop do kit "${bundleName}" não está ativo no momento.`;
+      case "VARIANT_UNAVAILABLE":
+        return `A variação escolhida de "${productName}" não está disponível no kit "${bundleName}".`;
+      case "SIZE_UNAVAILABLE":
+        return `O tamanho escolhido de "${productName}" não está disponível no kit "${bundleName}".`;
+      default:
+        return `O kit "${bundleName}" não pode ser comprado: "${productName}"${detail} não está disponível ou possui estoque insuficiente.`;
+    }
+  }
+
   switch (reason) {
     case "DROP_ENDED":
       return `O drop do produto "${productName}" não está ativo no momento.`;
@@ -106,115 +112,34 @@ export async function createOrder(payload: CreateOrderInput) {
     }
 
     if (!order) {
-      const variantIds = [
-        ...new Set(
-          items
-            .map((item) => item.variantId)
-            .filter((id): id is string => Boolean(id)),
-        ),
-      ];
-      const productIds = [
-        ...new Set(
-          items
-            .filter((item) => !item.variantId)
-            .map((item) => item.productId)
-            .filter((id): id is string => Boolean(id)),
-        ),
-      ];
-      const [variants, products] = await Promise.all([
-        variantIds.length > 0
-          ? prisma.productVariant.findMany({
-              where: { id: { in: variantIds } },
-              include: { product: { include: { drop: true, sizes: true } } },
-            })
-          : [],
-        productIds.length > 0
-          ? prisma.product.findMany({
-              where: { id: { in: productIds } },
-              include: { drop: true, sizes: true },
-            })
-          : [],
-      ]);
-      // Compare against distinct ids: the same product/variant can appear on
-      // several cart lines (e.g. two sizes).
-      if (
-        variants.length !== variantIds.length ||
-        products.length !== productIds.length
-      ) {
+      const catalogue = await loadCheckoutCatalogue(items);
+
+      const resolution = resolveOrderLines(items, catalogue);
+      if (!resolution.ok) {
+        return { success: false, error: resolution.error };
+      }
+
+      const unavailable = evaluateAvailability(
+        resolution.lines,
+        catalogue.stock,
+      );
+      if (unavailable) {
+        console.warn("[createOrder] Item unavailable", {
+          productId: unavailable.productId,
+          variantId: unavailable.variantId,
+          sizeId: unavailable.sizeId,
+          reason: unavailable.reason,
+        });
         return {
           success: false,
-          error: "Um ou mais produtos selecionados não foram encontrados.",
+          error: availabilityErrorMessage(unavailable),
         };
       }
 
-      let totalPriceCents = 0;
-      const orderItemsData: OrderItemData[] = [];
+      const { totalPriceCents, items: orderItemsData } = buildOrderSnapshots(
+        resolution.lines,
+      );
       const now = new Date();
-
-      for (const item of items) {
-        const variant = item.variantId
-          ? variants.find((v) => v.id === item.variantId)
-          : null;
-
-        if (variant && item.productId && item.productId !== variant.productId) {
-          return {
-            success: false,
-            error: "A variação selecionada não pertence ao produto informado.",
-          };
-        }
-
-        const productId = variant ? variant.productId : item.productId;
-        if (!productId) {
-          return { success: false, error: "Produto do item não especificado." };
-        }
-
-        const product = variant
-          ? variant.product
-          : products.find((p) => p.id === productId);
-
-        if (!product) {
-          return { success: false, error: "Produto inválido." };
-        }
-
-        const sizeLabel = item.sizeId
-          ? (product.sizes.find((s) => s.id === item.sizeId)?.size ?? null)
-          : null;
-
-        const availability = await checkProductAvailability(
-          productId,
-          item.variantId ?? undefined,
-          item.sizeId ?? undefined,
-          item.quantity,
-        );
-
-        if (!availability.available) {
-          console.warn("[createOrder] Item unavailable", {
-            productId,
-            variantId: item.variantId,
-            sizeId: item.sizeId,
-            reason: availability.reason,
-          });
-          return {
-            success: false,
-            error: availabilityErrorMessage(
-              availability.reason,
-              product.name,
-              variant?.name,
-            ),
-          };
-        }
-
-        totalPriceCents += product.priceCents * item.quantity;
-        orderItemsData.push({
-          productId: product.id,
-          productName: product.name,
-          dropName: product.drop?.name ?? "",
-          variantName: variant ? variant.name : null,
-          sizeLabel,
-          unitPriceCents: product.priceCents,
-          quantity: item.quantity,
-        });
-      }
 
       const cancelableUntil = new Date(now.getTime() + 2 * 60 * 60 * 1000);
       const newAccessToken = randomUUID();
@@ -231,10 +156,15 @@ export async function createOrder(payload: CreateOrderInput) {
             totalPriceCents,
             cancelableUntil,
             idempotencyKey: newIdempotencyKey,
+            // createMany cannot create child rows, so each item is created
+            // with its component snapshots in the same nested write.
             items: {
-              createMany: {
-                data: orderItemsData,
-              },
+              create: orderItemsData.map(({ components, ...item }) => ({
+                ...item,
+                ...(components.length > 0
+                  ? { components: { create: components } }
+                  : {}),
+              })),
             },
           },
         });
